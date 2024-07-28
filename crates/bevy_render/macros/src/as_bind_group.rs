@@ -384,7 +384,7 @@ pub fn derive_as_bind_group(ast: syn::DeriveInput) -> Result<TokenStream> {
                         binding_impls.push(quote! {
                             (
                                 #binding_index,
-                                #render_path::render_resource::OwnedBindingResource::TextureView({
+                                #render_path::render_resource::OwnedBindingResource::Sampler({
                                     let gpu_image: &#render_path::texture::GpuImage = (&self.#field_name).into();
                                     gpu_image.sampler.clone()
                                 })
