@@ -265,26 +265,40 @@ pub fn derive_as_bind_group(ast: syn::DeriveInput) -> Result<TokenStream> {
                         image_format,
                         access,
                         visibility,
+                        raw,
                     } = get_storage_texture_binding_attr(nested_meta_items)?;
 
                     let visibility =
                         visibility.hygienic_quote(&quote! { #render_path::render_resource });
 
-                    let fallback_image = get_fallback_image(&render_path, dimension);
+                    if raw {
+                        binding_impls.push(quote! {
+                            (
+                                #binding_index,
+                                #render_path::render_resource::OwnedBindingResource::TextureView({
+                                    let gpu_image: &#render_path::texture::GpuImage = (&self.#field_name).into();
+                                    gpu_image.texture_view.clone()
+                                })
+                            )
+                        });
+                    } else {
+                        let fallback_image = get_fallback_image(&render_path, dimension);
 
-                    // insert fallible texture-based entries at 0 so that if we fail here, we exit before allocating any buffers
-                    binding_impls.insert(0, quote! {
-                        ( #binding_index,
-                          #render_path::render_resource::OwnedBindingResource::TextureView({
-                              let handle: Option<&#asset_path::Handle<#render_path::texture::Image>> = (&self.#field_name).into();
-                              if let Some(handle) = handle {
-                                  images.get(handle).ok_or_else(|| #render_path::render_resource::AsBindGroupError::RetryNextUpdate)?.texture_view.clone()
-                              } else {
-                                  #fallback_image.texture_view.clone()
-                              }
-                          })
-                        )
-                    });
+                        // insert fallible texture-based entries at 0 so that if we fail here, we exit before allocating any buffers
+                        binding_impls.insert(0, quote! {
+                            (
+                                #binding_index,
+                                #render_path::render_resource::OwnedBindingResource::TextureView({
+                                    let handle: Option<&#asset_path::Handle<#render_path::texture::Image>> = (&self.#field_name).into();
+                                    if let Some(handle) = handle {
+                                        images.get(handle).ok_or_else(|| #render_path::render_resource::AsBindGroupError::RetryNextUpdate)?.texture_view.clone()
+                                    } else {
+                                        #fallback_image.texture_view.clone()
+                                    }
+                                })
+                            )
+                        });
+                    }
 
                     binding_layouts.push(quote! {
                         #render_path::render_resource::BindGroupLayoutEntry {
@@ -305,27 +319,40 @@ pub fn derive_as_bind_group(ast: syn::DeriveInput) -> Result<TokenStream> {
                         sample_type,
                         multisampled,
                         visibility,
+                        raw,
                     } = tex_attrs.as_ref().unwrap();
 
                     let visibility =
                         visibility.hygienic_quote(&quote! { #render_path::render_resource });
 
-                    let fallback_image = get_fallback_image(&render_path, *dimension);
+                    if *raw {
+                        binding_impls.push(quote! {
+                            (
+                                #binding_index,
+                                #render_path::render_resource::OwnedBindingResource::TextureView({
+                                    let gpu_image: &#render_path::texture::GpuImage = (&self.#field_name).into();
+                                    gpu_image.texture_view.clone()
+                                })
+                            )
+                        });
+                    } else {
+                        let fallback_image = get_fallback_image(&render_path, *dimension);
 
-                    // insert fallible texture-based entries at 0 so that if we fail here, we exit before allocating any buffers
-                    binding_impls.insert(0, quote! {
-                        (
-                            #binding_index,
-                            #render_path::render_resource::OwnedBindingResource::TextureView({
-                                let handle: Option<&#asset_path::Handle<#render_path::texture::Image>> = (&self.#field_name).into();
-                                if let Some(handle) = handle {
-                                    images.get(handle).ok_or_else(|| #render_path::render_resource::AsBindGroupError::RetryNextUpdate)?.texture_view.clone()
-                                } else {
-                                    #fallback_image.texture_view.clone()
-                                }
-                            })
-                        )
-                    });
+                        // insert fallible texture-based entries at 0 so that if we fail here, we exit before allocating any buffers
+                        binding_impls.insert(0, quote! {
+                            (
+                                #binding_index,
+                                #render_path::render_resource::OwnedBindingResource::TextureView({
+                                    let handle: Option<&#asset_path::Handle<#render_path::texture::Image>> = (&self.#field_name).into();
+                                    if let Some(handle) = handle {
+                                        images.get(handle).ok_or_else(|| #render_path::render_resource::AsBindGroupError::RetryNextUpdate)?.texture_view.clone()
+                                    } else {
+                                        #fallback_image.texture_view.clone()
+                                    }
+                                })
+                            )
+                        });
+                    }
 
                     binding_layouts.push(quote! {
                         #render_path::render_resource::BindGroupLayoutEntry {
@@ -346,29 +373,41 @@ pub fn derive_as_bind_group(ast: syn::DeriveInput) -> Result<TokenStream> {
                         visibility,
                         ..
                     } = get_sampler_attrs(nested_meta_items)?;
-                    let TextureAttrs { dimension, .. } = tex_attrs
+                    let TextureAttrs { dimension, raw, .. } = tex_attrs
                         .as_ref()
                         .expect("sampler attribute must have matching texture attribute");
 
                     let visibility =
                         visibility.hygienic_quote(&quote! { #render_path::render_resource });
 
-                    let fallback_image = get_fallback_image(&render_path, *dimension);
+                    if *raw {
+                        binding_impls.push(quote! {
+                            (
+                                #binding_index,
+                                #render_path::render_resource::OwnedBindingResource::TextureView({
+                                    let gpu_image: &#render_path::texture::GpuImage = (&self.#field_name).into();
+                                    gpu_image.sampler.clone()
+                                })
+                            )
+                        });
+                    } else {
+                        let fallback_image = get_fallback_image(&render_path, *dimension);
 
-                    // insert fallible texture-based entries at 0 so that if we fail here, we exit before allocating any buffers
-                    binding_impls.insert(0, quote! {
-                        (
-                            #binding_index,
-                            #render_path::render_resource::OwnedBindingResource::Sampler({
-                                let handle: Option<&#asset_path::Handle<#render_path::texture::Image>> = (&self.#field_name).into();
-                                if let Some(handle) = handle {
-                                    images.get(handle).ok_or_else(|| #render_path::render_resource::AsBindGroupError::RetryNextUpdate)?.sampler.clone()
-                                } else {
-                                    #fallback_image.sampler.clone()
-                                }
-                            })
-                        )
-                    });
+                        // insert fallible texture-based entries at 0 so that if we fail here, we exit before allocating any buffers
+                        binding_impls.insert(0, quote! {
+                            (
+                                #binding_index,
+                                #render_path::render_resource::OwnedBindingResource::Sampler({
+                                    let handle: Option<&#asset_path::Handle<#render_path::texture::Image>> = (&self.#field_name).into();
+                                    if let Some(handle) = handle {
+                                        images.get(handle).ok_or_else(|| #render_path::render_resource::AsBindGroupError::RetryNextUpdate)?.sampler.clone()
+                                    } else {
+                                        #fallback_image.sampler.clone()
+                                    }
+                                })
+                            )
+                        });
+                    }
 
                     binding_layouts.push(quote!{
                         #render_path::render_resource::BindGroupLayoutEntry {
@@ -779,6 +818,7 @@ struct TextureAttrs {
     sample_type: BindingTextureSampleType,
     multisampled: bool,
     visibility: ShaderStageVisibility,
+    raw: bool,
 }
 
 impl Default for BindingTextureSampleType {
@@ -794,6 +834,7 @@ impl Default for TextureAttrs {
             sample_type: Default::default(),
             multisampled: true,
             visibility: Default::default(),
+            raw: false,
         }
     }
 }
@@ -807,6 +848,7 @@ struct StorageTextureAttrs {
     // which will error if the access is not member of the StorageTextureAccess enum.
     access: proc_macro2::TokenStream,
     visibility: ShaderStageVisibility,
+    raw: bool,
 }
 
 impl Default for StorageTextureAttrs {
@@ -816,6 +858,7 @@ impl Default for StorageTextureAttrs {
             image_format: quote! { Rgba8Unorm },
             access: quote! { ReadWrite },
             visibility: ShaderStageVisibility::compute(),
+            raw: false,
         }
     }
 }
@@ -824,7 +867,7 @@ fn get_storage_texture_binding_attr(metas: Vec<Meta>) -> Result<StorageTextureAt
     let mut storage_texture_attrs = StorageTextureAttrs::default();
 
     for meta in metas {
-        use syn::Meta::{List, NameValue};
+        use syn::Meta::{List, NameValue, Path};
         match meta {
             // Parse #[storage_texture(0, dimension = "...")].
             NameValue(m) if m.path == DIMENSION => {
@@ -842,6 +885,9 @@ fn get_storage_texture_binding_attr(metas: Vec<Meta>) -> Result<StorageTextureAt
             // Parse #[storage_texture(0, visibility(...))].
             List(m) if m.path == VISIBILITY => {
                 storage_texture_attrs.visibility = get_visibility_flag_value(&m)?;
+            }
+            Path(path) if path == RAW => {
+                storage_texture_attrs.raw = true;
             }
             NameValue(m) => {
                 return Err(Error::new_spanned(
@@ -867,6 +913,7 @@ const ACCESS: Symbol = Symbol("access");
 const SAMPLE_TYPE: Symbol = Symbol("sample_type");
 const FILTERABLE: Symbol = Symbol("filterable");
 const MULTISAMPLED: Symbol = Symbol("multisampled");
+const RAW: Symbol = Symbol("raw");
 
 // Values for `dimension` attribute.
 const DIM_1D: &str = "1d";
@@ -890,9 +937,10 @@ fn get_texture_attrs(metas: Vec<Meta>) -> Result<TextureAttrs> {
     let mut filterable_ident = None;
 
     let mut visibility = ShaderStageVisibility::vertex_fragment();
+    let mut raw = false;
 
     for meta in metas {
-        use syn::Meta::{List, NameValue};
+        use syn::Meta::{List, NameValue, Path};
         match meta {
             // Parse #[texture(0, dimension = "...")].
             NameValue(m) if m.path == DIMENSION => {
@@ -916,6 +964,9 @@ fn get_texture_attrs(metas: Vec<Meta>) -> Result<TextureAttrs> {
             // Parse #[texture(0, visibility(...))].
             List(m) if m.path == VISIBILITY => {
                 visibility = get_visibility_flag_value(&m)?;
+            }
+            Path(path) if path == RAW => {
+                raw = true;
             }
             NameValue(m) => {
                 return Err(Error::new_spanned(
@@ -954,6 +1005,7 @@ fn get_texture_attrs(metas: Vec<Meta>) -> Result<TextureAttrs> {
         sample_type,
         multisampled,
         visibility,
+        raw,
     })
 }
 
