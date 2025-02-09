@@ -78,7 +78,7 @@ use crate::{
         masks::{IdentifierMask, HIGH_MASK},
         Identifier,
     },
-    storage::{SparseSetIndex, TableId, TableRow},
+    storage::{SparseSetIndex, SubStorageId, TableId, TableRow},
 };
 use alloc::vec::Vec;
 use bevy_platform_support::sync::atomic::Ordering;
@@ -1085,6 +1085,8 @@ pub struct EntityLocation {
     /// [`Archetype`]: crate::archetype::Archetype
     pub archetype_row: ArchetypeRow,
 
+    pub sub_storage: SubStorageId,
+
     /// The ID of the [`Table`] the [`Entity`] belongs to.
     ///
     /// [`Table`]: crate::storage::Table
@@ -1101,6 +1103,7 @@ impl EntityLocation {
     pub(crate) const INVALID: EntityLocation = EntityLocation {
         archetype_id: ArchetypeId::INVALID,
         archetype_row: ArchetypeRow::INVALID,
+        sub_storage: SubStorageId::INVALID,
         table_id: TableId::INVALID,
         table_row: TableRow::INVALID,
     };

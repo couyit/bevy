@@ -7,8 +7,8 @@ use crate::{
     query::{ArchetypeFilter, DebugCheckedUnwrap, QueryState, StorageId},
     storage::{Table, TableRow, Tables},
     world::{
-        unsafe_world_cell::UnsafeWorldCell, EntityMut, EntityMutExcept, EntityRef, EntityRefExcept,
-        FilteredEntityMut, FilteredEntityRef,
+        sub_world::SubWorld, unsafe_world_cell::UnsafeWorldCell, EntityMut, EntityMutExcept,
+        EntityRef, EntityRefExcept, FilteredEntityMut, FilteredEntityRef,
     },
 };
 use alloc::vec::Vec;
@@ -24,15 +24,16 @@ use core::{
 ///
 /// This struct is created by the [`Query::iter`](crate::system::Query::iter) and
 /// [`Query::iter_mut`](crate::system::Query::iter_mut) methods.
-pub struct QueryIter<'w, 's, D: QueryData, F: QueryFilter> {
+pub struct QueryIter<'w, 's, D: QueryData, F: QueryFilter, W: SubWorld> {
     world: UnsafeWorldCell<'w>,
     tables: &'w Tables,
+    sparse_sets: &'w SparseSets,
     archetypes: &'w Archetypes,
     query_state: &'s QueryState<D, F>,
     cursor: QueryIterationCursor<'w, 's, D, F>,
 }
 
-impl<'w, 's, D: QueryData, F: QueryFilter> QueryIter<'w, 's, D, F> {
+impl<'w, 's, D: QueryData, F: QueryFilter, W: SubWorld> QueryIter<'w, 's, D, F, W> {
     /// # Safety
     /// - `world` must have permission to access any of the components registered in `query_state`.
     /// - `world` must be the same one used to initialize `query_state`.

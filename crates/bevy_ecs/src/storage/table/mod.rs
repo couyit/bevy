@@ -17,6 +17,7 @@ use core::{
     num::NonZeroUsize,
     ops::{Index, IndexMut},
 };
+
 mod column;
 
 /// An opaque unique ID for a [`Table`] within a [`World`].

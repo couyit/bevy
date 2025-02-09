@@ -11,6 +11,8 @@ mod identifier;
 mod spawn_batch;
 pub mod unsafe_world_cell;
 
+pub mod sub_world;
+
 #[cfg(feature = "bevy_reflect")]
 pub mod reflect;
 
@@ -29,6 +31,7 @@ pub use entity_ref::{
 pub use filtered_resource::*;
 pub use identifier::WorldId;
 pub use spawn_batch::*;
+use sub_world::SubWorlds;
 
 use crate::{
     archetype::{ArchetypeId, ArchetypeRow, Archetypes},
@@ -47,7 +50,7 @@ use crate::{
     resource::Resource,
     result::Result,
     schedule::{Schedule, ScheduleLabel, Schedules},
-    storage::{ResourceData, Storages},
+    storage::{ResourceData, Storages, SubStorageId},
     system::Commands,
     world::{
         command_queue::RawCommandQueue,
@@ -90,6 +93,7 @@ pub struct World {
     pub(crate) entities: Entities,
     pub(crate) components: Components,
     pub(crate) archetypes: Archetypes,
+    pub(crate) sub_worlds: SubWorlds,
     pub(crate) storages: Storages,
     pub(crate) bundles: Bundles,
     pub(crate) observers: Observers,
@@ -107,7 +111,8 @@ impl Default for World {
             id: WorldId::new().expect("More `bevy` `World`s have been created than is supported"),
             entities: Entities::new(),
             components: Default::default(),
-            archetypes: Archetypes::new(),
+            archetypes: Archetypes::default(),
+            sub_worlds: SubWorlds::new(),
             storages: Default::default(),
             bundles: Default::default(),
             observers: Observers::default(),
@@ -214,6 +219,11 @@ impl World {
     #[inline]
     pub fn archetypes(&self) -> &Archetypes {
         &self.archetypes
+    }
+
+    #[inline]
+    pub fn sub_worlds(&self) -> &SubWorlds {
+        &self.sub_worlds
     }
 
     /// Retrieves this world's [`Components`] collection.
@@ -938,6 +948,7 @@ impl World {
                     let location = EntityLocation {
                         archetype_id: archetype.id(),
                         archetype_row: ArchetypeRow::new(archetype_row),
+                        sub_storage: archetype.sub_storage(),
                         table_id: archetype.table_id(),
                         table_row: archetype_entity.table_row(),
                     };
@@ -967,6 +978,7 @@ impl World {
                     let location = EntityLocation {
                         archetype_id: archetype.id(),
                         archetype_row: ArchetypeRow::new(archetype_row),
+                        sub_storage: archetype.sub_storage(),
                         table_id: archetype.table_id(),
                         table_row: archetype_entity.table_row(),
                     };
@@ -1006,13 +1018,14 @@ impl World {
     /// assert_eq!(position.x, 0.0);
     /// ```
     #[track_caller]
-    pub fn spawn_empty(&mut self) -> EntityWorldMut {
+    pub fn spawn_empty(&mut self, sub_storage: SubStorageId) -> EntityWorldMut {
         self.flush();
         let entity = self.entities.alloc();
         // SAFETY: entity was just allocated
         unsafe {
             self.spawn_at_empty_internal(
                 entity,
+                sub_storage,
                 #[cfg(feature = "track_location")]
                 Location::caller(),
             )
@@ -1080,9 +1093,14 @@ impl World {
     /// assert_eq!(position.x, 2.0);
     /// ```
     #[track_caller]
-    pub fn spawn<B: Bundle>(&mut self, bundle: B) -> EntityWorldMut {
+    pub fn spawn<B: Bundle>(
+        &mut self,
+        bundle: B,
+        //sub_storage: SubStorageId
+    ) -> EntityWorldMut {
         self.spawn_with_caller(
             bundle,
+            sub_storage,
             #[cfg(feature = "track_location")]
             Location::caller(),
         )
@@ -1091,12 +1109,13 @@ impl World {
     pub(crate) fn spawn_with_caller<B: Bundle>(
         &mut self,
         bundle: B,
+        sub_storage: SubStorageId,
         #[cfg(feature = "track_location")] caller: &'static Location<'static>,
     ) -> EntityWorldMut {
         self.flush();
         let change_tick = self.change_tick();
         let entity = self.entities.alloc();
-        let mut bundle_spawner = BundleSpawner::new::<B>(self, change_tick);
+        let mut bundle_spawner = BundleSpawner::new::<B>(self, change_tick, sub_storage);
         // SAFETY: bundle's type matches `bundle_info`, entity is allocated but non-existent
         let mut entity_location = unsafe {
             bundle_spawner.spawn_non_existent(
@@ -1129,11 +1148,16 @@ impl World {
     unsafe fn spawn_at_empty_internal(
         &mut self,
         entity: Entity,
+        sub_storage: SubStorageId,
         #[cfg(feature = "track_location")] caller: &'static Location,
     ) -> EntityWorldMut {
-        let archetype = self.archetypes.empty_mut();
+        let archetype = self
+            .archetypes
+            .get(self.storages.sub_storages[sub_storage].empty().clone())
+            .unwrap();
         // PERF: consider avoiding allocating entities in the empty archetype unless needed
-        let table_row = self.storages.tables[archetype.table_id()].allocate(entity);
+        let table_row =
+            self.storages.sub_storages[sub_storage].tables[archetype.table_id()].allocate(entity);
         // SAFETY: no components are allocated by archetype.allocate() because the archetype is
         // empty
         let location = unsafe { archetype.allocate(entity, table_row) };
@@ -2260,9 +2284,7 @@ impl World {
 
         let change_tick = self.change_tick();
 
-        let bundle_id = self
-            .bundles
-            .register_info::<B>(&mut self.components, &mut self.storages);
+        let bundle_id = self.bundles.register_info::<B>(&mut self.components);
         enum SpawnOrInsert<'w> {
             Spawn(BundleSpawner<'w>),
             Insert(BundleInserter<'w>, ArchetypeId),
@@ -2453,9 +2475,7 @@ impl World {
 
         self.flush();
         let change_tick = self.change_tick();
-        let bundle_id = self
-            .bundles
-            .register_info::<B>(&mut self.components, &mut self.storages);
+        let bundle_id = self.bundles.register_info::<B>(&mut self.components);
 
         let mut batch_iter = batch.into_iter();
 
@@ -2605,9 +2625,7 @@ impl World {
 
         self.flush();
         let change_tick = self.change_tick();
-        let bundle_id = self
-            .bundles
-            .register_info::<B>(&mut self.components, &mut self.storages);
+        let bundle_id = self.bundles.register_info::<B>(&mut self.components);
 
         let mut invalid_entities = Vec::<Entity>::new();
         let mut batch_iter = batch.into_iter();
@@ -3129,16 +3147,19 @@ impl World {
         }
 
         let Storages {
-            ref mut tables,
-            ref mut sparse_sets,
+            ref mut sub_storages,
             ref mut resources,
             ref mut non_send_resources,
         } = self.storages;
 
         #[cfg(feature = "trace")]
         let _span = tracing::info_span!("check component ticks").entered();
-        tables.check_change_ticks(change_tick);
-        sparse_sets.check_change_ticks(change_tick);
+
+        for sub_storage in sub_storages.sub_storages.iter_mut() {
+            sub_storage.tables.check_change_ticks(change_tick);
+            sub_storage.sparse_sets.check_change_ticks(change_tick);
+        }
+
         resources.check_change_ticks(change_tick);
         non_send_resources.check_change_ticks(change_tick);
 
@@ -3158,8 +3179,10 @@ impl World {
 
     /// Despawns all entities in this [`World`].
     pub fn clear_entities(&mut self) {
-        self.storages.tables.clear();
-        self.storages.sparse_sets.clear_entities();
+        for sub_storage in self.storages.sub_storages.sub_storages.iter_mut() {
+            sub_storage.tables.clear();
+            sub_storage.sparse_sets.clear();
+        }
         self.archetypes.clear_entities();
         self.entities.clear();
     }
@@ -3183,9 +3206,7 @@ impl World {
     /// component in the bundle.
     #[inline]
     pub fn register_bundle<B: Bundle>(&mut self) -> &BundleInfo {
-        let id = self
-            .bundles
-            .register_info::<B>(&mut self.components, &mut self.storages);
+        let id = self.bundles.register_info::<B>(&mut self.components);
         // SAFETY: We just initialized the bundle so its id should definitely be valid.
         unsafe { self.bundles.get(id).debug_checked_unwrap() }
     }

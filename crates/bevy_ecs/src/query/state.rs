@@ -11,7 +11,11 @@ use crate::{
     },
     storage::{SparseSetIndex, TableId},
     system::Query,
-    world::{unsafe_world_cell::UnsafeWorldCell, World, WorldId},
+    world::{
+        sub_world::{MainSubWorld, SubWorld},
+        unsafe_world_cell::UnsafeWorldCell,
+        World, WorldId,
+    },
 };
 
 use alloc::vec::Vec;

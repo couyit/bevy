@@ -7,8 +7,8 @@ use crate::{
     query::{Access, DebugCheckedUnwrap, FilteredAccess, WorldQuery},
     storage::{ComponentSparseSet, Table, TableRow},
     world::{
-        unsafe_world_cell::UnsafeWorldCell, EntityMut, EntityMutExcept, EntityRef, EntityRefExcept,
-        FilteredEntityMut, FilteredEntityRef, Mut, Ref, World,
+        sub_world::SubWorld, unsafe_world_cell::UnsafeWorldCell, EntityMut, EntityMutExcept,
+        EntityRef, EntityRefExcept, FilteredEntityMut, FilteredEntityRef, Mut, Ref, World,
     },
 };
 use bevy_ptr::{ThinSlicePtr, UnsafeCellDeref};
@@ -1147,7 +1147,7 @@ unsafe impl<T: Component> WorldQuery for &T {
     unsafe fn set_archetype<'w>(
         fetch: &mut ReadFetch<'w, T>,
         component_id: &ComponentId,
-        _archetype: &'w Archetype,
+        archetype: &'w Archetype,
         table: &'w Table,
     ) {
         if Self::IS_DENSE {
@@ -1155,6 +1155,10 @@ unsafe impl<T: Component> WorldQuery for &T {
             unsafe {
                 Self::set_table(fetch, component_id, table);
             }
+        } else {
+            let sparse_set = world.storages().sub_storages[archetype.sub_storage()]
+                .sparse_sets
+                .get(component_id);
         }
     }
 

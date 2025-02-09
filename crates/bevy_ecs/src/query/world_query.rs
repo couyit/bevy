@@ -2,7 +2,7 @@ use crate::{
     archetype::Archetype,
     component::{ComponentId, Components, Tick},
     query::FilteredAccess,
-    storage::Table,
+    storage::{ComponentSparseSet, SparseSet, Table},
     world::{unsafe_world_cell::UnsafeWorldCell, World},
 };
 use variadics_please::all_tuples;
@@ -90,6 +90,7 @@ pub unsafe trait WorldQuery {
         state: &Self::State,
         archetype: &'w Archetype,
         table: &'w Table,
+        sparse_set: &'w SparseSet<ComponentId, ComponentSparseSet>,
     );
 
     /// Adjusts internal state to account for the next [`Table`]. This will always be called on tables
@@ -161,7 +162,6 @@ macro_rules! impl_tuple_world_query {
             type Fetch<'w> = ($($name::Fetch<'w>,)*);
             type State = ($($name::State,)*);
 
-
             fn shrink_fetch<'wlong: 'wshort, 'wshort>(fetch: Self::Fetch<'wlong>) -> Self::Fetch<'wshort> {
                 let ($($name,)*) = fetch;
                 ($(
@@ -183,12 +183,13 @@ macro_rules! impl_tuple_world_query {
                 fetch: &mut Self::Fetch<'w>,
                 state: &Self::State,
                 archetype: &'w Archetype,
-                table: &'w Table
+                table: &'w Table,
+                sparse_set: &'w SparseSet<ComponentId, ComponentSparseSet>,
             ) {
                 let ($($name,)*) = fetch;
                 let ($($state,)*) = state;
                 // SAFETY: The invariants are upheld by the caller.
-                $(unsafe { $name::set_archetype($name, $state, archetype, table); })*
+                $(unsafe { $name::set_archetype($name, $state, archetype, table, sparse_set); })*
             }
 
             #[inline]

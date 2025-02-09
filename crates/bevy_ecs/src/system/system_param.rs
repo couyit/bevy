@@ -13,8 +13,9 @@ use crate::{
     storage::ResourceData,
     system::{Query, Single, SystemMeta},
     world::{
-        unsafe_world_cell::UnsafeWorldCell, DeferredWorld, FilteredResources, FilteredResourcesMut,
-        FromWorld, World,
+        sub_world::{MainSubWorld, SubWorld},
+        unsafe_world_cell::UnsafeWorldCell,
+        DeferredWorld, FilteredResources, FilteredResourcesMut, FromWorld, World,
     },
 };
 use alloc::{borrow::ToOwned, boxed::Box, vec::Vec};
@@ -299,16 +300,18 @@ pub unsafe trait ReadOnlySystemParam: SystemParam {}
 pub type SystemParamItem<'w, 's, P> = <P as SystemParam>::Item<'w, 's>;
 
 // SAFETY: QueryState is constrained to read-only fetches, so it only reads World.
-unsafe impl<'w, 's, D: ReadOnlyQueryData + 'static, F: QueryFilter + 'static> ReadOnlySystemParam
-    for Query<'w, 's, D, F>
+unsafe impl<'w, 's, D: ReadOnlyQueryData + 'static, F: QueryFilter + 'static, W: SubWorld>
+    ReadOnlySystemParam for Query<'w, 's, D, F, W>
 {
 }
 
 // SAFETY: Relevant query ComponentId and ArchetypeComponentId access is applied to SystemMeta. If
 // this Query conflicts with any prior access, a panic will occur.
-unsafe impl<D: QueryData + 'static, F: QueryFilter + 'static> SystemParam for Query<'_, '_, D, F> {
+unsafe impl<D: QueryData + 'static, F: QueryFilter + 'static, W: SubWorld> SystemParam
+    for Query<'_, '_, D, F, W>
+{
     type State = QueryState<D, F>;
-    type Item<'w, 's> = Query<'w, 's, D, F>;
+    type Item<'w, 's> = Query<'w, 's, D, F, W>;
 
     fn init_state(world: &mut World, system_meta: &mut SystemMeta) -> Self::State {
         let state = QueryState::new_with_access(world, &mut system_meta.archetype_component_access);

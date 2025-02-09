@@ -24,7 +24,9 @@ use crate::{
     component::{ComponentId, Components, RequiredComponentConstructor, StorageType},
     entity::{Entity, EntityLocation},
     observer::Observers,
-    storage::{ImmutableSparseSet, SparseArray, SparseSet, SparseSetIndex, TableId, TableRow},
+    storage::{
+        ImmutableSparseSet, SparseArray, SparseSet, SparseSetIndex, SubStorageId, TableId, TableRow,
+    },
 };
 use alloc::{boxed::Box, vec::Vec};
 use bevy_platform_support::collections::HashMap;
@@ -79,8 +81,6 @@ impl ArchetypeRow {
 pub struct ArchetypeId(u32);
 
 impl ArchetypeId {
-    /// The ID for the [`Archetype`] without any components.
-    pub const EMPTY: ArchetypeId = ArchetypeId(0);
     /// # Safety:
     ///
     /// This must always have an all-1s bit pattern to ensure soundness in fast entity id space allocation.
@@ -372,6 +372,7 @@ bitflags::bitflags! {
 pub struct Archetype {
     id: ArchetypeId,
     table_id: TableId,
+    sub_storage: SubStorageId,
     edges: Edges,
     entities: Vec<ArchetypeEntity>,
     components: ImmutableSparseSet<ComponentId, ArchetypeComponentInfo>,
@@ -386,6 +387,7 @@ impl Archetype {
         observers: &Observers,
         id: ArchetypeId,
         table_id: TableId,
+        sub_storage: SubStorageId,
         table_components: impl Iterator<Item = (ComponentId, ArchetypeComponentId)>,
         sparse_set_components: impl Iterator<Item = (ComponentId, ArchetypeComponentId)>,
     ) -> Self {
@@ -434,6 +436,7 @@ impl Archetype {
         Self {
             id,
             table_id,
+            sub_storage,
             entities: Vec::new(),
             components: archetype_components.into_immutable(),
             edges: Default::default(),
@@ -459,6 +462,11 @@ impl Archetype {
     #[inline]
     pub fn table_id(&self) -> TableId {
         self.table_id
+    }
+
+    #[inline]
+    pub fn sub_storage(&self) -> SubStorageId {
+        self.sub_storage
     }
 
     /// Fetches the entities contained in this archetype.
@@ -575,6 +583,7 @@ impl Archetype {
         EntityLocation {
             archetype_id: self.id,
             archetype_row,
+            sub_storage: self.sub_storage,
             table_id: self.table_id,
             table_row,
         }
@@ -728,18 +737,11 @@ impl Archetype {
 #[derive(Debug, Copy, Clone, PartialEq)]
 pub struct ArchetypeGeneration(pub(crate) ArchetypeId);
 
-impl ArchetypeGeneration {
-    /// The first archetype.
-    #[inline]
-    pub const fn initial() -> Self {
-        ArchetypeGeneration(ArchetypeId::EMPTY)
-    }
-}
-
 #[derive(Hash, PartialEq, Eq)]
 struct ArchetypeComponents {
     table_components: Box<[ComponentId]>,
     sparse_set_components: Box<[ComponentId]>,
+    sub_storage: SubStorageId,
 }
 
 /// An opaque unique joint ID for a [`Component`] in an [`Archetype`] within a [`World`].
@@ -813,26 +815,6 @@ pub struct ArchetypeRecord {
 }
 
 impl Archetypes {
-    pub(crate) fn new() -> Self {
-        let mut archetypes = Archetypes {
-            archetypes: Vec::new(),
-            by_components: Default::default(),
-            by_component: Default::default(),
-            archetype_component_count: 0,
-        };
-        // SAFETY: Empty archetype has no components
-        unsafe {
-            archetypes.get_id_or_insert(
-                &Components::default(),
-                &Observers::default(),
-                TableId::empty(),
-                Vec::new(),
-                Vec::new(),
-            );
-        }
-        archetypes
-    }
-
     /// Returns the "generation", a handle to the current highest archetype ID.
     ///
     /// This can be used with the `Index` [`Archetypes`] implementation to
@@ -852,25 +834,6 @@ impl Archetypes {
     )]
     pub fn len(&self) -> usize {
         self.archetypes.len()
-    }
-
-    /// Fetches an immutable reference to the archetype without any components.
-    ///
-    /// Shorthand for `archetypes.get(ArchetypeId::EMPTY).unwrap()`
-    #[inline]
-    pub fn empty(&self) -> &Archetype {
-        // SAFETY: empty archetype always exists
-        unsafe { self.archetypes.get_unchecked(ArchetypeId::EMPTY.index()) }
-    }
-
-    /// Fetches a mutable reference to the archetype without any components.
-    #[inline]
-    pub(crate) fn empty_mut(&mut self) -> &mut Archetype {
-        // SAFETY: empty archetype always exists
-        unsafe {
-            self.archetypes
-                .get_unchecked_mut(ArchetypeId::EMPTY.index())
-        }
     }
 
     /// Generate and store a new [`ArchetypeComponentId`].
@@ -931,12 +894,14 @@ impl Archetypes {
         components: &Components,
         observers: &Observers,
         table_id: TableId,
+        sub_storage: SubStorageId,
         table_components: Vec<ComponentId>,
         sparse_set_components: Vec<ComponentId>,
     ) -> ArchetypeId {
         let archetype_identity = ArchetypeComponents {
             sparse_set_components: sparse_set_components.into_boxed_slice(),
             table_components: table_components.into_boxed_slice(),
+            sub_storage,
         };
 
         let archetypes = &mut self.archetypes;
@@ -949,6 +914,7 @@ impl Archetypes {
                 let ArchetypeComponents {
                     table_components,
                     sparse_set_components,
+                    sub_storage,
                 } = identity;
                 let id = ArchetypeId::new(archetypes.len());
                 let table_start = *archetype_component_count;
@@ -965,6 +931,7 @@ impl Archetypes {
                     observers,
                     id,
                     table_id,
+                    *sub_storage,
                     table_components
                         .iter()
                         .copied()
