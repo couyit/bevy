@@ -11,8 +11,6 @@ mod identifier;
 mod spawn_batch;
 pub mod unsafe_world_cell;
 
-pub mod sub_world;
-
 #[cfg(feature = "bevy_reflect")]
 pub mod reflect;
 
@@ -31,7 +29,6 @@ pub use entity_ref::{
 pub use filtered_resource::*;
 pub use identifier::WorldId;
 pub use spawn_batch::*;
-use sub_world::SubWorlds;
 
 use crate::{
     archetype::{ArchetypeId, ArchetypeRow, Archetypes},
@@ -50,7 +47,7 @@ use crate::{
     resource::Resource,
     result::Result,
     schedule::{Schedule, ScheduleLabel, Schedules},
-    storage::{ResourceData, Storages, SubStorageId},
+    storage::{ResourceData, SubStorageId, SubStorages},
     system::Commands,
     world::{
         command_queue::RawCommandQueue,
@@ -93,8 +90,7 @@ pub struct World {
     pub(crate) entities: Entities,
     pub(crate) components: Components,
     pub(crate) archetypes: Archetypes,
-    pub(crate) sub_worlds: SubWorlds,
-    pub(crate) storages: Storages,
+    pub(crate) sub_storages: SubStorages,
     pub(crate) bundles: Bundles,
     pub(crate) observers: Observers,
     pub(crate) removed_components: RemovedComponentEvents,
@@ -111,9 +107,8 @@ impl Default for World {
             id: WorldId::new().expect("More `bevy` `World`s have been created than is supported"),
             entities: Entities::new(),
             components: Default::default(),
-            archetypes: Archetypes::default(),
-            sub_worlds: SubWorlds::new(),
-            storages: Default::default(),
+            archetypes: Default::default(),
+            sub_storages: SubStorages::new(),
             bundles: Default::default(),
             observers: Observers::default(),
             removed_components: Default::default(),
@@ -222,8 +217,8 @@ impl World {
     }
 
     #[inline]
-    pub fn sub_worlds(&self) -> &SubWorlds {
-        &self.sub_worlds
+    pub fn sub_storages(&self) -> &SubStorages {
+        &self.sub_storages
     }
 
     /// Retrieves this world's [`Components`] collection.
@@ -235,7 +230,7 @@ impl World {
     /// Retrieves this world's [`Storages`] collection.
     #[inline]
     pub fn storages(&self) -> &Storages {
-        &self.storages
+        &self.sub_storages[SubStorages::MAIN_STORAGE].storages
     }
 
     /// Retrieves this world's [`Bundles`] collection.
@@ -1018,7 +1013,11 @@ impl World {
     /// assert_eq!(position.x, 0.0);
     /// ```
     #[track_caller]
-    pub fn spawn_empty(&mut self, sub_storage: SubStorageId) -> EntityWorldMut {
+    pub fn spawn_empty(&mut self) -> EntityWorldMut {
+        self.spawn_empty_in_sub_storage(SubStorages::MAIN_STORAGE)
+    }
+
+    pub fn spawn_empty_in_sub_storage(&mut self, sub_storage: SubStorageId) -> Entity {
         self.flush();
         let entity = self.entities.alloc();
         // SAFETY: entity was just allocated
@@ -1093,10 +1092,14 @@ impl World {
     /// assert_eq!(position.x, 2.0);
     /// ```
     #[track_caller]
-    pub fn spawn<B: Bundle>(
+    pub fn spawn<B: Bundle>(&mut self, bundle: B) -> EntityWorldMut {
+        self.spawn_in_sub_storage(bundle, SubStorages::MAIN_STORAGE)
+    }
+
+    pub(crate) fn spawn_in_sub_storage<B: Bundle>(
         &mut self,
         bundle: B,
-        //sub_storage: SubStorageId
+        sub_storage: SubStorageId,
     ) -> EntityWorldMut {
         self.spawn_with_caller(
             bundle,
@@ -2260,8 +2263,22 @@ impl World {
         I::IntoIter: Iterator<Item = (Entity, B)>,
         B: Bundle,
     {
+        self.insert_or_spawn_batch_in_sub_storage(iter, SubStorageId::MAIN_STORAGE)
+    }
+
+    pub fn insert_or_spawn_batch_in_sub_storage<I, B>(
+        &mut self,
+        iter: I,
+        sub_storage: SubStorageId,
+    ) -> Result<(), Vec<Entity>>
+    where
+        I: IntoIterator,
+        I::IntoIter: Iterator<Item = (Entity, B)>,
+        B: Bundle,
+    {
         self.insert_or_spawn_batch_with_caller(
             iter,
+            sub_storage,
             #[cfg(feature = "track_location")]
             Location::caller(),
         )
@@ -2273,6 +2290,7 @@ impl World {
     pub(crate) fn insert_or_spawn_batch_with_caller<I, B>(
         &mut self,
         iter: I,
+        sub_storage: SubStorageId,
         #[cfg(feature = "track_location")] caller: &'static Location,
     ) -> Result<(), Vec<Entity>>
     where
@@ -2300,7 +2318,7 @@ impl World {
         }
         // SAFETY: we initialized this bundle_id in `init_info`
         let mut spawn_or_insert = SpawnOrInsert::Spawn(unsafe {
-            BundleSpawner::new_with_id(self, bundle_id, change_tick)
+            BundleSpawner::new_with_id(self, bundle_id, change_tick, sub_storage)
         });
 
         let mut invalid_entities = Vec::new();
@@ -2365,8 +2383,9 @@ impl World {
                         };
                     } else {
                         // SAFETY: we initialized this bundle_id in `init_info`
-                        let mut spawner =
-                            unsafe { BundleSpawner::new_with_id(self, bundle_id, change_tick) };
+                        let mut spawner = unsafe {
+                            BundleSpawner::new_with_id(self, bundle_id, change_tick, sub_storage)
+                        };
                         // SAFETY: `entity` is valid, `location` matches entity, bundle matches inserter
                         unsafe {
                             spawner.spawn_non_existent(
@@ -3146,22 +3165,15 @@ impl World {
             return;
         }
 
-        let Storages {
-            ref mut sub_storages,
-            ref mut resources,
-            ref mut non_send_resources,
-        } = self.storages;
-
         #[cfg(feature = "trace")]
         let _span = tracing::info_span!("check component ticks").entered();
 
-        for sub_storage in sub_storages.sub_storages.iter_mut() {
-            sub_storage.tables.check_change_ticks(change_tick);
-            sub_storage.sparse_sets.check_change_ticks(change_tick);
+        for storage in self.sub_storages.sub_storages.iter_mut() {
+            storage.tables.check_change_ticks(change_tick);
+            storage.sparse_sets.check_change_ticks(change_tick);
+            storage.resources.check_change_ticks(change_tick);
+            storage.non_send_resources.check_change_ticks(change_tick);
         }
-
-        resources.check_change_ticks(change_tick);
-        non_send_resources.check_change_ticks(change_tick);
 
         if let Some(mut schedules) = self.get_resource_mut::<Schedules>() {
             schedules.check_change_ticks(change_tick);

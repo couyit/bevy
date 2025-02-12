@@ -12,7 +12,7 @@ use crate::{
     query::{Access, ReadOnlyQueryData},
     removal_detection::RemovedComponentEvents,
     resource::Resource,
-    storage::{Storages, SubStorageId},
+    storage::{MainStorage, Storages, SubStorageId, SubStorages},
     system::IntoObserverSystem,
     world::{
         error::EntityComponentError, unsafe_world_cell::UnsafeEntityCell, DeferredWorld, Mut, Ref,
@@ -2575,6 +2575,13 @@ impl<'w> EntityWorldMut<'w> {
     /// If the entity has been despawned while this `EntityWorldMut` is still alive.
     #[track_caller]
     pub fn observe<E: Event, B: Bundle, M>(
+        &mut self,
+        observer: impl IntoObserverSystem<E, B, M>,
+    ) -> &mut Self {
+        self.observe_in_sub_storage(SubStorages::MAIN_STORAGE, observer)
+    }
+
+    pub fn observe_in_sub_storage<E: Event, B: Bundle, M>(
         &mut self,
         sub_storage: SubStorageId,
         observer: impl IntoObserverSystem<E, B, M>,

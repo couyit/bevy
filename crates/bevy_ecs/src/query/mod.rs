@@ -113,7 +113,7 @@ mod tests {
             ReadOnlyQueryData, WorldQuery,
         },
         schedule::{IntoSystemConfigs, Schedule},
-        storage::{Table, TableRow},
+        storage::{SparseSets, Table, TableRow},
         system::{assert_is_system, IntoSystem, Query, System, SystemState},
         world::{unsafe_world_cell::UnsafeWorldCell, World},
     };
@@ -830,6 +830,7 @@ mod tests {
             _state: &Self::State,
             _archetype: &'w Archetype,
             _table: &Table,
+            _sparse_sets: &SparseSets,
         ) {
         }
 

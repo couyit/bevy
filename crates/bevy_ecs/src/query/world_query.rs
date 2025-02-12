@@ -2,7 +2,7 @@ use crate::{
     archetype::Archetype,
     component::{ComponentId, Components, Tick},
     query::FilteredAccess,
-    storage::{ComponentSparseSet, SparseSet, Table},
+    storage::{ComponentSparseSet, SparseSet, SparseSets, Table},
     world::{unsafe_world_cell::UnsafeWorldCell, World},
 };
 use variadics_please::all_tuples;
@@ -90,7 +90,7 @@ pub unsafe trait WorldQuery {
         state: &Self::State,
         archetype: &'w Archetype,
         table: &'w Table,
-        sparse_set: &'w SparseSet<ComponentId, ComponentSparseSet>,
+        sparse_sets: &'w SparseSets,
     );
 
     /// Adjusts internal state to account for the next [`Table`]. This will always be called on tables
@@ -184,12 +184,12 @@ macro_rules! impl_tuple_world_query {
                 state: &Self::State,
                 archetype: &'w Archetype,
                 table: &'w Table,
-                sparse_set: &'w SparseSet<ComponentId, ComponentSparseSet>,
+                sparse_sets: &SparseSets,
             ) {
                 let ($($name,)*) = fetch;
                 let ($($state,)*) = state;
                 // SAFETY: The invariants are upheld by the caller.
-                $(unsafe { $name::set_archetype($name, $state, archetype, table, sparse_set); })*
+                $(unsafe { $name::set_archetype($name, $state, archetype, table, sparse_sets); })*
             }
 
             #[inline]

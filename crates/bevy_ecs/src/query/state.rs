@@ -9,13 +9,9 @@ use crate::{
         Access, DebugCheckedUnwrap, FilteredAccess, QueryCombinationIter, QueryIter, QueryParIter,
         WorldQuery,
     },
-    storage::{SparseSetIndex, TableId},
+    storage::{SparseSetIndex, SubStorage, TableId},
     system::Query,
-    world::{
-        sub_world::{MainSubWorld, SubWorld},
-        unsafe_world_cell::UnsafeWorldCell,
-        World, WorldId,
-    },
+    world::{unsafe_world_cell::UnsafeWorldCell, World, WorldId},
 };
 
 use alloc::vec::Vec;
@@ -325,7 +321,10 @@ impl<D: QueryData, F: QueryFilter> QueryState<D, F> {
     /// Creates a [`Query`] from the given [`QueryState`] and [`World`].
     ///
     /// This will create read-only queries, see [`Self::query_mut`] for mutable queries.
-    pub fn query<'w, 's>(&'s mut self, world: &'w World) -> Query<'w, 's, D::ReadOnly, F> {
+    pub fn query<'w, 's, S: SubStorage>(
+        &'s mut self,
+        world: &'w World,
+    ) -> Query<'w, 's, D::ReadOnly, F, S> {
         self.update_archetypes(world);
         self.query_manual(world)
     }
@@ -341,7 +340,10 @@ impl<D: QueryData, F: QueryFilter> QueryState<D, F> {
     /// access to `self`.
     ///
     /// This will create read-only queries, see [`Self::query_mut`] for mutable queries.
-    pub fn query_manual<'w, 's>(&'s self, world: &'w World) -> Query<'w, 's, D::ReadOnly, F> {
+    pub fn query_manual<'w, 's, S: SubStorage>(
+        &'s self,
+        world: &'w World,
+    ) -> Query<'w, 's, D::ReadOnly, F, S> {
         // SAFETY: We have read access to the entire world, and we call `as_readonly()` so the query only performs read access.
         unsafe {
             self.as_readonly()
@@ -350,7 +352,10 @@ impl<D: QueryData, F: QueryFilter> QueryState<D, F> {
     }
 
     /// Creates a [`Query`] from the given [`QueryState`] and [`World`].
-    pub fn query_mut<'w, 's>(&'s mut self, world: &'w mut World) -> Query<'w, 's, D, F> {
+    pub fn query_mut<'w, 's, S: SubStorage>(
+        &'s mut self,
+        world: &'w mut World,
+    ) -> Query<'w, 's, D, F, S> {
         let last_run = world.last_change_tick();
         let this_run = world.change_tick();
         // SAFETY: We have exclusive access to the entire world.
@@ -363,10 +368,10 @@ impl<D: QueryData, F: QueryFilter> QueryState<D, F> {
     ///
     /// This does not check for mutable query correctness. To be safe, make sure mutable queries
     /// have unique access to the components they query.
-    pub unsafe fn query_unchecked<'w, 's>(
+    pub unsafe fn query_unchecked<'w, 's, S: SubStorage>(
         &'s mut self,
         world: UnsafeWorldCell<'w>,
-    ) -> Query<'w, 's, D, F> {
+    ) -> Query<'w, 's, D, F, S> {
         self.update_archetypes_unsafe_world_cell(world);
         // SAFETY: Caller ensures we have the required access
         unsafe { self.query_unchecked_manual(world) }
@@ -386,10 +391,10 @@ impl<D: QueryData, F: QueryFilter> QueryState<D, F> {
     ///
     /// This does not check for mutable query correctness. To be safe, make sure mutable queries
     /// have unique access to the components they query.
-    pub unsafe fn query_unchecked_manual<'w, 's>(
+    pub unsafe fn query_unchecked_manual<'w, 's, S: SubStorage>(
         &'s self,
         world: UnsafeWorldCell<'w>,
-    ) -> Query<'w, 's, D, F> {
+    ) -> Query<'w, 's, D, F, S> {
         let last_run = world.last_change_tick();
         let this_run = world.change_tick();
         // SAFETY: The caller ensured we have the correct access to the world.
@@ -402,12 +407,12 @@ impl<D: QueryData, F: QueryFilter> QueryState<D, F> {
     ///
     /// This does not check for mutable query correctness. To be safe, make sure mutable queries
     /// have unique access to the components they query.
-    pub unsafe fn query_unchecked_with_ticks<'w, 's>(
+    pub unsafe fn query_unchecked_with_ticks<'w, 's, S: SubStorage>(
         &'s mut self,
         world: UnsafeWorldCell<'w>,
         last_run: Tick,
         this_run: Tick,
-    ) -> Query<'w, 's, D, F> {
+    ) -> Query<'w, 's, D, F, S> {
         self.update_archetypes_unsafe_world_cell(world);
         // SAFETY: The caller ensured we have the correct access to the world.
         unsafe { self.query_unchecked_manual_with_ticks(world, last_run, this_run) }
@@ -427,12 +432,12 @@ impl<D: QueryData, F: QueryFilter> QueryState<D, F> {
     ///
     /// This does not check for mutable query correctness. To be safe, make sure mutable queries
     /// have unique access to the components they query.
-    pub unsafe fn query_unchecked_manual_with_ticks<'w, 's>(
+    pub unsafe fn query_unchecked_manual_with_ticks<'w, 's, S: SubStorage>(
         &'s self,
         world: UnsafeWorldCell<'w>,
         last_run: Tick,
         this_run: Tick,
-    ) -> Query<'w, 's, D, F> {
+    ) -> Query<'w, 's, D, F, S> {
         self.validate_world(world.id());
         // SAFETY:
         // - The caller ensured we have the correct access to the world.
@@ -1174,8 +1179,16 @@ impl<D: QueryData, F: QueryFilter> QueryState<D, F> {
             .tables
             .get(location.table_id)
             .debug_checked_unwrap();
-        D::set_archetype(&mut fetch, &self.fetch_state, archetype, table);
-        F::set_archetype(&mut filter, &self.filter_state, archetype, table);
+        let sparse_sets = world.storages().sparse_sets;
+
+        D::set_archetype(&mut fetch, &self.fetch_state, archetype, table, sparse_sets);
+        F::set_archetype(
+            &mut filter,
+            &self.filter_state,
+            archetype,
+            table,
+            sparse_sets,
+        );
 
         if F::filter_fetch(&mut filter, entity, location.table_row) {
             Ok(D::fetch(&mut fetch, entity, location.table_row))

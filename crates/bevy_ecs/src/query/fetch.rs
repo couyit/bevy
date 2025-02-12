@@ -5,10 +5,10 @@ use crate::{
     component::{Component, ComponentId, Components, Mutable, StorageType, Tick},
     entity::{Entities, Entity, EntityLocation},
     query::{Access, DebugCheckedUnwrap, FilteredAccess, WorldQuery},
-    storage::{ComponentSparseSet, Table, TableRow},
+    storage::{ComponentSparseSet, SparseSets, Table, TableRow},
     world::{
-        sub_world::SubWorld, unsafe_world_cell::UnsafeWorldCell, EntityMut, EntityMutExcept,
-        EntityRef, EntityRefExcept, FilteredEntityMut, FilteredEntityRef, Mut, Ref, World,
+        unsafe_world_cell::UnsafeWorldCell, EntityMut, EntityMutExcept, EntityRef, EntityRefExcept,
+        FilteredEntityMut, FilteredEntityRef, Mut, Ref, World,
     },
 };
 use bevy_ptr::{ThinSlicePtr, UnsafeCellDeref};
@@ -342,6 +342,7 @@ unsafe impl WorldQuery for Entity {
         _state: &Self::State,
         _archetype: &'w Archetype,
         _table: &Table,
+        _sparse_sets: &SparseSets,
     ) {
     }
 
@@ -418,6 +419,7 @@ unsafe impl WorldQuery for EntityLocation {
         _state: &Self::State,
         _archetype: &'w Archetype,
         _table: &Table,
+        _sparse_sets: &SparseSets,
     ) {
     }
 
@@ -493,6 +495,7 @@ unsafe impl<'a> WorldQuery for EntityRef<'a> {
         _state: &Self::State,
         _archetype: &'w Archetype,
         _table: &Table,
+        _sparse_sets: &SparseSets,
     ) {
     }
 
@@ -573,6 +576,7 @@ unsafe impl<'a> WorldQuery for EntityMut<'a> {
         _state: &Self::State,
         _archetype: &'w Archetype,
         _table: &Table,
+        _sparse_sets: &SparseSets,
     ) {
     }
 
@@ -652,6 +656,7 @@ unsafe impl<'a> WorldQuery for FilteredEntityRef<'a> {
         state: &Self::State,
         _: &'w Archetype,
         _table: &Table,
+        _sparse_sets: &SparseSets,
     ) {
         fetch.1.clone_from(&state.access);
     }
@@ -747,6 +752,7 @@ unsafe impl<'a> WorldQuery for FilteredEntityMut<'a> {
         state: &Self::State,
         _: &'w Archetype,
         _table: &Table,
+        _sparse_sets: &SparseSets,
     ) {
         fetch.1.clone_from(&state.access);
     }
@@ -840,6 +846,7 @@ where
         _: &Self::State,
         _: &'w Archetype,
         _: &'w Table,
+        _: &SparseSets,
     ) {
     }
 
@@ -939,6 +946,7 @@ where
         _: &Self::State,
         _: &'w Archetype,
         _: &'w Table,
+        _: &SparseSets,
     ) {
     }
 
@@ -1035,6 +1043,7 @@ unsafe impl WorldQuery for &Archetype {
         _state: &Self::State,
         _archetype: &'w Archetype,
         _table: &Table,
+        _sparse_sets: &SparseSets,
     ) {
     }
 
@@ -1117,22 +1126,13 @@ unsafe impl<T: Component> WorldQuery for &T {
 
     #[inline]
     unsafe fn init_fetch<'w>(
-        world: UnsafeWorldCell<'w>,
-        &component_id: &ComponentId,
+        _world: UnsafeWorldCell<'w>,
+        _component_id: &ComponentId,
         _last_run: Tick,
         _this_run: Tick,
     ) -> ReadFetch<'w, T> {
         ReadFetch {
-            components: StorageSwitch::new(
-                || None,
-                || {
-                    // SAFETY: The underlying type associated with `component_id` is `T`,
-                    // which we are allowed to access since we registered it in `update_archetype_component_access`.
-                    // Note that we do not actually access any components in this function, we just get a shared
-                    // reference to the sparse set, which is used to access the components in `Self::fetch`.
-                    unsafe { world.storages().sparse_sets.get(component_id) }
-                },
-            ),
+            components: StorageSwitch::new(|| None, || None),
         }
     }
 
@@ -1147,8 +1147,9 @@ unsafe impl<T: Component> WorldQuery for &T {
     unsafe fn set_archetype<'w>(
         fetch: &mut ReadFetch<'w, T>,
         component_id: &ComponentId,
-        archetype: &'w Archetype,
+        _archetype: &'w Archetype,
         table: &'w Table,
+        sparse_sets: &'w SparseSets,
     ) {
         if Self::IS_DENSE {
             // SAFETY: `set_archetype`'s safety rules are a super set of the `set_table`'s ones.
@@ -1156,9 +1157,11 @@ unsafe impl<T: Component> WorldQuery for &T {
                 Self::set_table(fetch, component_id, table);
             }
         } else {
-            let sparse_set = world.storages().sub_storages[archetype.sub_storage()]
-                .sparse_sets
-                .get(component_id);
+            unsafe {
+                fetch
+                    .components
+                    .set_sparse_sets(Some(sparse_sets.get(*component_id).debug_checked_unwrap()));
+            }
         }
     }
 
@@ -1287,22 +1290,13 @@ unsafe impl<'__w, T: Component> WorldQuery for Ref<'__w, T> {
 
     #[inline]
     unsafe fn init_fetch<'w>(
-        world: UnsafeWorldCell<'w>,
-        &component_id: &ComponentId,
+        _world: UnsafeWorldCell<'w>,
+        _component_id: &ComponentId,
         last_run: Tick,
         this_run: Tick,
     ) -> RefFetch<'w, T> {
         RefFetch {
-            components: StorageSwitch::new(
-                || None,
-                || {
-                    // SAFETY: The underlying type associated with `component_id` is `T`,
-                    // which we are allowed to access since we registered it in `update_archetype_component_access`.
-                    // Note that we do not actually access any components in this function, we just get a shared
-                    // reference to the sparse set, which is used to access the components in `Self::fetch`.
-                    unsafe { world.storages().sparse_sets.get(component_id) }
-                },
-            ),
+            components: StorageSwitch::new(|| None, || None),
             last_run,
             this_run,
         }
@@ -1321,11 +1315,18 @@ unsafe impl<'__w, T: Component> WorldQuery for Ref<'__w, T> {
         component_id: &ComponentId,
         _archetype: &'w Archetype,
         table: &'w Table,
+        sparse_sets: &'w SparseSets,
     ) {
         if Self::IS_DENSE {
             // SAFETY: `set_archetype`'s safety rules are a super set of the `set_table`'s ones.
             unsafe {
                 Self::set_table(fetch, component_id, table);
+            }
+        } else {
+            unsafe {
+                fetch
+                    .components
+                    .set_sparse_sets(Some(sparse_sets.get(*component_id).debug_checked_unwrap()));
             }
         }
     }
@@ -1485,22 +1486,13 @@ unsafe impl<'__w, T: Component> WorldQuery for &'__w mut T {
 
     #[inline]
     unsafe fn init_fetch<'w>(
-        world: UnsafeWorldCell<'w>,
-        &component_id: &ComponentId,
+        _world: UnsafeWorldCell<'w>,
+        _component_id: &ComponentId,
         last_run: Tick,
         this_run: Tick,
     ) -> WriteFetch<'w, T> {
         WriteFetch {
-            components: StorageSwitch::new(
-                || None,
-                || {
-                    // SAFETY: The underlying type associated with `component_id` is `T`,
-                    // which we are allowed to access since we registered it in `update_archetype_component_access`.
-                    // Note that we do not actually access any components in this function, we just get a shared
-                    // reference to the sparse set, which is used to access the components in `Self::fetch`.
-                    unsafe { world.storages().sparse_sets.get(component_id) }
-                },
-            ),
+            components: StorageSwitch::new(|| None, || None),
             last_run,
             this_run,
         }
@@ -1519,11 +1511,18 @@ unsafe impl<'__w, T: Component> WorldQuery for &'__w mut T {
         component_id: &ComponentId,
         _archetype: &'w Archetype,
         table: &'w Table,
+        sparse_sets: &'w SparseSets,
     ) {
         if Self::IS_DENSE {
             // SAFETY: `set_archetype`'s safety rules are a super set of the `set_table`'s ones.
             unsafe {
                 Self::set_table(fetch, component_id, table);
+            }
+        } else {
+            unsafe {
+                fetch
+                    .components
+                    .set_sparse_sets(Some(sparse_sets.get(*component_id).debug_checked_unwrap()));
             }
         }
     }
@@ -1677,8 +1676,9 @@ unsafe impl<'__w, T: Component> WorldQuery for Mut<'__w, T> {
         state: &ComponentId,
         archetype: &'w Archetype,
         table: &'w Table,
+        sparse_sets: &'w SparseSets,
     ) {
-        <&mut T as WorldQuery>::set_archetype(fetch, state, archetype, table);
+        <&mut T as WorldQuery>::set_archetype(fetch, state, archetype, table, sparse_sets);
     }
 
     #[inline]
@@ -1796,12 +1796,13 @@ unsafe impl<T: WorldQuery> WorldQuery for Option<T> {
         state: &T::State,
         archetype: &'w Archetype,
         table: &'w Table,
+        sparse_sets: &'w SparseSets,
     ) {
         fetch.matches = T::matches_component_set(state, &|id| archetype.contains(id));
         if fetch.matches {
             // SAFETY: The invariants are upheld by the caller.
             unsafe {
-                T::set_archetype(&mut fetch.fetch, state, archetype, table);
+                T::set_archetype(&mut fetch.fetch, state, archetype, table, sparse_sets);
             }
         }
     }
@@ -1978,6 +1979,7 @@ unsafe impl<T: Component> WorldQuery for Has<T> {
         state: &Self::State,
         archetype: &'w Archetype,
         _table: &Table,
+        _sparse_sets: &SparseSets,
     ) {
         *fetch = archetype.contains(*state);
     }
@@ -2139,7 +2141,8 @@ macro_rules! impl_anytuple_fetch {
                 _fetch: &mut Self::Fetch<'w>,
                 _state: &Self::State,
                 _archetype: &'w Archetype,
-                _table: &'w Table
+                _table: &'w Table,
+                _sparse_sets: &'w SparseSets,
             ) {
                 let ($($name,)*) = _fetch;
                 let ($($state,)*) = _state;
@@ -2147,7 +2150,7 @@ macro_rules! impl_anytuple_fetch {
                     $name.1 = $name::matches_component_set($state, &|id| _archetype.contains(id));
                     if $name.1 {
                         // SAFETY: The invariants are upheld by the caller.
-                        unsafe { $name::set_archetype(&mut $name.0, $state, _archetype, _table); }
+                        unsafe { $name::set_archetype(&mut $name.0, $state, _archetype, _table, _sparse_sets); }
                     }
                 )*
             }
@@ -2301,6 +2304,7 @@ unsafe impl<D: QueryData> WorldQuery for NopWorldQuery<D> {
         _state: &D::State,
         _archetype: &Archetype,
         _tables: &Table,
+        _sparse_sets: &SparseSets,
     ) {
     }
 
@@ -2372,6 +2376,7 @@ unsafe impl<T: ?Sized> WorldQuery for PhantomData<T> {
         _state: &Self::State,
         _archetype: &'w Archetype,
         _table: &'w Table,
+        _sparse_sets: &SparseSets,
     ) {
     }
 
@@ -2418,7 +2423,7 @@ pub(super) union StorageSwitch<C: Component, T: Copy, S: Copy> {
     /// The table variant. Requires the component to be a table component.
     table: T,
     /// The sparse set variant. Requires the component to be a sparse set component.
-    sparse_set: S,
+    sparse_sets: S,
     _marker: PhantomData<C>,
 }
 
@@ -2429,7 +2434,7 @@ impl<C: Component, T: Copy, S: Copy> StorageSwitch<C, T, S> {
         match C::STORAGE_TYPE {
             StorageType::Table => Self { table: table() },
             StorageType::SparseSet => Self {
-                sparse_set: sparse_set(),
+                sparse_sets: sparse_set(),
             },
         }
     }
@@ -2456,6 +2461,19 @@ impl<C: Component, T: Copy, S: Copy> StorageSwitch<C, T, S> {
         }
     }
 
+    #[inline]
+    pub unsafe fn set_sparse_sets(&mut self, sarpse_sets: S) {
+        match C::STORAGE_TYPE {
+            StorageType::SparseSet => self.sparse_sets = sarpse_sets,
+            _ => {
+                #[cfg(debug_assertions)]
+                unreachable!();
+                #[cfg(not(debug_assertions))]
+                core::hint::unreachable_unchecked()
+            }
+        }
+    }
+
     /// Fetches the internal value from the variant that corresponds to the
     /// component's [`StorageType`].
     pub fn extract<R>(&self, table: impl FnOnce(T) -> R, sparse_set: impl FnOnce(S) -> R) -> R {
@@ -2466,7 +2484,7 @@ impl<C: Component, T: Copy, S: Copy> StorageSwitch<C, T, S> {
             ),
             StorageType::SparseSet => sparse_set(
                 // SAFETY: C::STORAGE_TYPE == StorageType::SparseSet
-                unsafe { self.sparse_set },
+                unsafe { self.sparse_sets },
             ),
         }
     }

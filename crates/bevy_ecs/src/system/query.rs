@@ -7,10 +7,8 @@ use crate::{
         QueryManyUniqueIter, QueryParIter, QuerySingleError, QueryState, ROQueryItem,
         ReadOnlyQueryData,
     },
-    world::{
-        sub_world::{MainSubWorld, SubWorld},
-        unsafe_world_cell::UnsafeWorldCell,
-    },
+    storage::{MainStorage, SubStorage},
+    world::unsafe_world_cell::UnsafeWorldCell,
 };
 use core::{
     marker::PhantomData,
@@ -376,24 +374,24 @@ use core::{
 /// [`Table`]: crate::storage::Table
 /// [`With`]: crate::query::With
 /// [`Without`]: crate::query::Without
-pub struct Query<'world, 'state, D: QueryData, F: QueryFilter = (), W: SubWorld = MainSubWorld> {
+pub struct Query<'world, 'state, D: QueryData, F: QueryFilter = (), S: SubStorage = MainStorage> {
     // SAFETY: Must have access to the components registered in `state`.
     world: UnsafeWorldCell<'world>,
     state: &'state QueryState<D, F>,
     last_run: Tick,
     this_run: Tick,
-    _phantom: PhantomData<W>,
+    _phantom: PhantomData<S>,
 }
 
-impl<D: ReadOnlyQueryData, F: QueryFilter, W: SubWorld> Clone for Query<'_, '_, D, F, W> {
+impl<D: ReadOnlyQueryData, F: QueryFilter, S: SubStorage> Clone for Query<'_, '_, D, F, S> {
     fn clone(&self) -> Self {
         *self
     }
 }
 
-impl<D: ReadOnlyQueryData, F: QueryFilter, W: SubWorld> Copy for Query<'_, '_, D, F, W> {}
+impl<D: ReadOnlyQueryData, F: QueryFilter, S: SubStorage> Copy for Query<'_, '_, D, F, S> {}
 
-impl<D: QueryData, F: QueryFilter, W: SubWorld> core::fmt::Debug for Query<'_, '_, D, F, W> {
+impl<D: QueryData, F: QueryFilter, S: SubStorage> core::fmt::Debug for Query<'_, '_, D, F, S> {
     fn fmt(&self, f: &mut core::fmt::Formatter) -> core::fmt::Result {
         f.debug_struct("Query")
             .field("matched_entities", &self.iter().count())
@@ -405,7 +403,7 @@ impl<D: QueryData, F: QueryFilter, W: SubWorld> core::fmt::Debug for Query<'_, '
     }
 }
 
-impl<'w, 's, D: QueryData, F: QueryFilter, W: SubWorld> Query<'w, 's, D, F, W> {
+impl<'w, 's, D: QueryData, F: QueryFilter, S: SubStorage> Query<'w, 's, D, F, S> {
     /// Creates a new query.
     ///
     /// # Safety
@@ -1862,7 +1860,7 @@ impl<'w, 's, D: QueryData, F: QueryFilter, W: SubWorld> Query<'w, 's, D, F, W> {
     #[track_caller]
     pub fn transmute_lens_filtered_inner<NewD: QueryData, NewF: QueryFilter>(
         self,
-    ) -> QueryLens<'w, NewD, NewF, W> {
+    ) -> QueryLens<'w, NewD, NewF, S> {
         let state = self.state.transmute_filtered::<NewD, NewF>(self.world);
         QueryLens {
             world: self.world,
@@ -2013,8 +2011,8 @@ impl<'w, 's, D: QueryData, F: QueryFilter, W: SubWorld> Query<'w, 's, D, F, W> {
         NewF: QueryFilter,
     >(
         self,
-        other: &mut Query<OtherD, OtherF, W>,
-    ) -> QueryLens<'w, NewD, NewF, W> {
+        other: &mut Query<OtherD, OtherF, S>,
+    ) -> QueryLens<'w, NewD, NewF, S> {
         let state = self
             .state
             .join_filtered::<OtherD, OtherF, NewD, NewF>(self.world, other.state);
@@ -2028,9 +2026,9 @@ impl<'w, 's, D: QueryData, F: QueryFilter, W: SubWorld> Query<'w, 's, D, F, W> {
     }
 }
 
-impl<'w, 's, D: QueryData, F: QueryFilter, W: SubWorld> IntoIterator for Query<'w, 's, D, F, W> {
+impl<'w, 's, D: QueryData, F: QueryFilter, S: SubStorage> IntoIterator for Query<'w, 's, D, F, S> {
     type Item = D::Item<'w>;
-    type IntoIter = QueryIter<'w, 's, D, F, W>;
+    type IntoIter = QueryIter<'w, 's, D, F>;
 
     fn into_iter(self) -> Self::IntoIter {
         // SAFETY:
@@ -2044,29 +2042,29 @@ impl<'w, 's, D: QueryData, F: QueryFilter, W: SubWorld> IntoIterator for Query<'
     }
 }
 
-impl<'w, 's, D: QueryData, F: QueryFilter, W: SubWorld> IntoIterator
-    for &'w Query<'_, 's, D, F, W>
+impl<'w, 's, D: QueryData, F: QueryFilter, S: SubStorage> IntoIterator
+    for &'w Query<'_, 's, D, F, S>
 {
     type Item = ROQueryItem<'w, D>;
-    type IntoIter = QueryIter<'w, 's, D::ReadOnly, F, W>;
+    type IntoIter = QueryIter<'w, 's, D::ReadOnly, F>;
 
     fn into_iter(self) -> Self::IntoIter {
         self.iter()
     }
 }
 
-impl<'w, 's, D: QueryData, F: QueryFilter, W: SubWorld> IntoIterator
-    for &'w mut Query<'_, 's, D, F, W>
+impl<'w, 's, D: QueryData, F: QueryFilter, S: SubStorage> IntoIterator
+    for &'w mut Query<'_, 's, D, F, S>
 {
     type Item = D::Item<'w>;
-    type IntoIter = QueryIter<'w, 's, D, F, W>;
+    type IntoIter = QueryIter<'w, 's, D, F>;
 
     fn into_iter(self) -> Self::IntoIter {
         self.iter_mut()
     }
 }
 
-impl<'w, 's, D: ReadOnlyQueryData, F: QueryFilter, W: SubWorld> Query<'w, 's, D, F, W> {
+impl<'w, 's, D: ReadOnlyQueryData, F: QueryFilter, S: SubStorage> Query<'w, 's, D, F, S> {
     /// Returns an [`Iterator`] over the query items, with the actual "inner" world lifetime.
     ///
     /// This can only return immutable data (mutable data will be cast to an immutable form).
@@ -2099,17 +2097,17 @@ impl<'w, 's, D: ReadOnlyQueryData, F: QueryFilter, W: SubWorld> Query<'w, 's, D,
 /// Type returned from [`Query::transmute_lens`] containing the new [`QueryState`].
 ///
 /// Call [`query`](QueryLens::query) or [`into`](Into::into) to construct the resulting [`Query`]
-pub struct QueryLens<'w, Q: QueryData, F: QueryFilter = (), W: SubWorld = MainSubWorld> {
+pub struct QueryLens<'w, Q: QueryData, F: QueryFilter = (), S: SubStorage = MainStorage> {
     world: UnsafeWorldCell<'w>,
     state: QueryState<Q, F>,
     last_run: Tick,
     this_run: Tick,
-    _phantom: PhantomData<W>,
+    _phantom: PhantomData<S>,
 }
 
-impl<'w, Q: QueryData, F: QueryFilter, W: SubWorld> QueryLens<'w, Q, F, W> {
+impl<'w, Q: QueryData, F: QueryFilter, S: SubStorage> QueryLens<'w, Q, F, S> {
     /// Create a [`Query`] from the underlying [`QueryState`].
-    pub fn query(&mut self) -> Query<'w, '_, Q, F, W> {
+    pub fn query(&mut self) -> Query<'w, '_, Q, F, S> {
         Query {
             world: self.world,
             state: &self.state,
@@ -2146,12 +2144,12 @@ impl<'w, 'q, Q: QueryData, F: QueryFilter> From<&'q mut Query<'w, '_, Q, F>>
 /// See [`Query`] for more details.
 ///
 /// [System parameter]: crate::system::SystemParam
-pub struct Single<'w, D: QueryData, F: QueryFilter = (), W: SubWorld = MainSubWorld> {
+pub struct Single<'w, D: QueryData, F: QueryFilter = (), S: SubStorage = MainStorage> {
     pub(crate) item: D::Item<'w>,
-    pub(crate) _filter: PhantomData<(F, W)>,
+    pub(crate) _filter: PhantomData<(F, S)>,
 }
 
-impl<'w, D: QueryData, F: QueryFilter, W: SubWorld> Deref for Single<'w, D, F, W> {
+impl<'w, D: QueryData, F: QueryFilter, S: SubStorage> Deref for Single<'w, D, F, S> {
     type Target = D::Item<'w>;
 
     fn deref(&self) -> &Self::Target {
@@ -2159,13 +2157,13 @@ impl<'w, D: QueryData, F: QueryFilter, W: SubWorld> Deref for Single<'w, D, F, W
     }
 }
 
-impl<'w, D: QueryData, F: QueryFilter, W: SubWorld> DerefMut for Single<'w, D, F, W> {
+impl<'w, D: QueryData, F: QueryFilter, S: SubStorage> DerefMut for Single<'w, D, F, S> {
     fn deref_mut(&mut self) -> &mut Self::Target {
         &mut self.item
     }
 }
 
-impl<'w, D: QueryData, F: QueryFilter, W: SubWorld> Single<'w, D, F, W> {
+impl<'w, D: QueryData, F: QueryFilter, S: SubStorage> Single<'w, D, F, S> {
     /// Returns the inner item with ownership.
     pub fn into_inner(self) -> D::Item<'w> {
         self.item
@@ -2184,27 +2182,27 @@ impl<'w, D: QueryData, F: QueryFilter, W: SubWorld> Single<'w, D, F, W> {
 /// See [`Query`] for more details.
 ///
 /// [System parameter]: crate::system::SystemParam
-pub struct Populated<'w, 's, D: QueryData, F: QueryFilter = (), W: SubWorld = MainSubWorld>(
-    pub(crate) Query<'w, 's, D, F, W>,
+pub struct Populated<'w, 's, D: QueryData, F: QueryFilter = (), S: SubStorage = MainStorage>(
+    pub(crate) Query<'w, 's, D, F, S>,
 );
 
-impl<'w, 's, D: QueryData, F: QueryFilter, W: SubWorld> Deref for Populated<'w, 's, D, F, W> {
-    type Target = Query<'w, 's, D, F, W>;
+impl<'w, 's, D: QueryData, F: QueryFilter, S: SubStorage> Deref for Populated<'w, 's, D, F, S> {
+    type Target = Query<'w, 's, D, F, S>;
 
     fn deref(&self) -> &Self::Target {
         &self.0
     }
 }
 
-impl<D: QueryData, F: QueryFilter, W: SubWorld> DerefMut for Populated<'_, '_, D, F, W> {
+impl<D: QueryData, F: QueryFilter, S: SubStorage> DerefMut for Populated<'_, '_, D, F, S> {
     fn deref_mut(&mut self) -> &mut Self::Target {
         &mut self.0
     }
 }
 
-impl<'w, 's, D: QueryData, F: QueryFilter, W: SubWorld> Populated<'w, 's, D, F, W> {
+impl<'w, 's, D: QueryData, F: QueryFilter, S: SubStorage> Populated<'w, 's, D, F, S> {
     /// Returns the inner item with ownership.
-    pub fn into_inner(self) -> Query<'w, 's, D, F, W> {
+    pub fn into_inner(self) -> Query<'w, 's, D, F, S> {
         self.0
     }
 }

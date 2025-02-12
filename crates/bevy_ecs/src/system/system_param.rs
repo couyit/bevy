@@ -10,12 +10,11 @@ use crate::{
         QueryState, ReadOnlyQueryData,
     },
     resource::Resource,
-    storage::ResourceData,
+    storage::{ResourceData, SubStorage},
     system::{Query, Single, SystemMeta},
     world::{
-        sub_world::{MainSubWorld, SubWorld},
-        unsafe_world_cell::UnsafeWorldCell,
-        DeferredWorld, FilteredResources, FilteredResourcesMut, FromWorld, World,
+        unsafe_world_cell::UnsafeWorldCell, DeferredWorld, FilteredResources, FilteredResourcesMut,
+        FromWorld, World,
     },
 };
 use alloc::{borrow::ToOwned, boxed::Box, vec::Vec};
@@ -300,18 +299,18 @@ pub unsafe trait ReadOnlySystemParam: SystemParam {}
 pub type SystemParamItem<'w, 's, P> = <P as SystemParam>::Item<'w, 's>;
 
 // SAFETY: QueryState is constrained to read-only fetches, so it only reads World.
-unsafe impl<'w, 's, D: ReadOnlyQueryData + 'static, F: QueryFilter + 'static, W: SubWorld>
-    ReadOnlySystemParam for Query<'w, 's, D, F, W>
+unsafe impl<'w, 's, D: ReadOnlyQueryData + 'static, F: QueryFilter + 'static, S: SubStorage>
+    ReadOnlySystemParam for Query<'w, 's, D, F, S>
 {
 }
 
 // SAFETY: Relevant query ComponentId and ArchetypeComponentId access is applied to SystemMeta. If
 // this Query conflicts with any prior access, a panic will occur.
-unsafe impl<D: QueryData + 'static, F: QueryFilter + 'static, W: SubWorld> SystemParam
-    for Query<'_, '_, D, F, W>
+unsafe impl<D: QueryData + 'static, F: QueryFilter + 'static, S: SubStorage> SystemParam
+    for Query<'_, '_, D, F, S>
 {
     type State = QueryState<D, F>;
-    type Item<'w, 's> = Query<'w, 's, D, F, W>;
+    type Item<'w, 's> = Query<'w, 's, D, F, S>;
 
     fn init_state(world: &mut World, system_meta: &mut SystemMeta) -> Self::State {
         let state = QueryState::new_with_access(world, &mut system_meta.archetype_component_access);
@@ -381,12 +380,14 @@ fn assert_component_access_compatibility(
 
 // SAFETY: Relevant query ComponentId and ArchetypeComponentId access is applied to SystemMeta. If
 // this Query conflicts with any prior access, a panic will occur.
-unsafe impl<'a, D: QueryData + 'static, F: QueryFilter + 'static> SystemParam for Single<'a, D, F> {
+unsafe impl<'a, D: QueryData + 'static, F: QueryFilter + 'static, S: SubStorage> SystemParam
+    for Single<'a, D, F, S>
+{
     type State = QueryState<D, F>;
-    type Item<'w, 's> = Single<'w, D, F>;
+    type Item<'w, 's> = Single<'w, D, F, S>;
 
     fn init_state(world: &mut World, system_meta: &mut SystemMeta) -> Self::State {
-        Query::init_state(world, system_meta)
+        Query::<D, F, S>::init_state(world, system_meta)
     }
 
     unsafe fn new_archetype(
@@ -395,7 +396,7 @@ unsafe impl<'a, D: QueryData + 'static, F: QueryFilter + 'static> SystemParam fo
         system_meta: &mut SystemMeta,
     ) {
         // SAFETY: Delegate to existing `SystemParam` implementations.
-        unsafe { Query::new_archetype(state, archetype, system_meta) };
+        unsafe { Query::<D, F, S>::new_archetype(state, archetype, system_meta) };
     }
 
     #[inline]
@@ -408,7 +409,7 @@ unsafe impl<'a, D: QueryData + 'static, F: QueryFilter + 'static> SystemParam fo
         state.validate_world(world.id());
         // SAFETY: State ensures that the components it accesses are not accessible somewhere elsewhere.
         let query = unsafe {
-            state.query_unchecked_manual_with_ticks(world, system_meta.last_run, change_tick)
+            state.query_unchecked_manual_with_ticks::<S>(world, system_meta.last_run, change_tick)
         };
         let single = query
             .get_single_inner()
@@ -429,7 +430,7 @@ unsafe impl<'a, D: QueryData + 'static, F: QueryFilter + 'static> SystemParam fo
         // SAFETY: State ensures that the components it accesses are not mutably accessible elsewhere
         // and the query is read only.
         let query = unsafe {
-            state.query_unchecked_manual_with_ticks(
+            state.query_unchecked_manual_with_ticks::<S>(
                 world,
                 system_meta.last_run,
                 world.change_tick(),
@@ -445,14 +446,14 @@ unsafe impl<'a, D: QueryData + 'static, F: QueryFilter + 'static> SystemParam fo
 
 // SAFETY: Relevant query ComponentId and ArchetypeComponentId access is applied to SystemMeta. If
 // this Query conflicts with any prior access, a panic will occur.
-unsafe impl<'a, D: QueryData + 'static, F: QueryFilter + 'static> SystemParam
-    for Option<Single<'a, D, F>>
+unsafe impl<'a, D: QueryData + 'static, F: QueryFilter + 'static, S: SubStorage> SystemParam
+    for Option<Single<'a, D, F, S>>
 {
     type State = QueryState<D, F>;
-    type Item<'w, 's> = Option<Single<'w, D, F>>;
+    type Item<'w, 's> = Option<Single<'w, D, F, S>>;
 
     fn init_state(world: &mut World, system_meta: &mut SystemMeta) -> Self::State {
-        Single::init_state(world, system_meta)
+        Single::<D, F, S>::init_state(world, system_meta)
     }
 
     unsafe fn new_archetype(
@@ -461,7 +462,7 @@ unsafe impl<'a, D: QueryData + 'static, F: QueryFilter + 'static> SystemParam
         system_meta: &mut SystemMeta,
     ) {
         // SAFETY: Delegate to existing `SystemParam` implementations.
-        unsafe { Single::new_archetype(state, archetype, system_meta) };
+        unsafe { Single::<D, F, S>::new_archetype(state, archetype, system_meta) };
     }
 
     #[inline]
@@ -474,7 +475,7 @@ unsafe impl<'a, D: QueryData + 'static, F: QueryFilter + 'static> SystemParam
         state.validate_world(world.id());
         // SAFETY: State ensures that the components it accesses are not accessible elsewhere.
         let query = unsafe {
-            state.query_unchecked_manual_with_ticks(world, system_meta.last_run, change_tick)
+            state.query_unchecked_manual_with_ticks::<S>(world, system_meta.last_run, change_tick)
         };
         match query.get_single_inner() {
             Ok(single) => Some(Single {
@@ -496,7 +497,7 @@ unsafe impl<'a, D: QueryData + 'static, F: QueryFilter + 'static> SystemParam
         // SAFETY: State ensures that the components it accesses are not mutably accessible elsewhere
         // and the query is read only.
         let query = unsafe {
-            state.query_unchecked_manual_with_ticks(
+            state.query_unchecked_manual_with_ticks::<S>(
                 world,
                 system_meta.last_run,
                 world.change_tick(),
@@ -525,14 +526,14 @@ unsafe impl<'a, D: ReadOnlyQueryData + 'static, F: QueryFilter + 'static> ReadOn
 
 // SAFETY: Relevant query ComponentId and ArchetypeComponentId access is applied to SystemMeta. If
 // this Query conflicts with any prior access, a panic will occur.
-unsafe impl<D: QueryData + 'static, F: QueryFilter + 'static> SystemParam
-    for Populated<'_, '_, D, F>
+unsafe impl<D: QueryData + 'static, F: QueryFilter + 'static, S: SubStorage> SystemParam
+    for Populated<'_, '_, D, F, S>
 {
     type State = QueryState<D, F>;
-    type Item<'w, 's> = Populated<'w, 's, D, F>;
+    type Item<'w, 's> = Populated<'w, 's, D, F, S>;
 
     fn init_state(world: &mut World, system_meta: &mut SystemMeta) -> Self::State {
-        Query::init_state(world, system_meta)
+        Query::<D, F, S>::init_state(world, system_meta)
     }
 
     unsafe fn new_archetype(
@@ -541,7 +542,7 @@ unsafe impl<D: QueryData + 'static, F: QueryFilter + 'static> SystemParam
         system_meta: &mut SystemMeta,
     ) {
         // SAFETY: Delegate to existing `SystemParam` implementations.
-        unsafe { Query::new_archetype(state, archetype, system_meta) };
+        unsafe { Query::<D, F, S>::new_archetype(state, archetype, system_meta) };
     }
 
     #[inline]

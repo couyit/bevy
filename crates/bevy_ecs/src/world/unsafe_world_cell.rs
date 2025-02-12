@@ -12,7 +12,7 @@ use crate::{
     query::{DebugCheckedUnwrap, ReadOnlyQueryData},
     removal_detection::RemovedComponentEvents,
     resource::Resource,
-    storage::{ComponentSparseSet, Storages, Table},
+    storage::{ComponentSparseSet, Storages, SubStorages, Table},
     world::RawCommandQueue,
 };
 use bevy_platform_support::sync::atomic::Ordering;
@@ -337,18 +337,9 @@ impl<'w> UnsafeWorldCell<'w> {
         Tick::new(change_tick.fetch_add(1, Ordering::Relaxed))
     }
 
-    /// Provides unchecked access to the internal data stores of the [`World`].
-    ///
-    /// # Safety
-    ///
-    /// The caller must ensure that this is only used to access world data
-    /// that this [`UnsafeWorldCell`] is allowed to.
-    /// As always, any mutable access to a component must not exist at the same
-    /// time as any other accesses to that same component.
     #[inline]
-    pub unsafe fn storages(self) -> &'w Storages {
-        // SAFETY: The caller promises to only access world data allowed by this instance.
-        &unsafe { self.unsafe_world() }.storages
+    pub fn sub_storages(self) -> &'w SubStorages {
+        &unsafe { self.unsafe_world() }.sub_storages
     }
 
     /// Retrieves an [`UnsafeEntityCell`] that exposes read and write operations for the given `entity`.
@@ -973,8 +964,7 @@ impl<'w> UnsafeEntityCell<'w> {
             };
             // SAFETY: Table is guaranteed to exist
             let table = unsafe {
-                self.world
-                    .storages()
+                self.world.sub_storages()[location.sub_storage]
                     .tables
                     .get(location.table_id)
                     .debug_checked_unwrap()

@@ -24,15 +24,14 @@ mod blob_array;
 mod blob_vec;
 mod resource;
 mod sparse_set;
+mod sub_storage;
 mod table;
 mod thin_array_ptr;
-
-use core::ops::{Index, IndexMut};
-use std::vec::Vec;
 
 use bevy_platform_support::collections::HashSet;
 pub use resource::*;
 pub use sparse_set::*;
+pub use sub_storage::*;
 pub use table::*;
 
 use crate::{
@@ -42,101 +41,23 @@ use crate::{
 };
 
 /// The raw data stores of a [`World`](crate::world::World)
-#[derive(Default)]
 pub struct Storages {
     /// Backing storage for [`SparseSet`] components.
     /// Note that sparse sets are only present for components that have been spawned or have had a relevant bundle registered.
-    // pub sparse_sets: SparseSets,
+    pub sparse_sets: SparseSets,
     /// Backing storage for [`Table`] components.
-    // pub tables: Tables,
-    pub sub_storages: SubStorages,
+    pub tables: Tables,
     /// Backing storage for resources.
     pub resources: Resources<true>,
     /// Backing storage for `!Send` resources.
     pub non_send_resources: Resources<false>,
-}
-
-#[derive(Hash, Clone, Copy, Debug, PartialEq, Eq)]
-pub struct SubStorageId(pub u32);
-
-#[derive(Default)]
-pub struct SubStorages {
-    pub sub_storages: Vec<SubStorage>,
-}
-
-pub struct SubStorage {
     pub empty: ArchetypeId,
     pub prepared: HashSet<BundleId>,
-    pub sparse_sets: SparseSets,
-    pub tables: Tables,
 }
 
-impl SubStorageId {
-    pub(crate) const INVALID: SubStorageId = SubStorageId(u32::MAX);
-    #[inline]
-    pub const fn from_u32(index: u32) -> Self {
-        Self(index)
-    }
-
-    #[inline]
-    pub const fn from_usize(index: usize) -> Self {
-        debug_assert!(index as u32 as usize == index);
-        Self(index as u32)
-    }
-
-    #[inline]
-    pub const fn as_u32(self) -> u32 {
-        self.0
-    }
-
-    #[inline]
-    pub const fn as_usize(self) -> usize {
-        // usize is at least u32 in Bevy
-        self.0 as usize
-    }
-
-    #[inline]
-    pub const fn empty() -> Self {
-        Self(0)
-    }
-}
-
-impl SubStorages {
-    #[inline]
-    pub(crate) fn get_2_mut(
-        &mut self,
-        a: SubStorageId,
-        b: SubStorageId,
-    ) -> (&mut SubStorage, &mut SubStorage) {
-        if a.as_usize() > b.as_usize() {
-            let (b_slice, a_slice) = self.sub_storages.split_at_mut(a.as_usize());
-            (&mut a_slice[0], &mut b_slice[b.as_usize()])
-        } else {
-            let (a_slice, b_slice) = self.sub_storages.split_at_mut(b.as_usize());
-            (&mut a_slice[a.as_usize()], &mut b_slice[0])
-        }
-    }
-}
-
-impl Index<SubStorageId> for SubStorages {
-    type Output = SubStorage;
-
-    #[inline]
-    fn index(&self, index: SubStorageId) -> &Self::Output {
-        &self.sub_storages[index.as_usize()]
-    }
-}
-
-impl IndexMut<SubStorageId> for SubStorages {
-    #[inline]
-    fn index_mut(&mut self, index: SubStorageId) -> &mut Self::Output {
-        &mut self.sub_storages[index.as_usize()]
-    }
-}
-
-impl SubStorage {
-    pub fn empty(&self) -> &ArchetypeId {
-        &self.empty
+impl Storages {
+    pub fn empty(&self) -> ArchetypeId {
+        self.empty
     }
 
     /// ensures that the components in the bundle have its necessary storage initialized.
