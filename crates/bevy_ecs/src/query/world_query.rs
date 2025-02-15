@@ -2,8 +2,8 @@ use crate::{
     archetype::Archetype,
     component::{ComponentId, Components, Tick},
     query::FilteredAccess,
-    storage::{ComponentSparseSet, SparseSet, SparseSets, Table},
-    world::{unsafe_world_cell::UnsafeWorldCell, World},
+    storage::Table,
+    world::{SubWorld, World},
 };
 use variadics_please::all_tuples;
 
@@ -61,7 +61,7 @@ pub unsafe trait WorldQuery {
     /// - `world` must have the **right** to access any access registered in `update_component_access`.
     /// - There must not be simultaneous resource access conflicting with readonly resource access registered in [`WorldQuery::update_component_access`].
     unsafe fn init_fetch<'w>(
-        world: UnsafeWorldCell<'w>,
+        sub_world: SubWorld<'w>,
         state: &Self::State,
         last_run: Tick,
         this_run: Tick,
@@ -90,7 +90,6 @@ pub unsafe trait WorldQuery {
         state: &Self::State,
         archetype: &'w Archetype,
         table: &'w Table,
-        sparse_sets: &'w SparseSets,
     );
 
     /// Adjusts internal state to account for the next [`Table`]. This will always be called on tables
@@ -170,7 +169,7 @@ macro_rules! impl_tuple_world_query {
             }
 
             #[inline]
-            unsafe fn init_fetch<'w>(world: UnsafeWorldCell<'w>, state: &Self::State, last_run: Tick, this_run: Tick) -> Self::Fetch<'w> {
+            unsafe fn init_fetch<'w>(world: SubWorld<'w>, state: &Self::State, last_run: Tick, this_run: Tick) -> Self::Fetch<'w> {
                 let ($($name,)*) = state;
                 // SAFETY: The invariants are upheld by the caller.
                 ($(unsafe { $name::init_fetch(world, $name, last_run, this_run) },)*)
@@ -184,12 +183,11 @@ macro_rules! impl_tuple_world_query {
                 state: &Self::State,
                 archetype: &'w Archetype,
                 table: &'w Table,
-                sparse_sets: &SparseSets,
             ) {
                 let ($($name,)*) = fetch;
                 let ($($state,)*) = state;
                 // SAFETY: The invariants are upheld by the caller.
-                $(unsafe { $name::set_archetype($name, $state, archetype, table, sparse_sets); })*
+                $(unsafe { $name::set_archetype($name, $state, archetype, table); })*
             }
 
             #[inline]

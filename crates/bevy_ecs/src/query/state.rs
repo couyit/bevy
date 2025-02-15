@@ -9,7 +9,7 @@ use crate::{
         Access, DebugCheckedUnwrap, FilteredAccess, QueryCombinationIter, QueryIter, QueryParIter,
         WorldQuery,
     },
-    storage::{SparseSetIndex, SubStorage, TableId},
+    storage::{SparseSetIndex, Storage, TableId},
     system::Query,
     world::{unsafe_world_cell::UnsafeWorldCell, World, WorldId},
 };
@@ -321,7 +321,7 @@ impl<D: QueryData, F: QueryFilter> QueryState<D, F> {
     /// Creates a [`Query`] from the given [`QueryState`] and [`World`].
     ///
     /// This will create read-only queries, see [`Self::query_mut`] for mutable queries.
-    pub fn query<'w, 's, S: SubStorage>(
+    pub fn query<'w, 's, S: Storage>(
         &'s mut self,
         world: &'w World,
     ) -> Query<'w, 's, D::ReadOnly, F, S> {
@@ -340,7 +340,7 @@ impl<D: QueryData, F: QueryFilter> QueryState<D, F> {
     /// access to `self`.
     ///
     /// This will create read-only queries, see [`Self::query_mut`] for mutable queries.
-    pub fn query_manual<'w, 's, S: SubStorage>(
+    pub fn query_manual<'w, 's, S: Storage>(
         &'s self,
         world: &'w World,
     ) -> Query<'w, 's, D::ReadOnly, F, S> {
@@ -352,7 +352,7 @@ impl<D: QueryData, F: QueryFilter> QueryState<D, F> {
     }
 
     /// Creates a [`Query`] from the given [`QueryState`] and [`World`].
-    pub fn query_mut<'w, 's, S: SubStorage>(
+    pub fn query_mut<'w, 's, S: Storage>(
         &'s mut self,
         world: &'w mut World,
     ) -> Query<'w, 's, D, F, S> {
@@ -368,7 +368,7 @@ impl<D: QueryData, F: QueryFilter> QueryState<D, F> {
     ///
     /// This does not check for mutable query correctness. To be safe, make sure mutable queries
     /// have unique access to the components they query.
-    pub unsafe fn query_unchecked<'w, 's, S: SubStorage>(
+    pub unsafe fn query_unchecked<'w, 's, S: Storage>(
         &'s mut self,
         world: UnsafeWorldCell<'w>,
     ) -> Query<'w, 's, D, F, S> {
@@ -391,7 +391,7 @@ impl<D: QueryData, F: QueryFilter> QueryState<D, F> {
     ///
     /// This does not check for mutable query correctness. To be safe, make sure mutable queries
     /// have unique access to the components they query.
-    pub unsafe fn query_unchecked_manual<'w, 's, S: SubStorage>(
+    pub unsafe fn query_unchecked_manual<'w, 's, S: Storage>(
         &'s self,
         world: UnsafeWorldCell<'w>,
     ) -> Query<'w, 's, D, F, S> {
@@ -407,7 +407,7 @@ impl<D: QueryData, F: QueryFilter> QueryState<D, F> {
     ///
     /// This does not check for mutable query correctness. To be safe, make sure mutable queries
     /// have unique access to the components they query.
-    pub unsafe fn query_unchecked_with_ticks<'w, 's, S: SubStorage>(
+    pub unsafe fn query_unchecked_with_ticks<'w, 's, S: Storage>(
         &'s mut self,
         world: UnsafeWorldCell<'w>,
         last_run: Tick,
@@ -432,7 +432,7 @@ impl<D: QueryData, F: QueryFilter> QueryState<D, F> {
     ///
     /// This does not check for mutable query correctness. To be safe, make sure mutable queries
     /// have unique access to the components they query.
-    pub unsafe fn query_unchecked_manual_with_ticks<'w, 's, S: SubStorage>(
+    pub unsafe fn query_unchecked_manual_with_ticks<'w, 's, S: Storage>(
         &'s self,
         world: UnsafeWorldCell<'w>,
         last_run: Tick,

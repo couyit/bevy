@@ -794,6 +794,7 @@ pub type ComponentIndex = HashMap<ComponentId, HashMap<ArchetypeId, ArchetypeRec
 ///
 /// [`World`]: crate::world::World
 /// [module level documentation]: crate::archetype
+#[derive(Default)]
 pub struct Archetypes {
     pub(crate) archetypes: Vec<Archetype>,
     archetype_component_count: usize,

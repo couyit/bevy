@@ -9,6 +9,7 @@ pub mod error;
 mod filtered_resource;
 mod identifier;
 mod spawn_batch;
+mod sub_world;
 pub mod unsafe_world_cell;
 
 #[cfg(feature = "bevy_reflect")]
@@ -29,6 +30,7 @@ pub use entity_ref::{
 pub use filtered_resource::*;
 pub use identifier::WorldId;
 pub use spawn_batch::*;
+pub use sub_world::*;
 
 use crate::{
     archetype::{ArchetypeId, ArchetypeRow, Archetypes},
@@ -47,7 +49,7 @@ use crate::{
     resource::Resource,
     result::Result,
     schedule::{Schedule, ScheduleLabel, Schedules},
-    storage::{ResourceData, SubStorageId, SubStorages},
+    storage::{ResourceData, Resources, SubStorageId, SubStorages},
     system::Commands,
     world::{
         command_queue::RawCommandQueue,
@@ -99,6 +101,8 @@ pub struct World {
     pub(crate) last_check_tick: Tick,
     pub(crate) last_trigger_id: u32,
     pub(crate) command_queue: RawCommandQueue,
+    pub(crate) resources: Resources<true>,
+    pub(crate) non_send_resources: Resources<false>,
 }
 
 impl Default for World {
@@ -119,6 +123,8 @@ impl Default for World {
             last_check_tick: Tick::new(0),
             last_trigger_id: 0,
             command_queue: RawCommandQueue::new(),
+            resources: Default::default(),
+            non_send_resources: Default::default(),
         };
         world.bootstrap();
         world
@@ -225,12 +231,6 @@ impl World {
     #[inline]
     pub fn components(&self) -> &Components {
         &self.components
-    }
-
-    /// Retrieves this world's [`Storages`] collection.
-    #[inline]
-    pub fn storages(&self) -> &Storages {
-        &self.sub_storages[SubStorages::MAIN_STORAGE].storages
     }
 
     /// Retrieves this world's [`Bundles`] collection.
@@ -1017,7 +1017,7 @@ impl World {
         self.spawn_empty_in_sub_storage(SubStorages::MAIN_STORAGE)
     }
 
-    pub fn spawn_empty_in_sub_storage(&mut self, sub_storage: SubStorageId) -> Entity {
+    pub fn spawn_empty_in_sub_storage(&mut self, sub_storage: SubStorageId) -> EntityWorldMut {
         self.flush();
         let entity = self.entities.alloc();
         // SAFETY: entity was just allocated
@@ -1118,7 +1118,8 @@ impl World {
         self.flush();
         let change_tick = self.change_tick();
         let entity = self.entities.alloc();
-        let mut bundle_spawner = BundleSpawner::new::<B>(self, change_tick, sub_storage);
+        let mut bundle_spawner =
+            BundleSpawner::new_in_sub_storage::<B>(self, change_tick, sub_storage);
         // SAFETY: bundle's type matches `bundle_info`, entity is allocated but non-existent
         let mut entity_location = unsafe {
             bundle_spawner.spawn_non_existent(
@@ -1156,11 +1157,11 @@ impl World {
     ) -> EntityWorldMut {
         let archetype = self
             .archetypes
-            .get(self.storages.sub_storages[sub_storage].empty().clone())
+            .get(self.sub_storages[sub_storage].empty().clone())
             .unwrap();
         // PERF: consider avoiding allocating entities in the empty archetype unless needed
         let table_row =
-            self.storages.sub_storages[sub_storage].tables[archetype.table_id()].allocate(entity);
+            self.sub_storages[sub_storage].tables[archetype.table_id()].allocate(entity);
         // SAFETY: no components are allocated by archetype.allocate() because the archetype is
         // empty
         let location = unsafe { archetype.allocate(entity, table_row) };
@@ -1656,7 +1657,6 @@ impl World {
         let caller = Location::caller();
         let component_id = self.components.register_resource::<R>();
         if self
-            .storages
             .resources
             .get(component_id)
             .is_none_or(|data| !data.is_present())
@@ -1732,7 +1732,6 @@ impl World {
         let caller = Location::caller();
         let component_id = self.components.register_non_send::<R>();
         if self
-            .storages
             .non_send_resources
             .get(component_id)
             .is_none_or(|data| !data.is_present())
@@ -1785,7 +1784,7 @@ impl World {
     #[inline]
     pub fn remove_resource<R: Resource>(&mut self) -> Option<R> {
         let component_id = self.components.get_resource_id(TypeId::of::<R>())?;
-        let (ptr, _, _) = self.storages.resources.get_mut(component_id)?.remove()?;
+        let (ptr, _, _) = self.resources.get_mut(component_id)?.remove()?;
         // SAFETY: `component_id` was gotten via looking up the `R` type
         unsafe { Some(ptr.read::<R>()) }
     }
@@ -1804,11 +1803,7 @@ impl World {
     #[inline]
     pub fn remove_non_send_resource<R: 'static>(&mut self) -> Option<R> {
         let component_id = self.components.get_resource_id(TypeId::of::<R>())?;
-        let (ptr, _, _) = self
-            .storages
-            .non_send_resources
-            .get_mut(component_id)?
-            .remove()?;
+        let (ptr, _, _) = self.non_send_resources.get_mut(component_id)?.remove()?;
         // SAFETY: `component_id` was gotten via looking up the `R` type
         unsafe { Some(ptr.read::<R>()) }
     }
@@ -1818,15 +1813,14 @@ impl World {
     pub fn contains_resource<R: Resource>(&self) -> bool {
         self.components
             .get_resource_id(TypeId::of::<R>())
-            .and_then(|component_id| self.storages.resources.get(component_id))
+            .and_then(|component_id| self.resources.get(component_id))
             .is_some_and(ResourceData::is_present)
     }
 
     /// Returns `true` if a resource with provided `component_id` exists. Otherwise returns `false`.
     #[inline]
     pub fn contains_resource_by_id(&self, component_id: ComponentId) -> bool {
-        self.storages
-            .resources
+        self.resources
             .get(component_id)
             .is_some_and(ResourceData::is_present)
     }
@@ -1836,15 +1830,14 @@ impl World {
     pub fn contains_non_send<R: 'static>(&self) -> bool {
         self.components
             .get_resource_id(TypeId::of::<R>())
-            .and_then(|component_id| self.storages.non_send_resources.get(component_id))
+            .and_then(|component_id| self.non_send_resources.get(component_id))
             .is_some_and(ResourceData::is_present)
     }
 
     /// Returns `true` if a resource with provided `component_id` exists. Otherwise returns `false`.
     #[inline]
     pub fn contains_non_send_by_id(&self, component_id: ComponentId) -> bool {
-        self.storages
-            .non_send_resources
+        self.non_send_resources
             .get(component_id)
             .is_some_and(ResourceData::is_present)
     }
@@ -1870,14 +1863,11 @@ impl World {
     /// - When called elsewhere, this will check for additions since the last time that [`World::clear_trackers`]
     ///   was called.
     pub fn is_resource_added_by_id(&self, component_id: ComponentId) -> bool {
-        self.storages
-            .resources
-            .get(component_id)
-            .is_some_and(|resource| {
-                resource.get_ticks().is_some_and(|ticks| {
-                    ticks.is_added(self.last_change_tick(), self.read_change_tick())
-                })
+        self.resources.get(component_id).is_some_and(|resource| {
+            resource.get_ticks().is_some_and(|ticks| {
+                ticks.is_added(self.last_change_tick(), self.read_change_tick())
             })
+        })
     }
 
     /// Returns `true` if a resource of type `R` exists and was modified since the world's
@@ -1901,14 +1891,11 @@ impl World {
     /// - When called elsewhere, this will check for changes since the last time that [`World::clear_trackers`]
     ///   was called.
     pub fn is_resource_changed_by_id(&self, component_id: ComponentId) -> bool {
-        self.storages
-            .resources
-            .get(component_id)
-            .is_some_and(|resource| {
-                resource.get_ticks().is_some_and(|ticks| {
-                    ticks.is_changed(self.last_change_tick(), self.read_change_tick())
-                })
+        self.resources.get(component_id).is_some_and(|resource| {
+            resource.get_ticks().is_some_and(|ticks| {
+                ticks.is_changed(self.last_change_tick(), self.read_change_tick())
             })
+        })
     }
 
     /// Retrieves the change ticks for the given resource.
@@ -1925,8 +1912,7 @@ impl World {
         &self,
         component_id: ComponentId,
     ) -> Option<ComponentTicks> {
-        self.storages
-            .resources
+        self.resources
             .get(component_id)
             .and_then(ResourceData::get_ticks)
     }
@@ -2122,7 +2108,6 @@ impl World {
 
         let component_id = self.components.register_resource::<R>();
         if self
-            .storages
             .resources
             .get(component_id)
             .is_none_or(|data| !data.is_present())
@@ -2142,12 +2127,7 @@ impl World {
         }
 
         // SAFETY: The resource was just initialized if it was empty.
-        let data = unsafe {
-            self.storages
-                .resources
-                .get_mut(component_id)
-                .debug_checked_unwrap()
-        };
+        let data = unsafe { self.resources.get_mut(component_id).debug_checked_unwrap() };
         // SAFETY: The resource must be present, as we would have inserted it if it was empty.
         let data = unsafe {
             data.get_mut(last_change_tick, change_tick)
@@ -2778,7 +2758,6 @@ impl World {
 
         let component_id = self.components.get_resource_id(TypeId::of::<R>())?;
         let (ptr, mut ticks, mut _caller) = self
-            .storages
             .resources
             .get_mut(component_id)
             .and_then(ResourceData::remove)?;
@@ -2805,7 +2784,7 @@ impl World {
         OwningPtr::make(value, |ptr| {
             // SAFETY: pointer is of type R
             unsafe {
-                self.storages.resources.get_mut(component_id).map(|info| {
+                self.resources.get_mut(component_id).map(|info| {
                     info.insert_with_ticks(
                         ptr,
                         ticks,
@@ -2924,8 +2903,7 @@ impl World {
         component_id: ComponentId,
     ) -> &mut ResourceData<true> {
         let archetypes = &mut self.archetypes;
-        self.storages
-            .resources
+        self.resources
             .initialize_with(component_id, &self.components, || {
                 archetypes.new_archetype_component_id()
             })
@@ -2939,8 +2917,7 @@ impl World {
         component_id: ComponentId,
     ) -> &mut ResourceData<false> {
         let archetypes = &mut self.archetypes;
-        self.storages
-            .non_send_resources
+        self.non_send_resources
             .initialize_with(component_id, &self.components, || {
                 archetypes.new_archetype_component_id()
             })
@@ -2951,7 +2928,7 @@ impl World {
     /// such as inserting a [`Component`].
     pub(crate) fn flush_entities(&mut self) {
         let empty_archetype = self.archetypes.empty_mut();
-        let table = &mut self.storages.tables[empty_archetype.table_id()];
+        let table = &mut self.tables[empty_archetype.table_id()];
         // PERF: consider pre-allocating space for flushed entities
         // SAFETY: entity is set to a valid location
         unsafe {
@@ -3171,9 +3148,10 @@ impl World {
         for storage in self.sub_storages.sub_storages.iter_mut() {
             storage.tables.check_change_ticks(change_tick);
             storage.sparse_sets.check_change_ticks(change_tick);
-            storage.resources.check_change_ticks(change_tick);
-            storage.non_send_resources.check_change_ticks(change_tick);
         }
+
+        self.resources.check_change_ticks(change_tick);
+        self.non_send_resources.check_change_ticks(change_tick);
 
         if let Some(mut schedules) = self.get_resource_mut::<Schedules>() {
             schedules.check_change_ticks(change_tick);
@@ -3191,9 +3169,9 @@ impl World {
 
     /// Despawns all entities in this [`World`].
     pub fn clear_entities(&mut self) {
-        for sub_storage in self.storages.sub_storages.sub_storages.iter_mut() {
+        for sub_storage in self.sub_storages.sub_storages.iter_mut() {
             sub_storage.tables.clear();
-            sub_storage.sparse_sets.clear();
+            sub_storage.sparse_sets.clear_entities();
         }
         self.archetypes.clear_entities();
         self.entities.clear();
@@ -3207,8 +3185,8 @@ impl World {
     /// This can easily cause systems expecting certain resources to immediately start panicking.
     /// Use with caution.
     pub fn clear_resources(&mut self) {
-        self.storages.resources.clear();
-        self.storages.non_send_resources.clear();
+        self.resources.clear();
+        self.non_send_resources.clear();
     }
 
     /// Registers all of the components in the given [`Bundle`] and returns both the component
@@ -3347,18 +3325,15 @@ impl World {
     /// ```
     #[inline]
     pub fn iter_resources(&self) -> impl Iterator<Item = (&ComponentInfo, Ptr<'_>)> {
-        self.storages
-            .resources
-            .iter()
-            .filter_map(|(component_id, data)| {
-                // SAFETY: If a resource has been initialized, a corresponding ComponentInfo must exist with its ID.
-                let component_info = unsafe {
-                    self.components
-                        .get_info(component_id)
-                        .debug_checked_unwrap()
-                };
-                Some((component_info, data.get_data()?))
-            })
+        self.resources.iter().filter_map(|(component_id, data)| {
+            // SAFETY: If a resource has been initialized, a corresponding ComponentInfo must exist with its ID.
+            let component_info = unsafe {
+                self.components
+                    .get_info(component_id)
+                    .debug_checked_unwrap()
+            };
+            Some((component_info, data.get_data()?))
+        })
     }
 
     /// Mutably iterates over all resources in the world.
@@ -3428,30 +3403,23 @@ impl World {
     /// ```
     #[inline]
     pub fn iter_resources_mut(&mut self) -> impl Iterator<Item = (&ComponentInfo, MutUntyped<'_>)> {
-        self.storages
-            .resources
-            .iter()
-            .filter_map(|(component_id, data)| {
-                // SAFETY: If a resource has been initialized, a corresponding ComponentInfo must exist with its ID.
-                let component_info = unsafe {
-                    self.components
-                        .get_info(component_id)
-                        .debug_checked_unwrap()
-                };
-                let (ptr, ticks, _caller) = data.get_with_ticks()?;
+        self.resources.iter().filter_map(|(component_id, data)| {
+            // SAFETY: If a resource has been initialized, a corresponding ComponentInfo must exist with its ID.
+            let component_info = unsafe {
+                self.components
+                    .get_info(component_id)
+                    .debug_checked_unwrap()
+            };
+            let (ptr, ticks, _caller) = data.get_with_ticks()?;
 
-                // SAFETY:
-                // - We have exclusive access to the world, so no other code can be aliasing the `TickCells`
-                // - We only hold one `TicksMut` at a time, and we let go of it before getting the next one
-                let ticks = unsafe {
-                    TicksMut::from_tick_cells(
-                        ticks,
-                        self.last_change_tick(),
-                        self.read_change_tick(),
-                    )
-                };
+            // SAFETY:
+            // - We have exclusive access to the world, so no other code can be aliasing the `TickCells`
+            // - We only hold one `TicksMut` at a time, and we let go of it before getting the next one
+            let ticks = unsafe {
+                TicksMut::from_tick_cells(ticks, self.last_change_tick(), self.read_change_tick())
+            };
 
-                let mut_untyped = MutUntyped {
+            let mut_untyped = MutUntyped {
                     // SAFETY:
                     // - We have exclusive access to the world, so no other code can be aliasing the `Ptr`
                     // - We iterate one resource at a time, and we let go of each `PtrMut` before getting the next one
@@ -3464,8 +3432,8 @@ impl World {
                     changed_by: unsafe { _caller.deref_mut() },
                 };
 
-                Some((component_info, mut_untyped))
-            })
+            Some((component_info, mut_untyped))
+        })
     }
 
     /// Gets a `!Send` resource to the resource with the id [`ComponentId`] if it exists.
@@ -3513,10 +3481,7 @@ impl World {
     /// **You should prefer to use the typed API [`World::remove_resource`] where possible and only
     /// use this in cases where the actual types are not known at compile time.**
     pub fn remove_resource_by_id(&mut self, component_id: ComponentId) -> Option<()> {
-        self.storages
-            .resources
-            .get_mut(component_id)?
-            .remove_and_drop();
+        self.resources.get_mut(component_id)?.remove_and_drop();
         Some(())
     }
 
@@ -3528,8 +3493,7 @@ impl World {
     /// # Panics
     /// This function will panic if it isn't called from the same thread that the resource was inserted from.
     pub fn remove_non_send_by_id(&mut self, component_id: ComponentId) -> Option<()> {
-        self.storages
-            .non_send_resources
+        self.non_send_resources
             .get_mut(component_id)?
             .remove_and_drop();
         Some(())
@@ -3710,7 +3674,7 @@ impl fmt::Debug for World {
             .field("entity_count", &self.entities.len())
             .field("archetype_count", &self.archetypes.len())
             .field("component_count", &self.components.len())
-            .field("resource_count", &self.storages.resources.len())
+            .field("resource_count", &self.resources.len())
             .finish()
     }
 }

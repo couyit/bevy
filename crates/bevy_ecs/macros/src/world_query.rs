@@ -111,7 +111,7 @@ pub(crate) fn world_query_impl(
             }
 
             unsafe fn init_fetch<'__w>(
-                _world: #path::world::unsafe_world_cell::UnsafeWorldCell<'__w>,
+                _sub_world: #path::world::SubWorld<'__w>,
                 state: &Self::State,
                 _last_run: #path::component::Tick,
                 _this_run: #path::component::Tick,
@@ -119,7 +119,7 @@ pub(crate) fn world_query_impl(
                 #fetch_struct_name {
                     #(#named_field_idents:
                         <#field_types>::init_fetch(
-                            _world,
+                            _sub_world,
                             &state.#named_field_idents,
                             _last_run,
                             _this_run,
@@ -138,9 +138,8 @@ pub(crate) fn world_query_impl(
                 _state: &Self::State,
                 _archetype: &'__w #path::archetype::Archetype,
                 _table: &'__w #path::storage::Table,
-                _sparse_sets: &'__w #path::storage::SparseSets,
             ) {
-                #(<#field_types>::set_archetype(&mut _fetch.#named_field_idents, &_state.#named_field_idents, _archetype, _table, _sparse_sets);)*
+                #(<#field_types>::set_archetype(&mut _fetch.#named_field_idents, &_state.#named_field_idents, _archetype, _table);)*
             }
 
             /// SAFETY: we call `set_table` for each member that implements `Fetch`

@@ -17,7 +17,7 @@ use crate::{
     observer::Observers,
     prelude::World,
     query::DebugCheckedUnwrap,
-    storage::{SparseSetIndex, SparseSets, Storages, SubStorageId, SubStorages, Table, TableRow},
+    storage::{SparseSetIndex, SparseSets, SubStorageId, SubStorages, Table, TableRow},
     world::{unsafe_world_cell::UnsafeWorldCell, ON_ADD, ON_INSERT, ON_REPLACE},
 };
 use alloc::{boxed::Box, vec, vec::Vec};
@@ -1340,7 +1340,12 @@ pub(crate) struct BundleSpawner<'w> {
 
 impl<'w> BundleSpawner<'w> {
     #[inline]
-    pub fn new<T: Bundle>(
+    pub fn new<T: Bundle>(world: &'w mut World, change_tick: Tick) -> Self {
+        Self::new_in_sub_storage::<T>(world, change_tick, SubStorages::MAIN_STORAGE)
+    }
+
+    #[inline]
+    pub fn new_in_sub_storage<T: Bundle>(
         world: &'w mut World,
         change_tick: Tick,
         sub_storage: SubStorageId,
