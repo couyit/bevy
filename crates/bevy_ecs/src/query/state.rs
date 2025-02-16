@@ -9,7 +9,7 @@ use crate::{
         Access, DebugCheckedUnwrap, FilteredAccess, QueryCombinationIter, QueryIter, QueryParIter,
         WorldQuery,
     },
-    storage::{SparseSetIndex, Storage, TableId},
+    storage::{InvalidStorage, SparseSetIndex, Storage, SubStorageId, SubStorages, TableId},
     system::Query,
     world::{unsafe_world_cell::UnsafeWorldCell, World, WorldId},
 };
@@ -401,6 +401,19 @@ impl<D: QueryData, F: QueryFilter> QueryState<D, F> {
         unsafe { self.query_unchecked_manual_with_ticks(world, last_run, this_run) }
     }
 
+    pub unsafe fn query_untyped_unchecked_manual<'w, 's>(
+        &'s self,
+        world: UnsafeWorldCell<'w>,
+        sub_storage: SubStorageId,
+    ) -> Query<'w, 's, D, F, InvalidStorage> {
+        let last_run = world.last_change_tick();
+        let this_run = world.change_tick();
+        // SAFETY: The caller ensured we have the correct access to the world.
+        unsafe {
+            self.query_untyped_unchecked_manual_with_ticks(world, last_run, this_run, sub_storage)
+        }
+    }
+
     /// Creates a [`Query`] from the given [`QueryState`] and [`World`].
     ///
     /// # Safety
@@ -416,6 +429,20 @@ impl<D: QueryData, F: QueryFilter> QueryState<D, F> {
         self.update_archetypes_unsafe_world_cell(world);
         // SAFETY: The caller ensured we have the correct access to the world.
         unsafe { self.query_unchecked_manual_with_ticks(world, last_run, this_run) }
+    }
+
+    pub unsafe fn query_untyped_unchecked_with_ticks<'w, 's, S: Storage>(
+        &'s mut self,
+        world: UnsafeWorldCell<'w>,
+        last_run: Tick,
+        this_run: Tick,
+        sub_storage: SubStorageId,
+    ) -> Query<'w, 's, D, F, InvalidStorage> {
+        self.update_archetypes_unsafe_world_cell(world);
+        // SAFETY: The caller ensured we have the correct access to the world.
+        unsafe {
+            self.query_untyped_unchecked_manual_with_ticks(world, last_run, this_run, sub_storage)
+        }
     }
 
     /// Creates a [`Query`] from the given [`QueryState`] and [`World`].
@@ -438,6 +465,20 @@ impl<D: QueryData, F: QueryFilter> QueryState<D, F> {
         last_run: Tick,
         this_run: Tick,
     ) -> Query<'w, 's, D, F, S> {
+        self.validate_world(world.id());
+        // SAFETY:
+        // - The caller ensured we have the correct access to the world.
+        // - `validate_world` did not panic, so the world matches.
+        unsafe { Query::new(world, self, last_run, this_run) }
+    }
+
+    pub unsafe fn query_unchecked_manual_with_ticks<'w, 's, S: Storage>(
+        &'s self,
+        world: UnsafeWorldCell<'w>,
+        last_run: Tick,
+        this_run: Tick,
+        sub_storage: SubStorageId,
+    ) -> Query<'w, 's, D, F, InvalidStorage> {
         self.validate_world(world.id());
         // SAFETY:
         // - The caller ensured we have the correct access to the world.

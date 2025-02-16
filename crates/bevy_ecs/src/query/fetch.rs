@@ -8,7 +8,7 @@ use crate::{
     storage::{ComponentSparseSet, SparseSets, Table, TableRow},
     world::{
         unsafe_world_cell::UnsafeWorldCell, EntityMut, EntityMutExcept, EntityRef, EntityRefExcept,
-        FilteredEntityMut, FilteredEntityRef, Mut, Ref, SubWorld, World,
+        FilteredEntityMut, FilteredEntityRef, Mut, Ref, World,
     },
 };
 use bevy_ptr::{ThinSlicePtr, UnsafeCellDeref};
@@ -327,7 +327,7 @@ unsafe impl WorldQuery for Entity {
     fn shrink_fetch<'wlong: 'wshort, 'wshort>(_: Self::Fetch<'wlong>) -> Self::Fetch<'wshort> {}
 
     unsafe fn init_fetch<'w>(
-        _sub_world: SubWorld<'w>,
+        _world: UnsafeWorldCell<'w>,
         _state: &Self::State,
         _last_run: Tick,
         _this_run: Tick,
@@ -341,7 +341,8 @@ unsafe impl WorldQuery for Entity {
         _fetch: &mut Self::Fetch<'w>,
         _state: &Self::State,
         _archetype: &'w Archetype,
-        _table: &Table,
+        _table: &'w Table,
+        _sparse_sets: &'w SparseSets,
     ) {
     }
 
@@ -400,12 +401,12 @@ unsafe impl WorldQuery for EntityLocation {
     }
 
     unsafe fn init_fetch<'w>(
-        sub_world: SubWorld<'w>,
+        world: UnsafeWorldCell<'w>,
         _state: &Self::State,
         _last_run: Tick,
         _this_run: Tick,
     ) -> Self::Fetch<'w> {
-        sub_world.shared_entities()
+        world.entities()
     }
 
     // This is set to true to avoid forcing archetypal iteration in compound queries, is likely to be slower
@@ -418,6 +419,7 @@ unsafe impl WorldQuery for EntityLocation {
         _state: &Self::State,
         _archetype: &'w Archetype,
         _table: &Table,
+        _sparse_sets: &'w SparseSets,
     ) {
     }
 
@@ -477,7 +479,7 @@ unsafe impl<'a> WorldQuery for EntityRef<'a> {
     }
 
     unsafe fn init_fetch<'w>(
-        _sub_world: SubWorld<'w>,
+        world: UnsafeWorldCell<'w>,
         _state: &Self::State,
         _last_run: Tick,
         _this_run: Tick,
@@ -493,6 +495,7 @@ unsafe impl<'a> WorldQuery for EntityRef<'a> {
         _state: &Self::State,
         _archetype: &'w Archetype,
         _table: &Table,
+        _sparse_sets: &'w SparseSets,
     ) {
     }
 
@@ -557,7 +560,7 @@ unsafe impl<'a> WorldQuery for EntityMut<'a> {
     }
 
     unsafe fn init_fetch<'w>(
-        _sub_world: SubWorld<'w>,
+        world: UnsafeWorldCell<'w>,
         _state: &Self::State,
         _last_run: Tick,
         _this_run: Tick,
@@ -573,6 +576,7 @@ unsafe impl<'a> WorldQuery for EntityMut<'a> {
         _state: &Self::State,
         _archetype: &'w Archetype,
         _table: &Table,
+        _sparse_sets: &'w SparseSets,
     ) {
     }
 
@@ -636,7 +640,7 @@ unsafe impl<'a> WorldQuery for FilteredEntityRef<'a> {
     const IS_DENSE: bool = false;
 
     unsafe fn init_fetch<'w>(
-        _sub_world: SubWorld<'w>,
+        world: UnsafeWorldCell<'w>,
         _state: &Self::State,
         _last_run: Tick,
         _this_run: Tick,
@@ -652,6 +656,7 @@ unsafe impl<'a> WorldQuery for FilteredEntityRef<'a> {
         state: &Self::State,
         _: &'w Archetype,
         _table: &Table,
+        _sparse_sets: &'w SparseSets,
     ) {
         fetch.1.clone_from(&state.access);
     }
@@ -731,7 +736,7 @@ unsafe impl<'a> WorldQuery for FilteredEntityMut<'a> {
     const IS_DENSE: bool = false;
 
     unsafe fn init_fetch<'w>(
-        _sub_world: SubWorld<'w>,
+        world: UnsafeWorldCell<'w>,
         _state: &Self::State,
         _last_run: Tick,
         _this_run: Tick,
@@ -747,6 +752,7 @@ unsafe impl<'a> WorldQuery for FilteredEntityMut<'a> {
         state: &Self::State,
         _: &'w Archetype,
         _table: &Table,
+        _sparse_sets: &'w SparseSets,
     ) {
         fetch.1.clone_from(&state.access);
     }
@@ -825,7 +831,7 @@ where
     }
 
     unsafe fn init_fetch<'w>(
-        _sub_world: SubWorld<'w>,
+        world: UnsafeWorldCell<'w>,
         _: &Self::State,
         _: Tick,
         _: Tick,
@@ -840,6 +846,7 @@ where
         _: &Self::State,
         _: &'w Archetype,
         _: &'w Table,
+        _sparse_sets: &'w SparseSets,
     ) {
     }
 
@@ -924,7 +931,7 @@ where
     }
 
     unsafe fn init_fetch<'w>(
-        _sub_world: SubWorld<'w>,
+        world: UnsafeWorldCell<'w>,
         _: &Self::State,
         _: Tick,
         _: Tick,
@@ -939,6 +946,7 @@ where
         _: &Self::State,
         _: &'w Archetype,
         _: &'w Table,
+        _: &'w SparseSets,
     ) {
     }
 
@@ -1017,7 +1025,7 @@ unsafe impl WorldQuery for &Archetype {
     }
 
     unsafe fn init_fetch<'w>(
-        _sub_world: SubWorld<'w>,
+        world: UnsafeWorldCell<'w>,
         _state: &Self::State,
         _last_run: Tick,
         _this_run: Tick,
@@ -1035,6 +1043,7 @@ unsafe impl WorldQuery for &Archetype {
         _state: &Self::State,
         _archetype: &'w Archetype,
         _table: &Table,
+        _sparse_sets: &'w SparseSets,
     ) {
     }
 
@@ -1117,23 +1126,13 @@ unsafe impl<T: Component> WorldQuery for &T {
 
     #[inline]
     unsafe fn init_fetch<'w>(
-        sub_world: SubWorld<'w>,
-        component_id: &ComponentId,
+        _world: UnsafeWorldCell<'w>,
+        _component_id: &ComponentId,
         _last_run: Tick,
         _this_run: Tick,
     ) -> ReadFetch<'w, T> {
         ReadFetch {
-            components: StorageSwitch::new(
-                || None,
-                || {
-                    Some(
-                        sub_world
-                            .sparse_sets
-                            .get(*component_id)
-                            .debug_checked_unwrap(),
-                    )
-                },
-            ),
+            components: StorageSwitch::new(|| None, || None),
         }
     }
 
@@ -1150,12 +1149,17 @@ unsafe impl<T: Component> WorldQuery for &T {
         component_id: &ComponentId,
         _archetype: &'w Archetype,
         table: &'w Table,
+        sparse_sets: &'w SparseSets,
     ) {
         if Self::IS_DENSE {
             // SAFETY: `set_archetype`'s safety rules are a super set of the `set_table`'s ones.
             unsafe {
                 Self::set_table(fetch, component_id, table);
             }
+        } else {
+            fetch
+                .components
+                .set_sparse_sets(Some(sparse_sets.get(*component_id).debug_checked_unwrap()));
         }
     }
 
@@ -1284,23 +1288,13 @@ unsafe impl<'__w, T: Component> WorldQuery for Ref<'__w, T> {
 
     #[inline]
     unsafe fn init_fetch<'w>(
-        sub_world: SubWorld<'w>,
-        component_id: &ComponentId,
+        _world: UnsafeWorldCell<'w>,
+        _component_id: &ComponentId,
         last_run: Tick,
         this_run: Tick,
     ) -> RefFetch<'w, T> {
         RefFetch {
-            components: StorageSwitch::new(
-                || None,
-                || {
-                    Some(
-                        sub_world
-                            .sparse_sets
-                            .get(*component_id)
-                            .debug_checked_unwrap(),
-                    )
-                },
-            ),
+            components: StorageSwitch::new(|| None, || None),
             last_run,
             this_run,
         }
@@ -1319,12 +1313,17 @@ unsafe impl<'__w, T: Component> WorldQuery for Ref<'__w, T> {
         component_id: &ComponentId,
         _archetype: &'w Archetype,
         table: &'w Table,
+        sparse_sets: &'w SparseSets,
     ) {
         if Self::IS_DENSE {
             // SAFETY: `set_archetype`'s safety rules are a super set of the `set_table`'s ones.
             unsafe {
                 Self::set_table(fetch, component_id, table);
             }
+        } else {
+            fetch
+                .components
+                .set_sparse_sets(Some(sparse_sets.get(*component_id).debug_checked_unwrap()));
         }
     }
 
@@ -1483,23 +1482,13 @@ unsafe impl<'__w, T: Component> WorldQuery for &'__w mut T {
 
     #[inline]
     unsafe fn init_fetch<'w>(
-        sub_world: SubWorld<'w>,
-        component_id: &ComponentId,
+        _world: UnsafeWorldCell<'w>,
+        _component_id: &ComponentId,
         last_run: Tick,
         this_run: Tick,
     ) -> WriteFetch<'w, T> {
         WriteFetch {
-            components: StorageSwitch::new(
-                || None,
-                || {
-                    Some(
-                        sub_world
-                            .sparse_sets
-                            .get(*component_id)
-                            .debug_checked_unwrap(),
-                    )
-                },
-            ),
+            components: StorageSwitch::new(|| None, || None),
             last_run,
             this_run,
         }
@@ -1518,12 +1507,17 @@ unsafe impl<'__w, T: Component> WorldQuery for &'__w mut T {
         component_id: &ComponentId,
         _archetype: &'w Archetype,
         table: &'w Table,
+        sparse_sets: &'w SparseSets,
     ) {
         if Self::IS_DENSE {
             // SAFETY: `set_archetype`'s safety rules are a super set of the `set_table`'s ones.
             unsafe {
                 Self::set_table(fetch, component_id, table);
             }
+        } else {
+            fetch
+                .components
+                .set_sparse_sets(Some(sparse_sets.get(*component_id).debug_checked_unwrap()));
         }
     }
 
@@ -1658,12 +1652,12 @@ unsafe impl<'__w, T: Component> WorldQuery for Mut<'__w, T> {
     #[inline]
     // Forwarded to `&mut T`
     unsafe fn init_fetch<'w>(
-        sub_world: SubWorld<'w>,
+        world: UnsafeWorldCell<'w>,
         state: &ComponentId,
         last_run: Tick,
         this_run: Tick,
     ) -> WriteFetch<'w, T> {
-        <&mut T as WorldQuery>::init_fetch(sub_world, state, last_run, this_run)
+        <&mut T as WorldQuery>::init_fetch(world, state, last_run, this_run)
     }
 
     // Forwarded to `&mut T`
@@ -1676,8 +1670,9 @@ unsafe impl<'__w, T: Component> WorldQuery for Mut<'__w, T> {
         state: &ComponentId,
         archetype: &'w Archetype,
         table: &'w Table,
+        sparse_sets: &'w SparseSets,
     ) {
-        <&mut T as WorldQuery>::set_archetype(fetch, state, archetype, table);
+        <&mut T as WorldQuery>::set_archetype(fetch, state, archetype, table, sparse_sets);
     }
 
     #[inline]
@@ -1775,14 +1770,14 @@ unsafe impl<T: WorldQuery> WorldQuery for Option<T> {
 
     #[inline]
     unsafe fn init_fetch<'w>(
-        sub_world: SubWorld<'w>,
+        world: UnsafeWorldCell<'w>,
         state: &T::State,
         last_run: Tick,
         this_run: Tick,
     ) -> OptionFetch<'w, T> {
         OptionFetch {
             // SAFETY: The invariants are upheld by the caller.
-            fetch: unsafe { T::init_fetch(sub_world, state, last_run, this_run) },
+            fetch: unsafe { T::init_fetch(world, state, last_run, this_run) },
             matches: false,
         }
     }
@@ -1795,12 +1790,13 @@ unsafe impl<T: WorldQuery> WorldQuery for Option<T> {
         state: &T::State,
         archetype: &'w Archetype,
         table: &'w Table,
+        sparse_sets: &'w SparseSets,
     ) {
         fetch.matches = T::matches_component_set(state, &|id| archetype.contains(id));
         if fetch.matches {
             // SAFETY: The invariants are upheld by the caller.
             unsafe {
-                T::set_archetype(&mut fetch.fetch, state, archetype, table);
+                T::set_archetype(&mut fetch.fetch, state, archetype, table, sparse_sets);
             }
         }
     }
@@ -1956,7 +1952,7 @@ unsafe impl<T: Component> WorldQuery for Has<T> {
 
     #[inline]
     unsafe fn init_fetch<'w>(
-        _sub_world: SubWorld<'w>,
+        _world: UnsafeWorldCell<'w>,
         _state: &Self::State,
         _last_run: Tick,
         _this_run: Tick,
@@ -1977,6 +1973,7 @@ unsafe impl<T: Component> WorldQuery for Has<T> {
         state: &Self::State,
         archetype: &'w Archetype,
         _table: &Table,
+        _sparse_sets: &'w SparseSets,
     ) {
         *fetch = archetype.contains(*state);
     }
@@ -2125,10 +2122,10 @@ macro_rules! impl_anytuple_fetch {
             }
 
             #[inline]
-            unsafe fn init_fetch<'w>(_sub_world: SubWorld<'w>, state: &Self::State, _last_run: Tick, _this_run: Tick) -> Self::Fetch<'w> {
+            unsafe fn init_fetch<'w>(_world: UnsafeWorldCell<'w>, state: &Self::State, _last_run: Tick, _this_run: Tick) -> Self::Fetch<'w> {
                 let ($($name,)*) = state;
                 // SAFETY: The invariants are upheld by the caller.
-                ($(( unsafe { $name::init_fetch(_sub_world, $name, _last_run, _this_run) }, false),)*)
+                ($(( unsafe { $name::init_fetch(_world, $name, _last_run, _this_run) }, false),)*)
             }
 
             const IS_DENSE: bool = true $(&& $name::IS_DENSE)*;
@@ -2139,6 +2136,7 @@ macro_rules! impl_anytuple_fetch {
                 _state: &Self::State,
                 _archetype: &'w Archetype,
                 _table: &'w Table,
+                _sparse_sets: &'w SparseSets,
             ) {
                 let ($($name,)*) = _fetch;
                 let ($($state,)*) = _state;
@@ -2146,7 +2144,7 @@ macro_rules! impl_anytuple_fetch {
                     $name.1 = $name::matches_component_set($state, &|id| _archetype.contains(id));
                     if $name.1 {
                         // SAFETY: The invariants are upheld by the caller.
-                        unsafe { $name::set_archetype(&mut $name.0, $state, _archetype, _table); }
+                        unsafe { $name::set_archetype(&mut $name.0, $state, _archetype, _table, _sparse_sets); }
                     }
                 )*
             }
@@ -2285,7 +2283,7 @@ unsafe impl<D: QueryData> WorldQuery for NopWorldQuery<D> {
 
     #[inline(always)]
     unsafe fn init_fetch(
-        _sub_world: SubWorld,
+        _world: UnsafeWorldCell,
         _state: &D::State,
         _last_run: Tick,
         _this_run: Tick,
@@ -2300,6 +2298,7 @@ unsafe impl<D: QueryData> WorldQuery for NopWorldQuery<D> {
         _state: &D::State,
         _archetype: &Archetype,
         _tables: &Table,
+        _sparse_sets: &SparseSets,
     ) {
     }
 
@@ -2355,7 +2354,7 @@ unsafe impl<T: ?Sized> WorldQuery for PhantomData<T> {
     }
 
     unsafe fn init_fetch<'w>(
-        _sub_world: SubWorld<'w>,
+        _world: UnsafeWorldCell<'w>,
         _state: &Self::State,
         _last_run: Tick,
         _this_run: Tick,
@@ -2371,6 +2370,7 @@ unsafe impl<T: ?Sized> WorldQuery for PhantomData<T> {
         _state: &Self::State,
         _archetype: &'w Archetype,
         _table: &'w Table,
+        _sparse_sets: &'w SparseSets,
     ) {
     }
 

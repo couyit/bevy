@@ -3,14 +3,15 @@ use crate::{
     component::Tick,
     entity::{Entity, EntityBorrow, EntitySet},
     query::{
-        QueryCombinationIter, QueryData, QueryEntityError, QueryFilter, QueryIter, QueryManyIter,
-        QueryManyUniqueIter, QueryParIter, QuerySingleError, QueryState, ROQueryItem,
-        ReadOnlyQueryData,
+        DebugCheckedUnwrap, QueryCombinationIter, QueryData, QueryEntityError, QueryFilter,
+        QueryIter, QueryManyIter, QueryManyUniqueIter, QueryParIter, QuerySingleError, QueryState,
+        ROQueryItem, ReadOnlyQueryData,
     },
-    storage::{MainStorage, Storage},
+    storage::{MainStorage, Storage, SubStorageId},
     world::unsafe_world_cell::UnsafeWorldCell,
 };
 use core::{
+    any::TypeId,
     marker::PhantomData,
     ops::{Deref, DerefMut},
 };
@@ -380,6 +381,7 @@ pub struct Query<'world, 'state, D: QueryData, F: QueryFilter = (), S: Storage =
     state: &'state QueryState<D, F>,
     last_run: Tick,
     this_run: Tick,
+    sub_storage: SubStorageId,
     _phantom: PhantomData<S>,
 }
 
@@ -418,11 +420,35 @@ impl<'w, 's, D: QueryData, F: QueryFilter, S: Storage> Query<'w, 's, D, F, S> {
         last_run: Tick,
         this_run: Tick,
     ) -> Self {
+        let &sub_storage = world
+            .sub_storages()
+            .indices
+            .get(&TypeId::of::<S>())
+            .debug_checked_unwrap();
         Self {
             world,
             state,
             last_run,
             this_run,
+            sub_storage,
+            _phantom: PhantomData,
+        }
+    }
+
+    #[inline]
+    pub(crate) unsafe fn new_untyped(
+        world: UnsafeWorldCell<'w>,
+        state: &'s QueryState<D, F>,
+        last_run: Tick,
+        this_run: Tick,
+        sub_storage: SubStorageId,
+    ) -> Self {
+        Self {
+            world,
+            state,
+            last_run,
+            this_run,
+            sub_storage,
             _phantom: PhantomData,
         }
     }
@@ -483,7 +509,7 @@ impl<'w, 's, D: QueryData, F: QueryFilter, S: Storage> Query<'w, 's, D, F, S> {
     ///     }
     /// }
     /// ```
-    pub fn reborrow(&mut self) -> Query<'_, 's, D, F> {
+    pub fn reborrow(&mut self) -> Query<'_, 's, D, F, S> {
         // SAFETY: this query is exclusively borrowed while the new one exists, so
         // no overlapping access can occur.
         unsafe { self.reborrow_unsafe() }
@@ -500,7 +526,7 @@ impl<'w, 's, D: QueryData, F: QueryFilter, S: Storage> Query<'w, 's, D, F, S> {
     /// # See also
     ///
     /// - [`reborrow`](Self::reborrow) for the safe versions.
-    pub unsafe fn reborrow_unsafe(&self) -> Query<'_, 's, D, F> {
+    pub unsafe fn reborrow_unsafe(&self) -> Query<'_, 's, D, F, S> {
         // SAFETY:
         // - This is memory safe because the caller ensures that there are no conflicting references.
         // - The world matches because it was the same one used to construct self.
@@ -1755,7 +1781,7 @@ impl<'w, 's, D: QueryData, F: QueryFilter, S: Storage> Query<'w, 's, D, F, S> {
     /// [`&Archetype`]: crate::archetype::Archetype
     /// [`Has<T>`]: crate::query::Has
     #[track_caller]
-    pub fn transmute_lens<NewD: QueryData>(&mut self) -> QueryLens<'_, NewD> {
+    pub fn transmute_lens<NewD: QueryData>(&mut self) -> QueryLens<'_, NewD, (), S> {
         self.transmute_lens_filtered::<NewD, ()>()
     }
 
@@ -1829,7 +1855,7 @@ impl<'w, 's, D: QueryData, F: QueryFilter, S: Storage> Query<'w, 's, D, F, S> {
     ///
     /// - [`transmute_lens`](Self::transmute_lens) to convert to a lens using a mutable borrow of the [`Query`].
     #[track_caller]
-    pub fn transmute_lens_inner<NewD: QueryData>(self) -> QueryLens<'w, NewD> {
+    pub fn transmute_lens_inner<NewD: QueryData>(self) -> QueryLens<'w, NewD, (), S> {
         self.transmute_lens_filtered_inner::<NewD, ()>()
     }
 
@@ -1842,7 +1868,7 @@ impl<'w, 's, D: QueryData, F: QueryFilter, S: Storage> Query<'w, 's, D, F, S> {
     #[track_caller]
     pub fn transmute_lens_filtered<NewD: QueryData, NewF: QueryFilter>(
         &mut self,
-    ) -> QueryLens<'_, NewD, NewF> {
+    ) -> QueryLens<'_, NewD, NewF, S> {
         self.reborrow().transmute_lens_filtered_inner()
     }
 
@@ -1867,12 +1893,12 @@ impl<'w, 's, D: QueryData, F: QueryFilter, S: Storage> Query<'w, 's, D, F, S> {
             state,
             last_run: self.last_run,
             this_run: self.this_run,
-            _phantom: PhantomData,
+            _phantom: PhantomData::<S>,
         }
     }
 
     /// Gets a [`QueryLens`] with the same accesses as the existing query
-    pub fn as_query_lens(&mut self) -> QueryLens<'_, D> {
+    pub fn as_query_lens(&mut self) -> QueryLens<'_, D, (), S> {
         self.transmute_lens()
     }
 
@@ -1881,7 +1907,7 @@ impl<'w, 's, D: QueryData, F: QueryFilter, S: Storage> Query<'w, 's, D, F, S> {
     /// # See also
     ///
     /// - [`as_query_lens`](Self::as_query_lens) to convert to a lens using a mutable borrow of the [`Query`].
-    pub fn into_query_lens(self) -> QueryLens<'w, D> {
+    pub fn into_query_lens(self) -> QueryLens<'w, D, (), S> {
         self.transmute_lens_inner()
     }
 
@@ -1941,8 +1967,8 @@ impl<'w, 's, D: QueryData, F: QueryFilter, S: Storage> Query<'w, 's, D, F, S> {
     /// See [`Self::transmute_lens`] for more details.
     pub fn join<OtherD: QueryData, NewD: QueryData>(
         &mut self,
-        other: &mut Query<OtherD>,
-    ) -> QueryLens<'_, NewD> {
+        other: &mut Query<OtherD, (), S>,
+    ) -> QueryLens<'_, NewD, (), S> {
         self.join_filtered(other)
     }
 
@@ -1968,8 +1994,8 @@ impl<'w, 's, D: QueryData, F: QueryFilter, S: Storage> Query<'w, 's, D, F, S> {
     /// - [`join`](Self::join) to join using a mutable borrow of the [`Query`].
     pub fn join_inner<OtherD: QueryData, NewD: QueryData>(
         self,
-        other: &mut Query<OtherD>,
-    ) -> QueryLens<'w, NewD> {
+        other: &mut Query<OtherD, (), S>,
+    ) -> QueryLens<'w, NewD, (), S> {
         self.join_filtered_inner(other)
     }
 
@@ -1987,8 +2013,8 @@ impl<'w, 's, D: QueryData, F: QueryFilter, S: Storage> Query<'w, 's, D, F, S> {
         NewF: QueryFilter,
     >(
         &mut self,
-        other: &mut Query<OtherD, OtherF>,
-    ) -> QueryLens<'_, NewD, NewF> {
+        other: &mut Query<OtherD, OtherF, S>,
+    ) -> QueryLens<'_, NewD, NewF, S> {
         self.reborrow().join_filtered_inner(other)
     }
 
@@ -2106,28 +2132,37 @@ pub struct QueryLens<'w, Q: QueryData, F: QueryFilter = (), S: Storage = MainSto
 impl<'w, Q: QueryData, F: QueryFilter, S: Storage> QueryLens<'w, Q, F, S> {
     /// Create a [`Query`] from the underlying [`QueryState`].
     pub fn query(&mut self) -> Query<'w, '_, Q, F, S> {
+        let &sub_storage = unsafe {
+            self.world
+                .sub_storages()
+                .indices
+                .get(&TypeId::of::<S>())
+                .debug_checked_unwrap()
+        };
+
         Query {
             world: self.world,
             state: &self.state,
             last_run: self.last_run,
             this_run: self.this_run,
+            sub_storage,
             _phantom: PhantomData,
         }
     }
 }
 
-impl<'w, 's, Q: QueryData, F: QueryFilter> From<&'s mut QueryLens<'w, Q, F>>
-    for Query<'w, 's, Q, F>
+impl<'w, 's, Q: QueryData, F: QueryFilter, S: Storage> From<&'s mut QueryLens<'w, Q, F, S>>
+    for Query<'w, 's, Q, F, S>
 {
-    fn from(value: &'s mut QueryLens<'w, Q, F>) -> Query<'w, 's, Q, F> {
+    fn from(value: &'s mut QueryLens<'w, Q, F, S>) -> Query<'w, 's, Q, F, S> {
         value.query()
     }
 }
 
-impl<'w, 'q, Q: QueryData, F: QueryFilter> From<&'q mut Query<'w, '_, Q, F>>
-    for QueryLens<'q, Q, F>
+impl<'w, 'q, Q: QueryData, F: QueryFilter, S: Storage> From<&'q mut Query<'w, '_, Q, F, S>>
+    for QueryLens<'q, Q, F, S>
 {
-    fn from(value: &'q mut Query<'w, '_, Q, F>) -> QueryLens<'q, Q, F> {
+    fn from(value: &'q mut Query<'w, '_, Q, F, S>) -> QueryLens<'q, Q, F, S> {
         value.transmute_lens_filtered()
     }
 }

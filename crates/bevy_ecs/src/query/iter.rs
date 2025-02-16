@@ -5,7 +5,7 @@ use crate::{
     component::Tick,
     entity::{Entities, Entity, EntityBorrow, EntitySet, EntitySetIterator},
     query::{ArchetypeFilter, DebugCheckedUnwrap, QueryState, StorageId},
-    storage::{SparseSets, SubStorageId, Table, TableRow, Tables},
+    storage::{InvalidStorage, SparseSets, SubStorageId, SubStorages, Table, TableRow, Tables},
     world::{
         unsafe_world_cell::UnsafeWorldCell, EntityMut, EntityMutExcept, EntityRef, EntityRefExcept,
         FilteredEntityMut, FilteredEntityRef,
@@ -31,6 +31,7 @@ pub struct QueryIter<'w, 's, D: QueryData, F: QueryFilter> {
     archetypes: &'w Archetypes,
     query_state: &'s QueryState<D, F>,
     cursor: QueryIterationCursor<'w, 's, D, F>,
+    sub_storage: SubStorageId,
 }
 
 impl<'w, 's, D: QueryData, F: QueryFilter> QueryIter<'w, 's, D, F> {
@@ -48,11 +49,12 @@ impl<'w, 's, D: QueryData, F: QueryFilter> QueryIter<'w, 's, D, F> {
             world,
             query_state,
             // SAFETY: We only access table data that has been registered in `query_state`.
-            tables: unsafe { &world.sub_storages()[sub_storage].storages.tables },
-            sparse_sets: &world.sub_storages()[sub_storage].storages.sparse_sets,
+            tables: &world.sub_storages()[sub_storage].tables,
+            sparse_sets: &world.sub_storages()[sub_storage].sparse_sets,
             archetypes: world.archetypes(),
             // SAFETY: The invariants are upheld by the caller.
             cursor: unsafe { QueryIterationCursor::init(world, query_state, last_run, this_run) },
+            sub_storage,
         }
     }
 
@@ -92,6 +94,7 @@ impl<'w, 's, D: QueryData, F: QueryFilter> QueryIter<'w, 's, D, F> {
             archetypes: self.archetypes,
             query_state: self.query_state,
             cursor: self.cursor.clone(),
+            sub_storage: self.sub_storage,
         }
     }
 
@@ -127,6 +130,7 @@ impl<'w, 's, D: QueryData, F: QueryFilter> QueryIter<'w, 's, D, F> {
             archetypes: self.archetypes,
             query_state: self.query_state,
             cursor: self.cursor.reborrow(),
+            sub_storage: self.sub_storage,
         }
     }
 
@@ -860,7 +864,9 @@ impl<'w, 's, D: QueryData, F: QueryFilter> QueryIter<'w, 's, D, F> {
         // SAFETY:
         // `self.world` has permission to access the required components.
         // The original query iter has not been iterated on, so no items are aliased from it.
-        let query_lens = unsafe { query_lens_state.query_unchecked_manual(world) }.into_iter();
+        let query_lens =
+            unsafe { query_lens_state.query_untyped_unchecked_manual(world, self.sub_storage) }
+                .into_iter();
         let mut keyed_query: Vec<_> = query_lens
             .map(|(key, entity)| (key, NeutralOrd(entity)))
             .collect();
@@ -986,8 +992,7 @@ where
 {
     entity_iter: I,
     entities: &'w Entities,
-    tables: &'w Tables,
-    sparse_sets: &'w SparseSets,
+    storages: &'w SubStorages,
     archetypes: &'w Archetypes,
     fetch: D::Fetch<'w>,
     query_state: &'s QueryState<D, F>,
@@ -1015,8 +1020,7 @@ where
             archetypes: world.archetypes(),
             // SAFETY: We only access table data that has been registered in `query_state`.
             // This means `world` has permission to access the data we use.
-            tables: &world.storages().tables,
-            sparse_sets: &world.storages().sparse_sets,
+            storages: world.sub_storages(),
             fetch,
             entity_iter: entity_list.into_iter(),
         }
@@ -1026,7 +1030,7 @@ where
     /// `entity` must stem from `self.entity_iter`, and not have been passed before.
     #[inline(always)]
     unsafe fn fetch_next(&mut self, entity: Entity) -> D::Item<'w> {
-        let (location, archetype, table);
+        let (location, archetype, table, sparse_sets);
         // SAFETY:
         // `tables` and `archetypes` belong to the same world that the [`QueryIter`]
         // was initialized for.
@@ -1036,10 +1040,12 @@ where
                 .archetypes
                 .get(location.archetype_id)
                 .debug_checked_unwrap();
-            table = self.tables.get(location.table_id).debug_checked_unwrap();
+            table = self.storages[location.sub_storage]
+                .tables
+                .get(location.table_id)
+                .debug_checked_unwrap();
+            sparse_sets = &self.storages[location.sub_storage].sparse_sets;
         }
-
-        let sparse_sets = self.sparse_sets;
 
         // SAFETY: `archetype` is from the world that `fetch` was created for,
         // `fetch_state` is the state that `fetch` was initialized with
@@ -1134,8 +1140,7 @@ pub struct QueryManyIter<'w, 's, D: QueryData, F: QueryFilter, I: Iterator<Item:
     world: UnsafeWorldCell<'w>,
     entity_iter: I,
     entities: &'w Entities,
-    tables: &'w Tables,
-    sparse_sets: &'w SparseSets,
+    storages: &'w SubStorages,
     archetypes: &'w Archetypes,
     fetch: D::Fetch<'w>,
     filter: F::Fetch<'w>,
@@ -1164,8 +1169,7 @@ impl<'w, 's, D: QueryData, F: QueryFilter, I: Iterator<Item: EntityBorrow>>
             archetypes: world.archetypes(),
             // SAFETY: We only access table data that has been registered in `query_state`.
             // This means `world` has permission to access the data we use.
-            tables: &world.storages().tables,
-            sparse_sets: &world.storages().sparse_sets,
+            storages: world.sub_storages(),
             fetch,
             filter,
             entity_iter: entity_list.into_iter(),
@@ -1184,8 +1188,7 @@ impl<'w, 's, D: QueryData, F: QueryFilter, I: Iterator<Item: EntityBorrow>>
     unsafe fn fetch_next_aliased_unchecked(
         entity_iter: impl Iterator<Item: EntityBorrow>,
         entities: &'w Entities,
-        tables: &'w Tables,
-        sparse_sets: &'w SparseSets,
+        storages: &'w SubStorages,
         archetypes: &'w Archetypes,
         fetch: &mut D::Fetch<'w>,
         filter: &mut F::Fetch<'w>,
@@ -1205,7 +1208,11 @@ impl<'w, 's, D: QueryData, F: QueryFilter, I: Iterator<Item: EntityBorrow>>
             }
 
             let archetype = archetypes.get(location.archetype_id).debug_checked_unwrap();
-            let table = tables.get(location.table_id).debug_checked_unwrap();
+            let table = storages[location.sub_storage]
+                .tables
+                .get(location.table_id)
+                .debug_checked_unwrap();
+            let sparse_sets = &storages[location.sub_storage].sparse_sets;
 
             // SAFETY: `archetype` is from the world that `fetch/filter` were created for,
             // `fetch_state`/`filter_state` are the states that `fetch/filter` were initialized with
@@ -1254,8 +1261,7 @@ impl<'w, 's, D: QueryData, F: QueryFilter, I: Iterator<Item: EntityBorrow>>
             Self::fetch_next_aliased_unchecked(
                 &mut self.entity_iter,
                 self.entities,
-                self.tables,
-                self.sparse_sets,
+                self.storages,
                 self.archetypes,
                 &mut self.fetch,
                 &mut self.filter,
@@ -1719,8 +1725,9 @@ impl<'w, 's, D: QueryData, F: QueryFilter, I: Iterator<Item: EntityBorrow>>
         // SAFETY:
         // `self.world` has permission to access the required components.
         // The original query iter has not been iterated on, so no items are aliased from it.
-        let query_lens = unsafe { query_lens_state.query_unchecked_manual(world) }
-            .iter_many_inner(self.entity_iter);
+        let query_lens =
+            unsafe { query_lens_state.query_unchecked_manual::<InvalidStorage>(world) }
+                .iter_many_inner(self.entity_iter);
         let mut keyed_query: Vec<_> = query_lens
             .map(|(key, entity)| (key, NeutralOrd(entity)))
             .collect();
@@ -1763,8 +1770,7 @@ impl<'w, 's, D: QueryData, F: QueryFilter, I: DoubleEndedIterator<Item: EntityBo
             Self::fetch_next_aliased_unchecked(
                 self.entity_iter.by_ref().rev(),
                 self.entities,
-                self.tables,
-                self.sparse_sets,
+                self.storages,
                 self.archetypes,
                 &mut self.fetch,
                 &mut self.filter,
@@ -1789,8 +1795,7 @@ impl<'w, 's, D: ReadOnlyQueryData, F: QueryFilter, I: Iterator<Item: EntityBorro
             Self::fetch_next_aliased_unchecked(
                 &mut self.entity_iter,
                 self.entities,
-                self.tables,
-                self.sparse_sets,
+                self.storages,
                 self.archetypes,
                 &mut self.fetch,
                 &mut self.filter,
@@ -1817,8 +1822,7 @@ impl<'w, 's, D: ReadOnlyQueryData, F: QueryFilter, I: DoubleEndedIterator<Item: 
             Self::fetch_next_aliased_unchecked(
                 self.entity_iter.by_ref().rev(),
                 self.entities,
-                self.tables,
-                self.sparse_sets,
+                self.storages,
                 self.archetypes,
                 &mut self.fetch,
                 &mut self.filter,
@@ -1900,8 +1904,7 @@ impl<'w, 's, D: QueryData, F: QueryFilter, I: EntitySetIterator> Iterator
             QueryManyIter::<'w, 's, D, F, I>::fetch_next_aliased_unchecked(
                 &mut self.0.entity_iter,
                 self.0.entities,
-                self.0.tables,
-                self.0.sparse_sets,
+                self.0.storages,
                 self.0.archetypes,
                 &mut self.0.fetch,
                 &mut self.0.filter,
@@ -1944,8 +1947,7 @@ impl<'w, 's, D: QueryData, F: QueryFilter, I: EntitySetIterator> Debug
 pub struct QuerySortedManyIter<'w, 's, D: QueryData, F: QueryFilter, I: Iterator<Item = Entity>> {
     entity_iter: I,
     entities: &'w Entities,
-    tables: &'w Tables,
-    sparse_sets: &'w SparseSets,
+    storages: &'w SubStorages,
     archetypes: &'w Archetypes,
     fetch: D::Fetch<'w>,
     query_state: &'s QueryState<D, F>,
@@ -1972,8 +1974,7 @@ impl<'w, 's, D: QueryData, F: QueryFilter, I: Iterator<Item = Entity>>
             archetypes: world.archetypes(),
             // SAFETY: We only access table data that has been registered in `query_state`.
             // This means `world` has permission to access the data we use.
-            tables: &world.storages().tables,
-            sparse_sets: &world.storages().sparse_sets,
+            storages: world.sub_storages(),
             fetch,
             entity_iter: entity_list.into_iter(),
         }
@@ -1988,7 +1989,7 @@ impl<'w, 's, D: QueryData, F: QueryFilter, I: Iterator<Item = Entity>>
     /// `entity` must stem from `self.entity_iter`, and not have been passed before.
     #[inline(always)]
     unsafe fn fetch_next_aliased_unchecked(&mut self, entity: Entity) -> D::Item<'w> {
-        let (location, archetype, table);
+        let (location, archetype, table, sparse_sets);
         // SAFETY:
         // `tables` and `archetypes` belong to the same world that the [`QueryIter`]
         // was initialized for.
@@ -1998,10 +1999,12 @@ impl<'w, 's, D: QueryData, F: QueryFilter, I: Iterator<Item = Entity>>
                 .archetypes
                 .get(location.archetype_id)
                 .debug_checked_unwrap();
-            table = self.tables.get(location.table_id).debug_checked_unwrap();
+            table = self.storages[location.sub_storage]
+                .tables
+                .get(location.table_id)
+                .debug_checked_unwrap();
+            sparse_sets = &self.storages[location.sub_storage].sparse_sets;
         }
-
-        let sparse_sets = self.sparse_sets;
 
         // SAFETY: `archetype` is from the world that `fetch` was created for,
         // `fetch_state` is the state that `fetch` was initialized with
@@ -2167,6 +2170,7 @@ impl<'w, 's, D: QueryData, F: QueryFilter, I: Iterator<Item = Entity>> Debug
 /// [`Query::iter_combinations_mut`]: crate::system::Query::iter_combinations_mut
 pub struct QueryCombinationIter<'w, 's, D: QueryData, F: QueryFilter, const K: usize> {
     tables: &'w Tables,
+    sparse_sets: &'w SparseSets,
     archetypes: &'w Archetypes,
     query_state: &'s QueryState<D, F>,
     cursors: [QueryIterationCursor<'w, 's, D, F>; K],
@@ -2181,6 +2185,7 @@ impl<'w, 's, D: QueryData, F: QueryFilter, const K: usize> QueryCombinationIter<
         query_state: &'s QueryState<D, F>,
         last_run: Tick,
         this_run: Tick,
+        sub_storage: SubStorageId,
     ) -> Self {
         assert!(K != 0, "K should not equal to zero");
         // Initialize array with cursors.
@@ -2208,7 +2213,8 @@ impl<'w, 's, D: QueryData, F: QueryFilter, const K: usize> QueryCombinationIter<
         QueryCombinationIter {
             query_state,
             // SAFETY: We only access table data that has been registered in `query_state`.
-            tables: unsafe { &world.storages().tables },
+            tables: &world.sub_storages()[sub_storage].tables,
+            sparse_sets: &world.sub_storages()[sub_storage].sparse_sets,
             archetypes: world.archetypes(),
             cursors: array.assume_init(),
         }

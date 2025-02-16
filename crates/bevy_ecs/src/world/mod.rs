@@ -1155,10 +1155,7 @@ impl World {
         sub_storage: SubStorageId,
         #[cfg(feature = "track_location")] caller: &'static Location,
     ) -> EntityWorldMut {
-        let archetype = self
-            .archetypes
-            .get(self.sub_storages[sub_storage].empty().clone())
-            .unwrap();
+        let archetype = &mut self.archetypes[self.sub_storages[sub_storage].empty().clone()];
         // PERF: consider avoiding allocating entities in the empty archetype unless needed
         let table_row =
             self.sub_storages[sub_storage].tables[archetype.table_id()].allocate(entity);
@@ -2243,7 +2240,7 @@ impl World {
         I::IntoIter: Iterator<Item = (Entity, B)>,
         B: Bundle,
     {
-        self.insert_or_spawn_batch_in_sub_storage(iter, SubStorageId::MAIN_STORAGE)
+        self.insert_or_spawn_batch_in_sub_storage(iter, SubStorages::MAIN_STORAGE)
     }
 
     pub fn insert_or_spawn_batch_in_sub_storage<I, B>(

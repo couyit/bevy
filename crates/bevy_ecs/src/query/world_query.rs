@@ -2,8 +2,8 @@ use crate::{
     archetype::Archetype,
     component::{ComponentId, Components, Tick},
     query::FilteredAccess,
-    storage::Table,
-    world::{SubWorld, World},
+    storage::{SparseSets, Table},
+    world::{unsafe_world_cell::UnsafeWorldCell, World},
 };
 use variadics_please::all_tuples;
 
@@ -61,7 +61,7 @@ pub unsafe trait WorldQuery {
     /// - `world` must have the **right** to access any access registered in `update_component_access`.
     /// - There must not be simultaneous resource access conflicting with readonly resource access registered in [`WorldQuery::update_component_access`].
     unsafe fn init_fetch<'w>(
-        sub_world: SubWorld<'w>,
+        world: UnsafeWorldCell<'w>,
         state: &Self::State,
         last_run: Tick,
         this_run: Tick,
@@ -90,6 +90,7 @@ pub unsafe trait WorldQuery {
         state: &Self::State,
         archetype: &'w Archetype,
         table: &'w Table,
+        sparse_sets: &'w SparseSets,
     );
 
     /// Adjusts internal state to account for the next [`Table`]. This will always be called on tables
@@ -101,7 +102,7 @@ pub unsafe trait WorldQuery {
     /// - `state` must be the [`State`](Self::State) that `fetch` was initialized with.
     unsafe fn set_table<'w>(fetch: &mut Self::Fetch<'w>, state: &Self::State, table: &'w Table);
 
-    /// Sets available accesses for implementors with dynamic access such as [`FilteredEntityRef`](crate::world::FilteredEntityRef)
+    /// Sets available accesses for implementers with dynamic access such as [`FilteredEntityRef`](crate::world::FilteredEntityRef)
     /// or [`FilteredEntityMut`](crate::world::FilteredEntityMut).
     ///
     /// Called when constructing a [`QueryLens`](crate::system::QueryLens) or calling [`QueryState::from_builder`](super::QueryState::from_builder)
@@ -169,7 +170,7 @@ macro_rules! impl_tuple_world_query {
             }
 
             #[inline]
-            unsafe fn init_fetch<'w>(world: SubWorld<'w>, state: &Self::State, last_run: Tick, this_run: Tick) -> Self::Fetch<'w> {
+            unsafe fn init_fetch<'w>(world: UnsafeWorldCell<'w>, state: &Self::State, last_run: Tick, this_run: Tick) -> Self::Fetch<'w> {
                 let ($($name,)*) = state;
                 // SAFETY: The invariants are upheld by the caller.
                 ($(unsafe { $name::init_fetch(world, $name, last_run, this_run) },)*)
@@ -183,11 +184,12 @@ macro_rules! impl_tuple_world_query {
                 state: &Self::State,
                 archetype: &'w Archetype,
                 table: &'w Table,
+                sparse_sets: &'w SparseSets
             ) {
                 let ($($name,)*) = fetch;
                 let ($($state,)*) = state;
                 // SAFETY: The invariants are upheld by the caller.
-                $(unsafe { $name::set_archetype($name, $state, archetype, table); })*
+                $(unsafe { $name::set_archetype($name, $state, archetype, table, sparse_sets); })*
             }
 
             #[inline]
