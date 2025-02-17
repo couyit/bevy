@@ -9,10 +9,10 @@ use crate::{
     },
     event::Event,
     observer::Observer,
-    query::{Access, ReadOnlyQueryData},
+    query::{Access, DebugCheckedUnwrap, ReadOnlyQueryData},
     removal_detection::RemovedComponentEvents,
     resource::Resource,
-    storage::{MainStorage, Storages, SubStorageId, SubStorages},
+    storage::SubStorages,
     system::IntoObserverSystem,
     world::{
         error::EntityComponentError, unsafe_world_cell::UnsafeEntityCell, DeferredWorld, Mut, Ref,
@@ -1708,7 +1708,7 @@ impl<'w> EntityWorldMut<'w> {
     pub fn take<T: Bundle>(&mut self) -> Option<T> {
         self.assert_not_despawned();
         let world = &mut self.world;
-        let storages = &mut world.storages;
+        let sub_storages = &mut world.sub_storages;
         let components = &mut world.components;
         let bundle_id = world.bundles.register_info::<T>(components);
         // SAFETY: We just ensured this bundle exists
@@ -1719,7 +1719,7 @@ impl<'w> EntityWorldMut<'w> {
         let new_archetype_id = unsafe {
             bundle_info.remove_bundle_from_archetype(
                 &mut world.archetypes,
-                storages,
+                sub_storages,
                 components,
                 &world.observers,
                 old_location.archetype_id,
@@ -1756,7 +1756,7 @@ impl<'w> EntityWorldMut<'w> {
         }
 
         let archetypes = &mut world.archetypes;
-        let storages = &mut world.storages;
+        let sub_storages = &mut world.sub_storages;
         let components = &mut world.components;
         let entities = &mut world.entities;
         let removed_components = &mut world.removed_components;
@@ -1766,7 +1766,7 @@ impl<'w> EntityWorldMut<'w> {
         // SAFETY: bundle components are iterated in order, which guarantees that the component type
         // matches
         let result = unsafe {
-            T::from_components(storages, &mut |storages| {
+            T::from_components(sub_storages, &mut |storages| {
                 let component_id = bundle_components.next().unwrap();
                 // SAFETY:
                 // - entity location is valid
@@ -1796,7 +1796,7 @@ impl<'w> EntityWorldMut<'w> {
                 old_location,
                 entities,
                 archetypes,
-                storages,
+                sub_storages,
                 new_archetype_id,
             );
         }
@@ -1821,7 +1821,7 @@ impl<'w> EntityWorldMut<'w> {
         old_location: EntityLocation,
         entities: &mut Entities,
         archetypes: &mut Archetypes,
-        storages: &mut Storages,
+        sub_storages: &mut SubStorages,
         new_archetype_id: ArchetypeId,
     ) {
         let old_archetype = &mut archetypes[old_archetype_id];
@@ -1852,13 +1852,12 @@ impl<'w> EntityWorldMut<'w> {
             new_archetype.allocate(entity, old_table_row)
         } else {
             let (old_table, new_table) = if old_sub_storage_id == new_archetype.sub_storage() {
-                storages.sub_storages[old_sub_storage_id]
+                sub_storages[old_sub_storage_id]
                     .tables
                     .get_2_mut(old_table_id, new_archetype.table_id())
             } else {
-                let (old_sub_storage, new_sub_storage) = storages
-                    .sub_storages
-                    .get_2_mut(old_sub_storage_id, new_archetype.sub_storage());
+                let (old_sub_storage, new_sub_storage) =
+                    sub_storages.get_2_mut(old_sub_storage_id, new_archetype.sub_storage());
 
                 (
                     &mut old_sub_storage.tables[old_table_id],
@@ -1925,7 +1924,7 @@ impl<'w> EntityWorldMut<'w> {
         let new_archetype_id = bundle_info
             .remove_bundle_from_archetype(
                 &mut world.archetypes,
-                &mut world.storages,
+                &mut world.sub_storages,
                 &world.components,
                 &world.observers,
                 location.archetype_id,
@@ -1969,7 +1968,7 @@ impl<'w> EntityWorldMut<'w> {
                 // Make sure to drop components stored in sparse sets.
                 // Dense components are dropped later in `move_to_and_drop_missing_unchecked`.
                 if let Some(StorageType::SparseSet) = old_archetype.get_storage_type(component_id) {
-                    world.storages.sub_storages[old_archetype.sub_storage()]
+                    world.sub_storages[old_archetype.sub_storage()]
                         .sparse_sets
                         .get_mut(component_id)
                         // Set exists because the component existed on the entity
@@ -1989,7 +1988,7 @@ impl<'w> EntityWorldMut<'w> {
             location,
             &mut world.entities,
             &mut world.archetypes,
-            &mut world.storages,
+            &mut world.sub_storages,
             new_archetype_id,
         );
 
@@ -2371,7 +2370,7 @@ impl<'w> EntityWorldMut<'w> {
 
             for component_id in archetype.sparse_set_components() {
                 // set must have existed for the component to be added.
-                let sparse_set = world.storages.sub_storages[archetype.sub_storage()]
+                let sparse_set = world.sub_storages[archetype.sub_storage()]
                     .sparse_sets
                     .get_mut(component_id)
                     .unwrap();
@@ -2379,7 +2378,7 @@ impl<'w> EntityWorldMut<'w> {
             }
             // SAFETY: table rows stored in archetypes always exist
             moved_entity = unsafe {
-                world.storages.sub_storages[archetype.sub_storage()].tables[archetype.table_id()]
+                world.sub_storages[archetype.sub_storage()].tables[archetype.table_id()]
                     .swap_remove_unchecked(table_row)
             };
         };
@@ -2578,17 +2577,8 @@ impl<'w> EntityWorldMut<'w> {
         &mut self,
         observer: impl IntoObserverSystem<E, B, M>,
     ) -> &mut Self {
-        self.observe_in_sub_storage(SubStorages::MAIN_STORAGE, observer)
-    }
-
-    pub fn observe_in_sub_storage<E: Event, B: Bundle, M>(
-        &mut self,
-        sub_storage: SubStorageId,
-        observer: impl IntoObserverSystem<E, B, M>,
-    ) -> &mut Self {
         self.observe_with_caller(
             observer,
-            sub_storage,
             #[cfg(feature = "track_location")]
             Location::caller(),
         )
@@ -2597,10 +2587,18 @@ impl<'w> EntityWorldMut<'w> {
     pub(crate) fn observe_with_caller<E: Event, B: Bundle, M>(
         &mut self,
         observer: impl IntoObserverSystem<E, B, M>,
-        sub_storage: SubStorageId,
         #[cfg(feature = "track_location")] caller: &'static Location<'static>,
     ) -> &mut Self {
         self.assert_not_despawned();
+
+        let sub_storage = unsafe {
+            self.world
+                .entities()
+                .get(self.entity)
+                .debug_checked_unwrap()
+        }
+        .sub_storage;
+
         self.world.spawn_with_caller(
             Observer::new(observer).with_entity(self.entity),
             sub_storage,
@@ -4147,7 +4145,7 @@ unsafe fn insert_dynamic_bundle<
 /// Panics if the entity did not have the component.
 #[inline]
 pub(crate) unsafe fn take_component<'a>(
-    storages: &'a mut Storages,
+    sub_storages: &'a mut SubStorages,
     components: &Components,
     removed_components: &mut RemovedComponentEvents,
     component_id: ComponentId,
@@ -4159,14 +4157,14 @@ pub(crate) unsafe fn take_component<'a>(
     removed_components.send(component_id, entity);
     match component_info.storage_type() {
         StorageType::Table => {
-            let table = &mut storages.sub_storages[location.sub_storage].tables[location.table_id];
+            let table = &mut sub_storages[location.sub_storage].tables[location.table_id];
             // SAFETY:
             // - archetypes only store valid table_rows
             // - index is in bounds as promised by caller
             // - promote is safe because the caller promises to remove the table row without dropping it immediately afterwards
             unsafe { table.take_component(component_id, location.table_row) }
         }
-        StorageType::SparseSet => storages.sub_storages[location.sub_storage]
+        StorageType::SparseSet => sub_storages[location.sub_storage]
             .sparse_sets
             .get_mut(component_id)
             .unwrap()

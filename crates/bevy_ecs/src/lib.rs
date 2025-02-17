@@ -1233,7 +1233,7 @@ mod tests {
             .components()
             .get_resource_id(TypeId::of::<Num>())
             .unwrap();
-        let archetype_component_id = world.storages().resources.get(resource_id).unwrap().id();
+        let archetype_component_id = world.resources.get(resource_id).unwrap().id();
 
         assert_eq!(world.resource::<Num>().0, 123);
         assert!(world.contains_resource::<Num>());
@@ -1296,8 +1296,7 @@ mod tests {
             "resource id does not change after removing / re-adding"
         );
 
-        let current_archetype_component_id =
-            world.storages().resources.get(resource_id).unwrap().id();
+        let current_archetype_component_id = world.resources.get(resource_id).unwrap().id();
 
         assert_eq!(
             archetype_component_id, current_archetype_component_id,

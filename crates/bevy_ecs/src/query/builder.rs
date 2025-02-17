@@ -3,6 +3,7 @@ use core::marker::PhantomData;
 use crate::{
     component::{ComponentId, StorageType},
     prelude::*,
+    storage::{MainStorage, Storage},
 };
 
 use super::{FilteredAccess, QueryData, QueryFilter};
@@ -35,15 +36,15 @@ use super::{FilteredAccess, QueryData, QueryFilter};
 /// // Consume the QueryState
 /// let (entity, b) = query.single(&world);
 /// ```
-pub struct QueryBuilder<'w, D: QueryData = (), F: QueryFilter = ()> {
+pub struct QueryBuilder<'w, D: QueryData = (), F: QueryFilter = (), S: Storage = MainStorage> {
     access: FilteredAccess<ComponentId>,
     world: &'w mut World,
     or: bool,
     first: bool,
-    _marker: PhantomData<(D, F)>,
+    _marker: PhantomData<(D, F, S)>,
 }
 
-impl<'w, D: QueryData, F: QueryFilter> QueryBuilder<'w, D, F> {
+impl<'w, D: QueryData, F: QueryFilter, S: Storage> QueryBuilder<'w, D, F, S> {
     /// Creates a new builder with the accesses required for `Q` and `F`
     pub fn new(world: &'w mut World) -> Self {
         let fetch_state = D::init_state(world);
@@ -67,7 +68,7 @@ impl<'w, D: QueryData, F: QueryFilter> QueryBuilder<'w, D, F> {
             world,
             or: false,
             first: false,
-            _marker: PhantomData,
+            _marker: PhantomData::<(D, F, S)>,
         }
     }
 

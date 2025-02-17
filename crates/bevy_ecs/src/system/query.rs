@@ -1108,6 +1108,7 @@ impl<'w, 's, D: QueryData, F: QueryFilter, S: Storage> Query<'w, 's, D, F, S> {
             last_run: self.last_run,
             this_run: self.this_run,
             batching_strategy: BatchingStrategy::new(),
+            sub_storage: self.sub_storage,
         }
     }
 
@@ -2049,6 +2050,10 @@ impl<'w, 's, D: QueryData, F: QueryFilter, S: Storage> Query<'w, 's, D, F, S> {
             this_run: self.this_run,
             _phantom: PhantomData,
         }
+    }
+
+    pub(crate) unsafe fn transmute<T: Storage>(self) -> Query<'w, 's, D, F, T> {
+        std::mem::transmute(self)
     }
 }
 

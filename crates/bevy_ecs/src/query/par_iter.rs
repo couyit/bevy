@@ -1,5 +1,6 @@
 use crate::{
-    batching::BatchingStrategy, component::Tick, world::unsafe_world_cell::UnsafeWorldCell,
+    batching::BatchingStrategy, component::Tick, storage::SubStorageId,
+    world::unsafe_world_cell::UnsafeWorldCell,
 };
 
 use super::{QueryData, QueryFilter, QueryItem, QueryState};
@@ -14,6 +15,7 @@ pub struct QueryParIter<'w, 's, D: QueryData, F: QueryFilter> {
     pub(crate) last_run: Tick,
     pub(crate) this_run: Tick,
     pub(crate) batching_strategy: BatchingStrategy,
+    pub(crate) sub_storage: SubStorageId,
 }
 
 impl<'w, 's, D: QueryData, F: QueryFilter> QueryParIter<'w, 's, D, F> {
@@ -128,7 +130,8 @@ impl<'w, 's, D: QueryData, F: QueryFilter> QueryParIter<'w, 's, D, F> {
             let id_iter = self.state.matched_storage_ids.iter();
             if self.state.is_dense {
                 // SAFETY: We only access table metadata.
-                let tables = unsafe { &self.world.world_metadata().storages().tables };
+                let tables =
+                    unsafe { &self.world.world_metadata().sub_storages()[self.sub_storage].tables };
                 id_iter
                     // SAFETY: The if check ensures that matched_storage_ids stores TableIds
                     .map(|id| unsafe { tables[id.table_id].entity_count() })

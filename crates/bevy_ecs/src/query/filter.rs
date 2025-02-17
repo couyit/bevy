@@ -3,8 +3,8 @@ use crate::{
     component::{Component, ComponentId, Components, StorageType, Tick},
     entity::Entity,
     query::{DebugCheckedUnwrap, FilteredAccess, StorageSwitch, WorldQuery},
-    storage::{ComponentSparseSet, Table, TableRow},
-    world::{SubWorld, World},
+    storage::{ComponentSparseSet, SparseSets, Table, TableRow},
+    world::{unsafe_world_cell::UnsafeWorldCell, World},
 };
 use bevy_ptr::{ThinSlicePtr, UnsafeCellDeref};
 use core::{cell::UnsafeCell, marker::PhantomData};
@@ -151,7 +151,7 @@ unsafe impl<T: Component> WorldQuery for With<T> {
 
     #[inline]
     unsafe fn init_fetch(
-        _sub_world: SubWorld,
+        _world: UnsafeWorldCell,
         _state: &ComponentId,
         _last_run: Tick,
         _this_run: Tick,
@@ -171,6 +171,7 @@ unsafe impl<T: Component> WorldQuery for With<T> {
         _state: &ComponentId,
         _archetype: &Archetype,
         _table: &Table,
+        _sparse_sets: &SparseSets,
     ) {
     }
 
@@ -251,7 +252,7 @@ unsafe impl<T: Component> WorldQuery for Without<T> {
 
     #[inline]
     unsafe fn init_fetch(
-        _sub_world: SubWorld,
+        _sub_world: UnsafeWorldCell,
         _state: &ComponentId,
         _last_run: Tick,
         _this_run: Tick,
@@ -271,6 +272,7 @@ unsafe impl<T: Component> WorldQuery for Without<T> {
         _state: &ComponentId,
         _archetype: &Archetype,
         _table: &Table,
+        _sparse_sets: &SparseSets,
     ) {
     }
 
@@ -400,11 +402,11 @@ macro_rules! impl_or_query_filter {
             const IS_DENSE: bool = true $(&& $filter::IS_DENSE)*;
 
             #[inline]
-            unsafe fn init_fetch<'w>(sub_world: SubWorld<'w>, state: &Self::State, last_run: Tick, this_run: Tick) -> Self::Fetch<'w> {
+            unsafe fn init_fetch<'w>(world: UnsafeWorldCell<'w>, state: &Self::State, last_run: Tick, this_run: Tick) -> Self::Fetch<'w> {
                 let ($($filter,)*) = state;
                 ($(OrFetch {
                     // SAFETY: The invariants are upheld by the caller.
-                    fetch: unsafe { $filter::init_fetch(sub_world, $filter, last_run, this_run) },
+                    fetch: unsafe { $filter::init_fetch(world, $filter, last_run, this_run) },
                     matches: false,
                 },)*)
             }
@@ -428,6 +430,7 @@ macro_rules! impl_or_query_filter {
                 state: & Self::State,
                 archetype: &'w Archetype,
                 table: &'w Table,
+                sparse_sets: &'w SparseSets,
             ) {
                 let ($($filter,)*) = fetch;
                 let ($($state,)*) = &state;
@@ -435,7 +438,7 @@ macro_rules! impl_or_query_filter {
                     $filter.matches = $filter::matches_component_set($state, &|id| archetype.contains(id));
                     if $filter.matches {
                         // SAFETY: The invariants are upheld by the caller.
-                       unsafe { $filter::set_archetype(&mut $filter.fetch, $state, archetype, table,  ); }
+                       unsafe { $filter::set_archetype(&mut $filter.fetch, $state, archetype, table, sparse_sets); }
                     }
                 )*
             }
@@ -662,23 +665,13 @@ unsafe impl<T: Component> WorldQuery for Added<T> {
 
     #[inline]
     unsafe fn init_fetch<'w>(
-        sub_world: SubWorld<'w>,
-        component_id: &ComponentId,
+        _world: UnsafeWorldCell<'w>,
+        _component_id: &ComponentId,
         last_run: Tick,
         this_run: Tick,
     ) -> Self::Fetch<'w> {
         Self::Fetch::<'w> {
-            ticks: StorageSwitch::new(
-                || None,
-                || {
-                    Some(
-                        sub_world
-                            .sparse_sets()
-                            .get(*component_id)
-                            .debug_checked_unwrap(),
-                    )
-                },
-            ),
+            ticks: StorageSwitch::new(|| None, || None),
             last_run,
             this_run,
         }
@@ -697,12 +690,17 @@ unsafe impl<T: Component> WorldQuery for Added<T> {
         component_id: &ComponentId,
         _archetype: &'w Archetype,
         table: &'w Table,
+        sparse_sets: &'w SparseSets,
     ) {
         if Self::IS_DENSE {
             // SAFETY: `set_archetype`'s safety rules are a super set of the `set_table`'s ones.
             unsafe {
                 Self::set_table(fetch, component_id, table);
             }
+        } else {
+            fetch
+                .ticks
+                .set_sparse_sets(Some(sparse_sets.get(*component_id).debug_checked_unwrap()));
         }
     }
 
@@ -890,23 +888,13 @@ unsafe impl<T: Component> WorldQuery for Changed<T> {
 
     #[inline]
     unsafe fn init_fetch<'w>(
-        sub_world: SubWorld<'w>,
-        component_id: &ComponentId,
+        _world: UnsafeWorldCell<'w>,
+        _component_id: &ComponentId,
         last_run: Tick,
         this_run: Tick,
     ) -> Self::Fetch<'w> {
         Self::Fetch::<'w> {
-            ticks: StorageSwitch::new(
-                || None,
-                || {
-                    Some(
-                        sub_world
-                            .sparse_sets()
-                            .get(*component_id)
-                            .debug_checked_unwrap(),
-                    )
-                },
-            ),
+            ticks: StorageSwitch::new(|| None, || None),
             last_run,
             this_run,
         }
@@ -925,12 +913,17 @@ unsafe impl<T: Component> WorldQuery for Changed<T> {
         component_id: &ComponentId,
         _archetype: &'w Archetype,
         table: &'w Table,
+        sparse_sets: &'w SparseSets,
     ) {
         if Self::IS_DENSE {
             // SAFETY: `set_archetype`'s safety rules are a super set of the `set_table`'s ones.
             unsafe {
                 Self::set_table(fetch, component_id, table);
             }
+        } else {
+            fetch
+                .ticks
+                .set_sparse_sets(Some(sparse_sets.get(*component_id).debug_checked_unwrap()))
         }
     }
 

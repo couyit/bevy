@@ -278,7 +278,7 @@ mod render_entities_world_query_impls {
         component::{ComponentId, Components, Tick},
         entity::Entity,
         query::{FilteredAccess, QueryData, ReadOnlyQueryData, WorldQuery},
-        storage::{Table, TableRow},
+        storage::{SparseSets, Table, TableRow},
         world::{unsafe_world_cell::UnsafeWorldCell, World},
     };
 
@@ -315,10 +315,17 @@ mod render_entities_world_query_impls {
             component_id: &ComponentId,
             archetype: &'w Archetype,
             table: &'w Table,
+            sparse_sets: &'w SparseSets,
         ) {
             // SAFETY: defers to the `&T` implementation, with T set to `RenderEntity`.
             unsafe {
-                <&RenderEntity as WorldQuery>::set_archetype(fetch, component_id, archetype, table);
+                <&RenderEntity as WorldQuery>::set_archetype(
+                    fetch,
+                    component_id,
+                    archetype,
+                    table,
+                    sparse_sets,
+                );
             }
         }
 
@@ -414,10 +421,17 @@ mod render_entities_world_query_impls {
             component_id: &ComponentId,
             archetype: &'w Archetype,
             table: &'w Table,
+            sparse_sets: &'w SparseSets,
         ) {
             // SAFETY: defers to the `&T` implementation, with T set to `MainEntity`.
             unsafe {
-                <&MainEntity as WorldQuery>::set_archetype(fetch, component_id, archetype, table);
+                <&MainEntity as WorldQuery>::set_archetype(
+                    fetch,
+                    component_id,
+                    archetype,
+                    table,
+                    sparse_sets,
+                );
             }
         }
 

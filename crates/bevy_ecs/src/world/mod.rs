@@ -9,7 +9,6 @@ pub mod error;
 mod filtered_resource;
 mod identifier;
 mod spawn_batch;
-mod sub_world;
 pub mod unsafe_world_cell;
 
 #[cfg(feature = "bevy_reflect")]
@@ -30,7 +29,6 @@ pub use entity_ref::{
 pub use filtered_resource::*;
 pub use identifier::WorldId;
 pub use spawn_batch::*;
-pub use sub_world::*;
 
 use crate::{
     archetype::{ArchetypeId, ArchetypeRow, Archetypes},
@@ -111,7 +109,7 @@ impl Default for World {
             id: WorldId::new().expect("More `bevy` `World`s have been created than is supported"),
             entities: Entities::new(),
             components: Default::default(),
-            archetypes: Default::default(),
+            archetypes: Archetypes::new(),
             sub_storages: SubStorages::new(),
             bundles: Default::default(),
             observers: Observers::default(),
@@ -231,6 +229,16 @@ impl World {
     #[inline]
     pub fn components(&self) -> &Components {
         &self.components
+    }
+
+    #[inline]
+    pub fn resources(&self) -> &Resources<true> {
+        &self.resources
+    }
+
+    #[inline]
+    pub fn non_send_resources(&self) -> &Resources<false> {
+        &self.non_send_resources
     }
 
     /// Retrieves this world's [`Bundles`] collection.
@@ -1497,7 +1505,15 @@ impl World {
     /// ```
     #[inline]
     pub fn query<D: QueryData>(&mut self) -> QueryState<D, ()> {
-        self.query_filtered::<D, ()>()
+        self.query_in_sub_storage::<D>(SubStorages::MAIN_STORAGE)
+    }
+
+    #[inline]
+    pub fn query_in_sub_storage<D: QueryData>(
+        &mut self,
+        sub_storage: SubStorageId,
+    ) -> QueryState<D, ()> {
+        self.query_filtered_in_sub_storage::<D, ()>(sub_storage)
     }
 
     /// Returns [`QueryState`] for the given filtered [`QueryData`], which is used to efficiently
@@ -1521,7 +1537,15 @@ impl World {
     /// ```
     #[inline]
     pub fn query_filtered<D: QueryData, F: QueryFilter>(&mut self) -> QueryState<D, F> {
-        QueryState::new(self)
+        self.query_filtered_in_sub_storage::<D, F>(SubStorages::MAIN_STORAGE)
+    }
+
+    #[inline]
+    pub fn query_filtered_in_sub_storage<D: QueryData, F: QueryFilter>(
+        &mut self,
+        sub_storage: SubStorageId,
+    ) -> QueryState<D, F> {
+        QueryState::new_in_sub_storage(self, sub_storage)
     }
 
     /// Returns [`QueryState`] for the given [`QueryData`], which is used to efficiently
@@ -2924,12 +2948,13 @@ impl World {
     /// This should be called before doing operations that might operate on queued entities,
     /// such as inserting a [`Component`].
     pub(crate) fn flush_entities(&mut self) {
-        let empty_archetype = self.archetypes.empty_mut();
-        let table = &mut self.tables[empty_archetype.table_id()];
         // PERF: consider pre-allocating space for flushed entities
         // SAFETY: entity is set to a valid location
         unsafe {
-            self.entities.flush(|entity, location| {
+            self.entities.flush(|entity, location, sub_storage| {
+                let empty_archetype = &mut self.archetypes[self.sub_storages[sub_storage].empty()];
+                let table = &mut self.sub_storages[sub_storage].tables[empty_archetype.table_id()];
+
                 // SAFETY: no components are allocated by archetype.allocate() because the archetype
                 // is empty
                 *location = empty_archetype.allocate(entity, table.allocate(entity));

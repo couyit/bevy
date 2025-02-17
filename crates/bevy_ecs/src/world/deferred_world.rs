@@ -12,6 +12,7 @@ use crate::{
     prelude::{Component, QueryState},
     query::{QueryData, QueryFilter},
     resource::Resource,
+    storage::InvalidStorage,
     system::{Commands, Query},
     traversal::Traversal,
     world::{error::EntityFetchError, WorldEntityFetch},
@@ -365,7 +366,7 @@ impl<'w> DeferredWorld<'w> {
     pub fn query<'s, D: QueryData, F: QueryFilter>(
         &mut self,
         state: &'s mut QueryState<D, F>,
-    ) -> Query<'_, 's, D, F> {
+    ) -> Query<'_, 's, D, F, InvalidStorage> {
         // SAFETY: We have mutable access to the entire world
         unsafe { state.query_unchecked(self.world) }
     }

@@ -5,6 +5,7 @@
 
 use crate::{AsAssetId, Asset, AssetId};
 use bevy_ecs::component::Components;
+use bevy_ecs::storage::SparseSets;
 use bevy_ecs::{
     archetype::Archetype,
     component::{ComponentId, Tick},
@@ -207,11 +208,12 @@ unsafe impl<A: AsAssetId> WorldQuery for AssetChanged<A> {
         state: &Self::State,
         archetype: &'w Archetype,
         table: &'w Table,
+        sparse_sets: &'w SparseSets,
     ) {
         if let Some(inner) = &mut fetch.inner {
             // SAFETY: We delegate to the inner `set_archetype` for `A`
             unsafe {
-                <&A>::set_archetype(inner, &state.asset_id, archetype, table);
+                <&A>::set_archetype(inner, &state.asset_id, archetype, table, sparse_sets);
             }
         }
     }

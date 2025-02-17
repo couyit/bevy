@@ -12,7 +12,7 @@ use crate::{
     query::{DebugCheckedUnwrap, ReadOnlyQueryData},
     removal_detection::RemovedComponentEvents,
     resource::Resource,
-    storage::{ComponentSparseSet, Storages, SubStorages, Table},
+    storage::{ComponentSparseSet, Resources, SubStorageId, SubStorages, Table},
     world::RawCommandQueue,
 };
 use bevy_platform_support::sync::atomic::Ordering;
@@ -342,6 +342,16 @@ impl<'w> UnsafeWorldCell<'w> {
         &unsafe { self.unsafe_world() }.sub_storages
     }
 
+    #[inline]
+    pub fn resources(self) -> &'w Resources<true> {
+        &unsafe { self.unsafe_world() }.resources
+    }
+
+    #[inline]
+    pub fn non_send_resources(self) -> &'w Resources<false> {
+        &unsafe { self.unsafe_world() }.non_send_resources
+    }
+
     /// Retrieves an [`UnsafeEntityCell`] that exposes read and write operations for the given `entity`.
     /// Similar to the [`UnsafeWorldCell`], you are in charge of making sure that no aliasing rules are violated.
     #[inline]
@@ -416,10 +426,7 @@ impl<'w> UnsafeWorldCell<'w> {
     pub unsafe fn get_resource_by_id(self, component_id: ComponentId) -> Option<Ptr<'w>> {
         // SAFETY: caller ensures that `self` has permission to access `R`
         //  caller ensures that no mutable reference exists to `R`
-        unsafe { self.storages() }
-            .resources
-            .get(component_id)?
-            .get_data()
+        self.resources().get(component_id)?.get_data()
     }
 
     /// Gets a reference to the non-send resource of the given type if it exists
@@ -458,10 +465,7 @@ impl<'w> UnsafeWorldCell<'w> {
     pub unsafe fn get_non_send_resource_by_id(self, component_id: ComponentId) -> Option<Ptr<'w>> {
         // SAFETY: we only access data on world that the caller has ensured is unaliased and we have
         //  permission to access.
-        unsafe { self.storages() }
-            .non_send_resources
-            .get(component_id)?
-            .get_data()
+        self.non_send_resources().get(component_id)?.get_data()
     }
 
     /// Gets a mutable reference to the resource of the given type if it exists
@@ -503,10 +507,7 @@ impl<'w> UnsafeWorldCell<'w> {
         self.assert_allows_mutable_access();
         // SAFETY: we only access data that the caller has ensured is unaliased and `self`
         //  has permission to access.
-        let (ptr, ticks, _caller) = unsafe { self.storages() }
-            .resources
-            .get(component_id)?
-            .get_with_ticks()?;
+        let (ptr, ticks, _caller) = self.resources().get(component_id)?.get_with_ticks()?;
 
         // SAFETY:
         // - index is in-bounds because the column is initialized and non-empty
@@ -572,8 +573,8 @@ impl<'w> UnsafeWorldCell<'w> {
         let change_tick = self.change_tick();
         // SAFETY: we only access data that the caller has ensured is unaliased and `self`
         //  has permission to access.
-        let (ptr, ticks, _caller) = unsafe { self.storages() }
-            .non_send_resources
+        let (ptr, ticks, _caller) = self
+            .non_send_resources()
             .get(component_id)?
             .get_with_ticks()?;
 
@@ -607,10 +608,7 @@ impl<'w> UnsafeWorldCell<'w> {
         // - caller ensures there is no `&mut World`
         // - caller ensures there are no mutable borrows of this resource
         // - caller ensures that we have permission to access this resource
-        unsafe { self.storages() }
-            .resources
-            .get(component_id)?
-            .get_with_ticks()
+        self.resources().get(component_id)?.get_with_ticks()
     }
 
     // Shorthand helper function for getting the data and change ticks for a resource.
@@ -630,8 +628,7 @@ impl<'w> UnsafeWorldCell<'w> {
         // - caller ensures there is no `&mut World`
         // - caller ensures there are no mutable borrows of this resource
         // - caller ensures that we have permission to access this resource
-        unsafe { self.storages() }
-            .non_send_resources
+        self.non_send_resources()
             .get(component_id)?
             .get_with_ticks()
     }
@@ -969,9 +966,10 @@ impl<'w> UnsafeEntityCell<'w> {
                     .get(location.table_id)
                     .debug_checked_unwrap()
             };
+            let sparse_sets = &self.world.sub_storages()[location.sub_storage].sparse_sets;
             // SAFETY: Archetype and table are from the same world used to initialize state and fetch.
             // Table corresponds to archetype. State is the same state used to init fetch above.
-            unsafe { Q::set_archetype(&mut fetch, &state, archetype, table) }
+            unsafe { Q::set_archetype(&mut fetch, &state, archetype, table, sparse_sets) }
             // SAFETY: Called after set_archetype above. Entity and location are guaranteed to exist.
             unsafe { Some(Q::fetch(&mut fetch, self.id(), location.table_row)) }
         } else {
@@ -1093,7 +1091,9 @@ impl<'w> UnsafeWorldCell<'w> {
         // SAFETY:
         // - caller ensures returned data is not misused and we have not created any borrows of component/resource data
         // - `location` contains a valid `TableId`, so getting the table won't fail
-        unsafe { self.storages().tables.get(location.table_id) }
+        self.sub_storages()[location.sub_storage]
+            .tables
+            .get(location.table_id)
     }
 
     #[inline]
@@ -1101,10 +1101,16 @@ impl<'w> UnsafeWorldCell<'w> {
     /// - the returned `ComponentSparseSet` is only used in ways that this [`UnsafeWorldCell`] has permission for.
     /// - the returned `ComponentSparseSet` is only used in ways that would not conflict with any existing
     ///   borrows of world data.
-    unsafe fn fetch_sparse_set(self, component_id: ComponentId) -> Option<&'w ComponentSparseSet> {
+    unsafe fn fetch_sparse_set(
+        self,
+        component_id: ComponentId,
+        sub_storage: SubStorageId,
+    ) -> Option<&'w ComponentSparseSet> {
         // SAFETY: caller ensures returned data is not misused and we have not created any borrows
         // of component/resource data
-        unsafe { self.storages() }.sparse_sets.get(component_id)
+        self.sub_storages()[sub_storage]
+            .sparse_sets
+            .get(component_id)
     }
 }
 
@@ -1131,7 +1137,9 @@ unsafe fn get_component(
             // SAFETY: archetypes only store valid table_rows and caller ensure aliasing rules
             table.get_component(component_id, location.table_row)
         }
-        StorageType::SparseSet => world.fetch_sparse_set(component_id)?.get(entity),
+        StorageType::SparseSet => world
+            .fetch_sparse_set(component_id, location.sub_storage)?
+            .get(entity),
     }
 }
 
@@ -1173,7 +1181,9 @@ unsafe fn get_component_and_ticks(
                 (),
             ))
         }
-        StorageType::SparseSet => world.fetch_sparse_set(component_id)?.get_with_ticks(entity),
+        StorageType::SparseSet => world
+            .fetch_sparse_set(component_id, location.sub_storage)?
+            .get_with_ticks(entity),
     }
 }
 
@@ -1199,7 +1209,9 @@ unsafe fn get_ticks(
             // SAFETY: archetypes only store valid table_rows and caller ensure aliasing rules
             table.get_ticks_unchecked(component_id, location.table_row)
         }
-        StorageType::SparseSet => world.fetch_sparse_set(component_id)?.get_ticks(entity),
+        StorageType::SparseSet => world
+            .fetch_sparse_set(component_id, location.sub_storage)?
+            .get_ticks(entity),
     }
 }
 

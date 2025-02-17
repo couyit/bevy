@@ -6,8 +6,8 @@ use crate::{
     component::{ComponentId, ComponentTicks, Components, Tick},
     entity::Entities,
     query::{
-        Access, FilteredAccess, FilteredAccessSet, QueryData, QueryFilter, QuerySingleError,
-        QueryState, ReadOnlyQueryData,
+        Access, DebugCheckedUnwrap, FilteredAccess, FilteredAccessSet, QueryData, QueryFilter,
+        QuerySingleError, QueryState, ReadOnlyQueryData,
     },
     resource::Resource,
     storage::{ResourceData, Storage},
@@ -24,7 +24,7 @@ use bevy_utils::synccell::SyncCell;
 #[cfg(feature = "track_location")]
 use core::panic::Location;
 use core::{
-    any::Any,
+    any::{Any, TypeId},
     fmt::Debug,
     marker::PhantomData,
     ops::{Deref, DerefMut},
@@ -313,7 +313,19 @@ unsafe impl<D: QueryData + 'static, F: QueryFilter + 'static, S: Storage> System
     type Item<'w, 's> = Query<'w, 's, D, F, S>;
 
     fn init_state(world: &mut World, system_meta: &mut SystemMeta) -> Self::State {
-        let state = QueryState::new_with_access(world, &mut system_meta.archetype_component_access);
+        let &sub_storage = unsafe {
+            world
+                .sub_storages()
+                .indices
+                .get(&TypeId::of::<S>())
+                .debug_checked_unwrap()
+        };
+
+        let state = QueryState::new_with_access(
+            world,
+            &mut system_meta.archetype_component_access,
+            sub_storage,
+        );
         init_query_param(world, system_meta, &state);
         state
     }
@@ -336,7 +348,11 @@ unsafe impl<D: QueryData + 'static, F: QueryFilter + 'static, S: Storage> System
         // SAFETY: We have registered all of the query's world accesses,
         // so the caller ensures that `world` has permission to access any
         // world data that the query needs.
-        unsafe { state.query_unchecked_manual_with_ticks(world, system_meta.last_run, change_tick) }
+        unsafe {
+            state
+                .query_unchecked_manual_with_ticks(world, system_meta.last_run, change_tick)
+                .transmute()
+        }
     }
 }
 
@@ -409,7 +425,9 @@ unsafe impl<'a, D: QueryData + 'static, F: QueryFilter + 'static, S: Storage> Sy
         state.validate_world(world.id());
         // SAFETY: State ensures that the components it accesses are not accessible somewhere elsewhere.
         let query = unsafe {
-            state.query_unchecked_manual_with_ticks::<S>(world, system_meta.last_run, change_tick)
+            state
+                .query_unchecked_manual_with_ticks(world, system_meta.last_run, change_tick)
+                .transmute::<S>()
         };
         let single = query
             .get_single_inner()
@@ -430,11 +448,9 @@ unsafe impl<'a, D: QueryData + 'static, F: QueryFilter + 'static, S: Storage> Sy
         // SAFETY: State ensures that the components it accesses are not mutably accessible elsewhere
         // and the query is read only.
         let query = unsafe {
-            state.query_unchecked_manual_with_ticks::<S>(
-                world,
-                system_meta.last_run,
-                world.change_tick(),
-            )
+            state
+                .query_unchecked_manual_with_ticks(world, system_meta.last_run, world.change_tick())
+                .transmute::<S>()
         };
         let is_valid = query.get_single_inner().is_ok();
         if !is_valid {
@@ -475,7 +491,9 @@ unsafe impl<'a, D: QueryData + 'static, F: QueryFilter + 'static, S: Storage> Sy
         state.validate_world(world.id());
         // SAFETY: State ensures that the components it accesses are not accessible elsewhere.
         let query = unsafe {
-            state.query_unchecked_manual_with_ticks::<S>(world, system_meta.last_run, change_tick)
+            state
+                .query_unchecked_manual_with_ticks(world, system_meta.last_run, change_tick)
+                .transmute::<S>()
         };
         match query.get_single_inner() {
             Ok(single) => Some(Single {
@@ -497,11 +515,9 @@ unsafe impl<'a, D: QueryData + 'static, F: QueryFilter + 'static, S: Storage> Sy
         // SAFETY: State ensures that the components it accesses are not mutably accessible elsewhere
         // and the query is read only.
         let query = unsafe {
-            state.query_unchecked_manual_with_ticks::<S>(
-                world,
-                system_meta.last_run,
-                world.change_tick(),
-            )
+            state
+                .query_unchecked_manual_with_ticks(world, system_meta.last_run, world.change_tick())
+                .transmute::<S>()
         };
         let result = query.get_single_inner();
         let is_valid = !matches!(result, Err(QuerySingleError::MultipleEntities(_)));
@@ -844,8 +860,8 @@ unsafe impl<'a, T: Resource> SystemParam for Res<'a, T> {
         world: UnsafeWorldCell,
     ) -> bool {
         // SAFETY: Read-only access to resource metadata.
-        let is_valid = unsafe { world.storages() }
-            .resources
+        let is_valid = world
+            .resources()
             .get(component_id)
             .is_some_and(ResourceData::is_present);
         if !is_valid {
@@ -958,8 +974,8 @@ unsafe impl<'a, T: Resource> SystemParam for ResMut<'a, T> {
         world: UnsafeWorldCell,
     ) -> bool {
         // SAFETY: Read-only access to resource metadata.
-        let is_valid = unsafe { world.storages() }
-            .resources
+        let is_valid = world
+            .resources()
             .get(component_id)
             .is_some_and(ResourceData::is_present);
         if !is_valid {
@@ -1514,8 +1530,8 @@ unsafe impl<'a, T: 'static> SystemParam for NonSend<'a, T> {
         world: UnsafeWorldCell,
     ) -> bool {
         // SAFETY: Read-only access to resource metadata.
-        let is_valid = unsafe { world.storages() }
-            .non_send_resources
+        let is_valid = world
+            .non_send_resources()
             .get(component_id)
             .is_some_and(ResourceData::is_present);
         if !is_valid {
@@ -1625,8 +1641,8 @@ unsafe impl<'a, T: 'static> SystemParam for NonSendMut<'a, T> {
         world: UnsafeWorldCell,
     ) -> bool {
         // SAFETY: Read-only access to resource metadata.
-        let is_valid = unsafe { world.storages() }
-            .non_send_resources
+        let is_valid = world
+            .non_send_resources()
             .get(component_id)
             .is_some_and(ResourceData::is_present);
         if !is_valid {

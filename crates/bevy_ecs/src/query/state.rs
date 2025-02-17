@@ -15,7 +15,7 @@ use crate::{
 };
 
 use alloc::vec::Vec;
-use core::{fmt, mem::MaybeUninit, ptr};
+use core::{any::TypeId, fmt, mem::MaybeUninit, ptr};
 use fixedbitset::FixedBitSet;
 use log::warn;
 #[cfg(feature = "trace")]
@@ -81,6 +81,7 @@ pub struct QueryState<D: QueryData, F: QueryFilter = ()> {
     pub(super) is_dense: bool,
     pub(crate) fetch_state: D::State,
     pub(crate) filter_state: F::State,
+    pub(crate) sub_storage: SubStorageId,
     #[cfg(feature = "trace")]
     par_iter_span: Span,
 }
@@ -158,7 +159,11 @@ impl<D: QueryData, F: QueryFilter> QueryState<D, F> {
 
     /// Creates a new [`QueryState`] from a given [`World`] and inherits the result of `world.id()`.
     pub fn new(world: &mut World) -> Self {
-        let mut state = Self::new_uninitialized(world);
+        Self::new_in_sub_storage(world, SubStorages::MAIN_STORAGE)
+    }
+
+    pub fn new_in_sub_storage(world: &mut World, sub_storage: SubStorageId) -> Self {
+        let mut state = Self::new_uninitialized(world, sub_storage);
         state.update_archetypes(world);
         state
     }
@@ -168,7 +173,11 @@ impl<D: QueryData, F: QueryFilter> QueryState<D, F> {
     /// This function may fail if, for example,
     /// the components that make up this query have not been registered into the world.
     pub fn try_new(world: &World) -> Option<Self> {
-        let mut state = Self::try_new_uninitialized(world)?;
+        Self::try_new_in_sub_storage(world, SubStorages::MAIN_STORAGE)
+    }
+
+    pub fn try_new_in_sub_storage(world: &World, sub_storage: SubStorageId) -> Option<Self> {
+        let mut state = Self::try_new_uninitialized(world, sub_storage)?;
         state.update_archetypes(world);
         Some(state)
     }
@@ -177,8 +186,9 @@ impl<D: QueryData, F: QueryFilter> QueryState<D, F> {
     pub(crate) fn new_with_access(
         world: &mut World,
         access: &mut Access<ArchetypeComponentId>,
+        sub_storage: SubStorageId,
     ) -> Self {
-        let mut state = Self::new_uninitialized(world);
+        let mut state = Self::new_uninitialized(world, sub_storage);
         for archetype in world.archetypes.iter() {
             // SAFETY: The state was just initialized from the `world` above, and the archetypes being added
             // come directly from the same world.
@@ -211,23 +221,24 @@ impl<D: QueryData, F: QueryFilter> QueryState<D, F> {
     ///
     /// `new_archetype` and its variants must be called on all of the World's archetypes before the
     /// state can return valid query results.
-    fn new_uninitialized(world: &mut World) -> Self {
+    fn new_uninitialized(world: &mut World, sub_storage: SubStorageId) -> Self {
         let fetch_state = D::init_state(world);
         let filter_state = F::init_state(world);
-        Self::from_states_uninitialized(world, fetch_state, filter_state)
+        Self::from_states_uninitialized(world, fetch_state, filter_state, sub_storage)
     }
 
     /// Creates a new [`QueryState`] but does not populate it with the matched results from the World yet
     ///
     /// `new_archetype` and its variants must be called on all of the World's archetypes before the
     /// state can return valid query results.
-    fn try_new_uninitialized(world: &World) -> Option<Self> {
+    fn try_new_uninitialized(world: &World, sub_storage: SubStorageId) -> Option<Self> {
         let fetch_state = D::get_state(world.components())?;
         let filter_state = F::get_state(world.components())?;
         Some(Self::from_states_uninitialized(
             world,
             fetch_state,
             filter_state,
+            sub_storage,
         ))
     }
 
@@ -239,6 +250,7 @@ impl<D: QueryData, F: QueryFilter> QueryState<D, F> {
         world: &World,
         fetch_state: <D as WorldQuery>::State,
         filter_state: <F as WorldQuery>::State,
+        sub_storage: SubStorageId,
     ) -> Self {
         let mut component_access = FilteredAccess::default();
         D::update_component_access(&fetch_state, &mut component_access);
@@ -262,9 +274,11 @@ impl<D: QueryData, F: QueryFilter> QueryState<D, F> {
             is_dense &= default_filters.is_dense(world.components());
         }
 
+        let empty = world.sub_storages()[sub_storage].empty();
+
         Self {
             world_id: world.id(),
-            archetype_generation: ArchetypeGeneration::initial(),
+            archetype_generation: ArchetypeGeneration(empty),
             matched_storage_ids: Vec::new(),
             is_dense,
             fetch_state,
@@ -272,6 +286,7 @@ impl<D: QueryData, F: QueryFilter> QueryState<D, F> {
             component_access,
             matched_tables: Default::default(),
             matched_archetypes: Default::default(),
+            sub_storage,
             #[cfg(feature = "trace")]
             par_iter_span: tracing::info_span!(
                 "par_for_each",
@@ -282,7 +297,7 @@ impl<D: QueryData, F: QueryFilter> QueryState<D, F> {
     }
 
     /// Creates a new [`QueryState`] from a given [`QueryBuilder`] and inherits its [`FilteredAccess`].
-    pub fn from_builder(builder: &mut QueryBuilder<D, F>) -> Self {
+    pub fn from_builder<S: Storage>(builder: &mut QueryBuilder<D, F, S>) -> Self {
         let mut fetch_state = D::init_state(builder.world_mut());
         let filter_state = F::init_state(builder.world_mut());
         D::set_access(&mut fetch_state, builder.access());
@@ -297,9 +312,20 @@ impl<D: QueryData, F: QueryFilter> QueryState<D, F> {
             is_dense &= default_filters.is_dense(builder.world().components());
         }
 
+        let &sub_storage = unsafe {
+            builder
+                .world()
+                .sub_storages()
+                .indices
+                .get(&TypeId::of::<S>())
+                .debug_checked_unwrap()
+        };
+
+        let empty = builder.world().sub_storages()[sub_storage].empty();
+
         let mut state = Self {
             world_id: builder.world().id(),
-            archetype_generation: ArchetypeGeneration::initial(),
+            archetype_generation: ArchetypeGeneration(empty),
             matched_storage_ids: Vec::new(),
             is_dense,
             fetch_state,
@@ -307,6 +333,7 @@ impl<D: QueryData, F: QueryFilter> QueryState<D, F> {
             component_access,
             matched_tables: Default::default(),
             matched_archetypes: Default::default(),
+            sub_storage,
             #[cfg(feature = "trace")]
             par_iter_span: tracing::info_span!(
                 "par_for_each",
@@ -321,10 +348,10 @@ impl<D: QueryData, F: QueryFilter> QueryState<D, F> {
     /// Creates a [`Query`] from the given [`QueryState`] and [`World`].
     ///
     /// This will create read-only queries, see [`Self::query_mut`] for mutable queries.
-    pub fn query<'w, 's, S: Storage>(
+    pub fn query<'w, 's>(
         &'s mut self,
         world: &'w World,
-    ) -> Query<'w, 's, D::ReadOnly, F, S> {
+    ) -> Query<'w, 's, D::ReadOnly, F, InvalidStorage> {
         self.update_archetypes(world);
         self.query_manual(world)
     }
@@ -340,10 +367,10 @@ impl<D: QueryData, F: QueryFilter> QueryState<D, F> {
     /// access to `self`.
     ///
     /// This will create read-only queries, see [`Self::query_mut`] for mutable queries.
-    pub fn query_manual<'w, 's, S: Storage>(
+    pub fn query_manual<'w, 's>(
         &'s self,
         world: &'w World,
-    ) -> Query<'w, 's, D::ReadOnly, F, S> {
+    ) -> Query<'w, 's, D::ReadOnly, F, InvalidStorage> {
         // SAFETY: We have read access to the entire world, and we call `as_readonly()` so the query only performs read access.
         unsafe {
             self.as_readonly()
@@ -352,10 +379,10 @@ impl<D: QueryData, F: QueryFilter> QueryState<D, F> {
     }
 
     /// Creates a [`Query`] from the given [`QueryState`] and [`World`].
-    pub fn query_mut<'w, 's, S: Storage>(
+    pub fn query_mut<'w, 's>(
         &'s mut self,
         world: &'w mut World,
-    ) -> Query<'w, 's, D, F, S> {
+    ) -> Query<'w, 's, D, F, InvalidStorage> {
         let last_run = world.last_change_tick();
         let this_run = world.change_tick();
         // SAFETY: We have exclusive access to the entire world.
@@ -368,10 +395,10 @@ impl<D: QueryData, F: QueryFilter> QueryState<D, F> {
     ///
     /// This does not check for mutable query correctness. To be safe, make sure mutable queries
     /// have unique access to the components they query.
-    pub unsafe fn query_unchecked<'w, 's, S: Storage>(
+    pub unsafe fn query_unchecked<'w, 's>(
         &'s mut self,
         world: UnsafeWorldCell<'w>,
-    ) -> Query<'w, 's, D, F, S> {
+    ) -> Query<'w, 's, D, F, InvalidStorage> {
         self.update_archetypes_unsafe_world_cell(world);
         // SAFETY: Caller ensures we have the required access
         unsafe { self.query_unchecked_manual(world) }
@@ -391,27 +418,14 @@ impl<D: QueryData, F: QueryFilter> QueryState<D, F> {
     ///
     /// This does not check for mutable query correctness. To be safe, make sure mutable queries
     /// have unique access to the components they query.
-    pub unsafe fn query_unchecked_manual<'w, 's, S: Storage>(
+    pub unsafe fn query_unchecked_manual<'w, 's>(
         &'s self,
         world: UnsafeWorldCell<'w>,
-    ) -> Query<'w, 's, D, F, S> {
-        let last_run = world.last_change_tick();
-        let this_run = world.change_tick();
-        // SAFETY: The caller ensured we have the correct access to the world.
-        unsafe { self.query_unchecked_manual_with_ticks(world, last_run, this_run) }
-    }
-
-    pub unsafe fn query_untyped_unchecked_manual<'w, 's>(
-        &'s self,
-        world: UnsafeWorldCell<'w>,
-        sub_storage: SubStorageId,
     ) -> Query<'w, 's, D, F, InvalidStorage> {
         let last_run = world.last_change_tick();
         let this_run = world.change_tick();
         // SAFETY: The caller ensured we have the correct access to the world.
-        unsafe {
-            self.query_untyped_unchecked_manual_with_ticks(world, last_run, this_run, sub_storage)
-        }
+        unsafe { self.query_unchecked_manual_with_ticks(world, last_run, this_run) }
     }
 
     /// Creates a [`Query`] from the given [`QueryState`] and [`World`].
@@ -420,29 +434,15 @@ impl<D: QueryData, F: QueryFilter> QueryState<D, F> {
     ///
     /// This does not check for mutable query correctness. To be safe, make sure mutable queries
     /// have unique access to the components they query.
-    pub unsafe fn query_unchecked_with_ticks<'w, 's, S: Storage>(
+    pub unsafe fn query_unchecked_with_ticks<'w, 's>(
         &'s mut self,
         world: UnsafeWorldCell<'w>,
         last_run: Tick,
         this_run: Tick,
-    ) -> Query<'w, 's, D, F, S> {
-        self.update_archetypes_unsafe_world_cell(world);
-        // SAFETY: The caller ensured we have the correct access to the world.
-        unsafe { self.query_unchecked_manual_with_ticks(world, last_run, this_run) }
-    }
-
-    pub unsafe fn query_untyped_unchecked_with_ticks<'w, 's, S: Storage>(
-        &'s mut self,
-        world: UnsafeWorldCell<'w>,
-        last_run: Tick,
-        this_run: Tick,
-        sub_storage: SubStorageId,
     ) -> Query<'w, 's, D, F, InvalidStorage> {
         self.update_archetypes_unsafe_world_cell(world);
         // SAFETY: The caller ensured we have the correct access to the world.
-        unsafe {
-            self.query_untyped_unchecked_manual_with_ticks(world, last_run, this_run, sub_storage)
-        }
+        unsafe { self.query_unchecked_manual_with_ticks(world, last_run, this_run) }
     }
 
     /// Creates a [`Query`] from the given [`QueryState`] and [`World`].
@@ -459,31 +459,17 @@ impl<D: QueryData, F: QueryFilter> QueryState<D, F> {
     ///
     /// This does not check for mutable query correctness. To be safe, make sure mutable queries
     /// have unique access to the components they query.
-    pub unsafe fn query_unchecked_manual_with_ticks<'w, 's, S: Storage>(
+    pub unsafe fn query_unchecked_manual_with_ticks<'w, 's>(
         &'s self,
         world: UnsafeWorldCell<'w>,
         last_run: Tick,
         this_run: Tick,
-    ) -> Query<'w, 's, D, F, S> {
-        self.validate_world(world.id());
-        // SAFETY:
-        // - The caller ensured we have the correct access to the world.
-        // - `validate_world` did not panic, so the world matches.
-        unsafe { Query::new(world, self, last_run, this_run) }
-    }
-
-    pub unsafe fn query_unchecked_manual_with_ticks<'w, 's, S: Storage>(
-        &'s self,
-        world: UnsafeWorldCell<'w>,
-        last_run: Tick,
-        this_run: Tick,
-        sub_storage: SubStorageId,
     ) -> Query<'w, 's, D, F, InvalidStorage> {
         self.validate_world(world.id());
         // SAFETY:
         // - The caller ensured we have the correct access to the world.
         // - `validate_world` did not panic, so the world matches.
-        unsafe { Query::new(world, self, last_run, this_run) }
+        unsafe { Query::new_untyped(world, self, last_run, this_run, self.sub_storage) }
     }
 
     /// Checks if the query is empty for the given [`World`], where the last change and current tick are given.
@@ -837,6 +823,7 @@ impl<D: QueryData, F: QueryFilter> QueryState<D, F> {
             component_access: self.component_access.clone(),
             matched_tables: self.matched_tables.clone(),
             matched_archetypes: self.matched_archetypes.clone(),
+            sub_storage: self.sub_storage,
             #[cfg(feature = "trace")]
             par_iter_span: tracing::info_span!(
                 "par_for_each",
@@ -959,6 +946,7 @@ impl<D: QueryData, F: QueryFilter> QueryState<D, F> {
             component_access: joined_component_access,
             matched_tables,
             matched_archetypes,
+            sub_storage: self.sub_storage,
             #[cfg(feature = "trace")]
             par_iter_span: tracing::info_span!(
                 "par_for_each",
@@ -1215,12 +1203,11 @@ impl<D: QueryData, F: QueryFilter> QueryState<D, F> {
         let mut fetch = D::init_fetch(world, &self.fetch_state, last_run, this_run);
         let mut filter = F::init_fetch(world, &self.filter_state, last_run, this_run);
 
-        let table = world
-            .storages()
+        let table = world.sub_storages()[self.sub_storage]
             .tables
             .get(location.table_id)
             .debug_checked_unwrap();
-        let sparse_sets = world.storages().sparse_sets;
+        let sparse_sets = &world.sub_storages()[self.sub_storage].sparse_sets;
 
         D::set_archetype(&mut fetch, &self.fetch_state, archetype, table, sparse_sets);
         F::set_archetype(
@@ -1755,6 +1742,7 @@ impl<D: QueryData, F: QueryFilter> QueryState<D, F> {
             last_run: world.last_change_tick(),
             this_run: world.read_change_tick(),
             batching_strategy: BatchingStrategy::new(),
+            sub_storage: self.sub_storage,
         }
     }
 
@@ -1813,6 +1801,7 @@ impl<D: QueryData, F: QueryFilter> QueryState<D, F> {
             last_run,
             this_run,
             batching_strategy: BatchingStrategy::new(),
+            sub_storage: self.sub_storage,
         }
     }
 
@@ -1851,7 +1840,7 @@ impl<D: QueryData, F: QueryFilter> QueryState<D, F> {
 
         bevy_tasks::ComputeTaskPool::get().scope(|scope| {
             // SAFETY: We only access table data that has been registered in `self.archetype_component_access`.
-            let tables = unsafe { &world.storages().tables };
+            let tables = &world.sub_storages()[self.sub_storage].tables;
             let archetypes = world.archetypes();
             let mut batch_queue = ArrayVec::new();
             let mut queue_entity_count = 0;

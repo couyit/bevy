@@ -744,7 +744,6 @@ impl BundleInfo {
                     // SAFETY: all component ids in `new_table_components` exist
                     table_id = unsafe {
                         sub_storages[sub_storage]
-                            .storages
                             .tables
                             .get_id_or_insert(&new_table_components, components)
                     };
@@ -870,7 +869,6 @@ impl BundleInfo {
                     // SAFETY: all components in next_table_components exist
                     unsafe {
                         sub_storages[sub_storage]
-                            .storages
                             .tables
                             .get_id_or_insert(&next_table_components, components)
                     }
@@ -974,7 +972,7 @@ impl<'w> BundleInserter<'w> {
             };
             let table_id = archetype.table_id();
             let sub_storage = archetype.sub_storage();
-            let table = &mut world.sub_storages[sub_storage].storages.tables[table_id];
+            let table = &mut world.sub_storages[sub_storage].tables[table_id];
             Self {
                 archetype_after_insert: archetype_after_insert.into(),
                 archetype: archetype.into(),
@@ -998,7 +996,7 @@ impl<'w> BundleInserter<'w> {
             let new_table_id = new_archetype.table_id();
             let sub_storage = archetype.sub_storage();
             if table_id == new_table_id {
-                let table = &mut world.sub_storages[sub_storage].storages.tables[table_id];
+                let table = &mut world.sub_storages[sub_storage].tables[table_id];
                 Self {
                     archetype_after_insert: archetype_after_insert.into(),
                     archetype: archetype.into(),
@@ -1012,7 +1010,6 @@ impl<'w> BundleInserter<'w> {
                 }
             } else {
                 let (table, new_table) = world.sub_storages[sub_storage]
-                    .storages
                     .tables
                     .get_2_mut(table_id, new_table_id);
                 Self {
@@ -1077,7 +1074,7 @@ impl<'w> BundleInserter<'w> {
         {
             let world = self.world.world_mut();
             let components = &world.components;
-            let sub_storage = &mut world.sub_storages[archetype.sub_storage()].storages;
+            let sub_storage = &mut world.sub_storages[archetype.sub_storage()];
 
             if !sub_storage.prepared.contains(&bundle_info.id()) {
                 sub_storage.prepare_bundle(components, bundle_info);
@@ -1095,9 +1092,7 @@ impl<'w> BundleInserter<'w> {
                 // SAFETY: Mutable references do not alias and will be dropped after this block
                 let sparse_sets = {
                     let world = self.world.world_mut();
-                    &mut world.sub_storages[archetype.sub_storage()]
-                        .storages
-                        .sparse_sets
+                    &mut world.sub_storages[archetype.sub_storage()].sparse_sets
                 };
 
                 bundle_info.write_components(
@@ -1123,9 +1118,7 @@ impl<'w> BundleInserter<'w> {
                 let (sparse_sets, entities) = {
                     let world = self.world.world_mut();
                     (
-                        &mut world.sub_storages[archetype.sub_storage()]
-                            .storages
-                            .sparse_sets,
+                        &mut world.sub_storages[archetype.sub_storage()].sparse_sets,
                         &mut world.entities,
                     )
                 };
@@ -1177,9 +1170,7 @@ impl<'w> BundleInserter<'w> {
                     let archetype_ptr: *mut Archetype = world.archetypes.archetypes.as_mut_ptr();
                     (
                         archetype_ptr,
-                        &mut world.sub_storages[archetype.sub_storage()]
-                            .storages
-                            .sparse_sets,
+                        &mut world.sub_storages[archetype.sub_storage()].sparse_sets,
                         &mut world.entities,
                     )
                 };
@@ -1367,7 +1358,7 @@ impl<'w> BundleSpawner<'w> {
         sub_storage: SubStorageId,
     ) -> Self {
         let bundle_info = world.bundles.get_unchecked(bundle_id);
-        let empty = world.sub_storages[sub_storage].storages.empty().clone();
+        let empty = world.sub_storages[sub_storage].empty();
         let new_archetype_id = bundle_info.insert_bundle_into_archetype(
             &mut world.archetypes,
             &mut world.sub_storages,
@@ -1376,7 +1367,7 @@ impl<'w> BundleSpawner<'w> {
             empty,
         );
         let archetype = &mut world.archetypes[new_archetype_id];
-        let table = &mut world.sub_storages[sub_storage].storages.tables[archetype.table_id()];
+        let table = &mut world.sub_storages[sub_storage].tables[archetype.table_id()];
         Self {
             bundle_info: bundle_info.into(),
             table: table.into(),
@@ -1412,7 +1403,7 @@ impl<'w> BundleSpawner<'w> {
         {
             let world = self.world.world_mut();
             let components = &world.components;
-            let sub_storage = &mut world.sub_storages[archetype.sub_storage()].storages;
+            let sub_storage = &mut world.sub_storages[archetype.sub_storage()];
 
             if !sub_storage.prepared.contains(&bundle_info.id()) {
                 sub_storage.prepare_bundle(components, bundle_info);
@@ -1427,7 +1418,7 @@ impl<'w> BundleSpawner<'w> {
             let (sparse_sets, entities) = {
                 let world = self.world.world_mut();
                 (
-                    &mut world.sub_storages[sub_storage].storages.sparse_sets,
+                    &mut world.sub_storages[sub_storage].sparse_sets,
                     &mut world.entities,
                 )
             };

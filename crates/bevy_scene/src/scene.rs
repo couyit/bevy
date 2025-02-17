@@ -69,7 +69,7 @@ impl Scene {
             .get_resource_id(TypeId::of::<DefaultQueryFilters>());
 
         // Resources archetype
-        for (component_id, resource_data) in self.world.storages().resources.iter() {
+        for (component_id, resource_data) in self.world.resources().iter() {
             if Some(component_id) == self_dqf_id {
                 continue;
             }

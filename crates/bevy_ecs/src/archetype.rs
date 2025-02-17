@@ -25,7 +25,8 @@ use crate::{
     entity::{Entity, EntityLocation},
     observer::Observers,
     storage::{
-        ImmutableSparseSet, SparseArray, SparseSet, SparseSetIndex, SubStorageId, TableId, TableRow,
+        ImmutableSparseSet, SparseArray, SparseSet, SparseSetIndex, SubStorageId, SubStorages,
+        TableId, TableRow,
     },
 };
 use alloc::{boxed::Box, vec::Vec};
@@ -81,6 +82,8 @@ impl ArchetypeRow {
 pub struct ArchetypeId(u32);
 
 impl ArchetypeId {
+    /// The ID for the [`Archetype`] without any components.
+    pub const MAIN_EMPTY: ArchetypeId = ArchetypeId(0);
     /// # Safety:
     ///
     /// This must always have an all-1s bit pattern to ensure soundness in fast entity id space allocation.
@@ -737,6 +740,14 @@ impl Archetype {
 #[derive(Debug, Copy, Clone, PartialEq)]
 pub struct ArchetypeGeneration(pub(crate) ArchetypeId);
 
+impl ArchetypeGeneration {
+    /// The first archetype.
+    #[inline]
+    pub const fn initial() -> Self {
+        ArchetypeGeneration(ArchetypeId::MAIN_EMPTY)
+    }
+}
+
 #[derive(Hash, PartialEq, Eq)]
 struct ArchetypeComponents {
     table_components: Box<[ComponentId]>,
@@ -794,7 +805,6 @@ pub type ComponentIndex = HashMap<ComponentId, HashMap<ArchetypeId, ArchetypeRec
 ///
 /// [`World`]: crate::world::World
 /// [module level documentation]: crate::archetype
-#[derive(Default)]
 pub struct Archetypes {
     pub(crate) archetypes: Vec<Archetype>,
     archetype_component_count: usize,
@@ -816,6 +826,27 @@ pub struct ArchetypeRecord {
 }
 
 impl Archetypes {
+    pub(crate) fn new() -> Self {
+        let mut archetypes = Archetypes {
+            archetypes: Vec::new(),
+            by_components: Default::default(),
+            by_component: Default::default(),
+            archetype_component_count: 0,
+        };
+        // SAFETY: Empty archetype has no components
+        unsafe {
+            archetypes.get_id_or_insert(
+                &Components::default(),
+                &Observers::default(),
+                TableId::empty(),
+                SubStorages::MAIN_STORAGE,
+                Vec::new(),
+                Vec::new(),
+            );
+        }
+        archetypes
+    }
+
     /// Returns the "generation", a handle to the current highest archetype ID.
     ///
     /// This can be used with the `Index` [`Archetypes`] implementation to

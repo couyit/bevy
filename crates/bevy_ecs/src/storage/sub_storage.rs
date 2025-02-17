@@ -1,4 +1,7 @@
-use core::ops::{Index, IndexMut};
+use core::{
+    any::TypeId,
+    ops::{Index, IndexMut},
+};
 use std::vec::Vec;
 
 use bevy_platform_support::collections::HashSet;
@@ -8,9 +11,11 @@ use crate::{
     archetype::ArchetypeId,
     bundle::{BundleId, BundleInfo},
     component::{ComponentInfo, Components, StorageType},
+    observer::Observers,
+    world::World,
 };
 
-use super::{SparseSets, Tables};
+use super::{SparseSets, TableId, Tables};
 
 #[derive(Default)]
 pub struct SubStorages {
@@ -41,16 +46,68 @@ impl Storage for InvalidStorage {}
 impl SubStorages {
     pub const MAIN_STORAGE: SubStorageId = SubStorageId(0);
 
-    pub fn new() -> Self {
-        Self {
-            sub_storages: vec![SubStorageInfo {
-                id: SubWorldId(0),
-                archetypes: Vec::new(),
-                storages: Storages::default(),
-            }],
-            indices: vec![(TypeId::of::<MainStorage>(), SubWorldId(0))]
-                .into_iter()
-                .collect(),
+    pub(crate) fn new() -> Self {
+        let mut sub_storages = Self {
+            sub_storages: Vec::with_capacity(1),
+            indices: TypeIdMap::default(),
+        };
+
+        sub_storages.sub_storages.push(SubStorage {
+            id: SubStorageId(0),
+            archetypes: Vec::new(),
+            sparse_sets: Default::default(),
+            tables: Default::default(),
+            empty: ArchetypeId::MAIN_EMPTY,
+            prepared: Default::default(),
+        });
+
+        sub_storages
+            .indices
+            .insert(TypeId::of::<MainStorage>(), SubStorageId(0));
+
+        sub_storages
+    }
+
+    pub fn create_sub_storage<'w, T: Storage>(&mut self, world: &'w mut World) -> SubStorageId {
+        let sub_storage = SubStorageId(self.sub_storages.len() as u32);
+
+        let empty = unsafe {
+            world.archetypes.get_id_or_insert(
+                &Components::default(),
+                &Observers::default(),
+                TableId::empty(),
+                sub_storage,
+                Vec::new(),
+                Vec::new(),
+            )
+        };
+
+        self.sub_storages.push(SubStorage {
+            id: sub_storage,
+            archetypes: Vec::new(),
+            sparse_sets: Default::default(),
+            tables: Default::default(),
+            empty,
+            prepared: Default::default(),
+        });
+
+        self.indices.insert(TypeId::of::<T>(), sub_storage);
+
+        sub_storage
+    }
+
+    #[inline]
+    pub(crate) fn get_2_mut(
+        &mut self,
+        a: SubStorageId,
+        b: SubStorageId,
+    ) -> (&mut SubStorage, &mut SubStorage) {
+        if a.as_usize() > b.as_usize() {
+            let (b_slice, a_slice) = self.sub_storages.split_at_mut(a.as_usize());
+            (&mut a_slice[0], &mut b_slice[b.as_usize()])
+        } else {
+            let (a_slice, b_slice) = self.sub_storages.split_at_mut(b.as_usize());
+            (&mut a_slice[a.as_usize()], &mut b_slice[0])
         }
     }
 }

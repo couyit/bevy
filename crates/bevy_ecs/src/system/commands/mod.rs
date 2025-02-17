@@ -27,6 +27,7 @@ use crate::{
     resource::Resource,
     result::Error,
     schedule::ScheduleLabel,
+    storage::{SubStorageId, SubStorages},
     system::{
         command::HandleError, entity_command::CommandWithEntity, input::SystemInput, Deferred,
         IntoObserverSystem, IntoSystem, RegisteredSystem, SystemId,
@@ -683,10 +684,22 @@ impl<'w, 's> Commands<'w, 's> {
         I: IntoIterator<Item = (Entity, B)> + Send + Sync + 'static,
         B: Bundle,
     {
+        self.insert_or_spawn_batch_in_sub_storage(bundles_iter, SubStorages::MAIN_STORAGE);
+    }
+
+    pub fn insert_or_spawn_batch_in_sub_storage<I, B>(
+        &mut self,
+        bundles_iter: I,
+        sub_storage: SubStorageId,
+    ) where
+        I: IntoIterator<Item = (Entity, B)> + Send + Sync + 'static,
+        B: Bundle,
+    {
         let caller = Location::caller();
         self.queue(move |world: &mut World| {
             if let Err(invalid_entities) = world.insert_or_spawn_batch_with_caller(
                 bundles_iter,
+                sub_storage,
                 #[cfg(feature = "track_location")]
                 caller,
             ) {
