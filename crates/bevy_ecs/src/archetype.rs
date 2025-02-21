@@ -25,7 +25,7 @@ use crate::{
     entity::{Entity, EntityLocation},
     observer::Observers,
     storage::{
-        ImmutableSparseSet, SparseArray, SparseSet, SparseSetIndex, SubStorageId, SubStorages,
+        ImmutableSparseSet, SparseArray, SparseSet, SparseSetIndex, SubWorldId, SubWorlds,
         TableId, TableRow,
     },
 };
@@ -83,7 +83,7 @@ pub struct ArchetypeId(u32);
 
 impl ArchetypeId {
     /// The ID for the [`Archetype`] without any components.
-    pub const MAIN_EMPTY: ArchetypeId = ArchetypeId(0);
+    pub const EMPTY: ArchetypeId = ArchetypeId(0);
     /// # Safety:
     ///
     /// This must always have an all-1s bit pattern to ensure soundness in fast entity id space allocation.
@@ -375,7 +375,7 @@ bitflags::bitflags! {
 pub struct Archetype {
     id: ArchetypeId,
     table_id: TableId,
-    sub_storage: SubStorageId,
+    sub_storage: SubWorldId,
     edges: Edges,
     entities: Vec<ArchetypeEntity>,
     components: ImmutableSparseSet<ComponentId, ArchetypeComponentInfo>,
@@ -390,7 +390,7 @@ impl Archetype {
         observers: &Observers,
         id: ArchetypeId,
         table_id: TableId,
-        sub_storage: SubStorageId,
+        sub_storage: SubWorldId,
         table_components: impl Iterator<Item = (ComponentId, ArchetypeComponentId)>,
         sparse_set_components: impl Iterator<Item = (ComponentId, ArchetypeComponentId)>,
     ) -> Self {
@@ -468,7 +468,7 @@ impl Archetype {
     }
 
     #[inline]
-    pub fn sub_storage(&self) -> SubStorageId {
+    pub fn sub_storage(&self) -> SubWorldId {
         self.sub_storage
     }
 
@@ -744,7 +744,7 @@ impl ArchetypeGeneration {
     /// The first archetype.
     #[inline]
     pub const fn initial() -> Self {
-        ArchetypeGeneration(ArchetypeId::MAIN_EMPTY)
+        ArchetypeGeneration(ArchetypeId::EMPTY)
     }
 }
 
@@ -752,7 +752,7 @@ impl ArchetypeGeneration {
 struct ArchetypeComponents {
     table_components: Box<[ComponentId]>,
     sparse_set_components: Box<[ComponentId]>,
-    sub_storage: SubStorageId,
+    sub_storage: SubWorldId,
 }
 
 /// An opaque unique joint ID for a [`Component`] in an [`Archetype`] within a [`World`].
@@ -839,7 +839,7 @@ impl Archetypes {
                 &Components::default(),
                 &Observers::default(),
                 TableId::empty(),
-                SubStorages::MAIN_STORAGE,
+                SubWorlds::MAIN_STORAGE,
                 Vec::new(),
                 Vec::new(),
             );
@@ -926,7 +926,7 @@ impl Archetypes {
         components: &Components,
         observers: &Observers,
         table_id: TableId,
-        sub_storage: SubStorageId,
+        sub_storage: SubWorldId,
         table_components: Vec<ComponentId>,
         sparse_set_components: Vec<ComponentId>,
     ) -> ArchetypeId {

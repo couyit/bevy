@@ -53,6 +53,7 @@ pub mod reflect;
 pub mod relationship;
 pub mod removal_detection;
 pub mod resource;
+pub mod resource_components;
 pub mod result;
 pub mod schedule;
 pub mod storage;

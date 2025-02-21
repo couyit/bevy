@@ -17,7 +17,7 @@ use crate::{
     observer::Observers,
     prelude::World,
     query::DebugCheckedUnwrap,
-    storage::{SparseSetIndex, SparseSets, SubStorageId, SubStorages, Table, TableRow},
+    storage::{SparseSetIndex, SparseSets, SubWorldId, SubWorlds, Table, TableRow},
     world::{unsafe_world_cell::UnsafeWorldCell, ON_ADD, ON_INSERT, ON_REPLACE},
 };
 use alloc::{boxed::Box, vec, vec::Vec};
@@ -661,7 +661,7 @@ impl BundleInfo {
     pub(crate) unsafe fn insert_bundle_into_archetype(
         &self,
         archetypes: &mut Archetypes,
-        sub_storages: &mut SubStorages,
+        sub_storages: &mut SubWorlds,
         components: &Components,
         observers: &Observers,
         archetype_id: ArchetypeId,
@@ -802,7 +802,7 @@ impl BundleInfo {
     pub(crate) unsafe fn remove_bundle_from_archetype(
         &self,
         archetypes: &mut Archetypes,
-        sub_storages: &mut SubStorages,
+        sub_storages: &mut SubWorlds,
         components: &Components,
         observers: &Observers,
         archetype_id: ArchetypeId,
@@ -1332,14 +1332,14 @@ pub(crate) struct BundleSpawner<'w> {
 impl<'w> BundleSpawner<'w> {
     #[inline]
     pub fn new<T: Bundle>(world: &'w mut World, change_tick: Tick) -> Self {
-        Self::new_in_sub_storage::<T>(world, change_tick, SubStorages::MAIN_STORAGE)
+        Self::new_in_sub_storage::<T>(world, change_tick, SubWorlds::MAIN_STORAGE)
     }
 
     #[inline]
     pub fn new_in_sub_storage<T: Bundle>(
         world: &'w mut World,
         change_tick: Tick,
-        sub_storage: SubStorageId,
+        sub_storage: SubWorldId,
     ) -> Self {
         let bundle_id = world.bundles.register_info::<T>(&mut world.components);
         // SAFETY: we initialized this bundle_id in `init_info`
@@ -1355,7 +1355,7 @@ impl<'w> BundleSpawner<'w> {
         world: &'w mut World,
         bundle_id: BundleId,
         change_tick: Tick,
-        sub_storage: SubStorageId,
+        sub_storage: SubWorldId,
     ) -> Self {
         let bundle_info = world.bundles.get_unchecked(bundle_id);
         let empty = world.sub_storages[sub_storage].empty();

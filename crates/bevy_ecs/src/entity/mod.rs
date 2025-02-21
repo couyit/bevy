@@ -79,7 +79,7 @@ use crate::{
         Identifier,
     },
     query::DebugCheckedUnwrap,
-    storage::{SparseSetIndex, SubStorageId, SubStorages, TableId, TableRow},
+    storage::{SparseSetIndex, SubWorldId, SubWorlds, TableId, TableRow},
 };
 use alloc::vec::Vec;
 use bevy_platform_support::sync::atomic::Ordering;
@@ -612,7 +612,7 @@ impl Entities {
     pub fn reserve_entities(
         &self,
         count: u32,
-        sub_storage: SubStorageId,
+        sub_storage: SubWorldId,
     ) -> ReserveEntitiesIterator {
         // Use one atomic subtract to grab a range of new IDs. The range might be
         // entirely nonnegative, meaning all IDs come from the freelist, or entirely
@@ -664,10 +664,10 @@ impl Entities {
     ///
     /// Equivalent to `self.reserve_entities(1).next().unwrap()`, but more efficient.
     pub fn reserve_entity(&self) -> Entity {
-        self.reserve_entity_in_sub_storage(SubStorages::MAIN_STORAGE)
+        self.reserve_entity_in_sub_storage(SubWorlds::MAIN_STORAGE)
     }
 
-    pub fn reserve_entity_in_sub_storage(&self, sub_storage: SubStorageId) -> Entity {
+    pub fn reserve_entity_in_sub_storage(&self, sub_storage: SubWorldId) -> Entity {
         let n = self.free_cursor.fetch_sub(1, Ordering::Relaxed);
         if n > 0 {
             // Allocate from the freelist.
@@ -935,7 +935,7 @@ impl Entities {
     /// to be initialized with the invalid archetype.
     pub unsafe fn flush(
         &mut self,
-        mut init: impl FnMut(Entity, &mut EntityLocation, SubStorageId),
+        mut init: impl FnMut(Entity, &mut EntityLocation, SubWorldId),
     ) {
         let free_cursor = self.free_cursor.get_mut();
         let current_free_cursor = *free_cursor;
@@ -947,7 +947,7 @@ impl Entities {
                 .enumerate()
                 .flat_map(|(sub_storage, count)| {
                     (0..count.load(Ordering::Relaxed))
-                        .map(move |_| SubStorageId(sub_storage as u32))
+                        .map(move |_| SubWorldId(sub_storage as u32))
                 });
 
         let new_free_cursor = if current_free_cursor >= 0 {
@@ -1123,7 +1123,7 @@ pub struct EntityLocation {
     /// [`Archetype`]: crate::archetype::Archetype
     pub archetype_row: ArchetypeRow,
 
-    pub sub_storage: SubStorageId,
+    pub sub_storage: SubWorldId,
 
     /// The ID of the [`Table`] the [`Entity`] belongs to.
     ///
@@ -1141,7 +1141,7 @@ impl EntityLocation {
     pub(crate) const INVALID: EntityLocation = EntityLocation {
         archetype_id: ArchetypeId::INVALID,
         archetype_row: ArchetypeRow::INVALID,
-        sub_storage: SubStorageId::INVALID,
+        sub_storage: SubWorldId::INVALID,
         table_id: TableId::INVALID,
         table_row: TableRow::INVALID,
     };

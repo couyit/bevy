@@ -12,7 +12,7 @@ use crate::{
     query::{Access, DebugCheckedUnwrap, ReadOnlyQueryData},
     removal_detection::RemovedComponentEvents,
     resource::Resource,
-    storage::SubStorages,
+    storage::SubWorlds,
     system::IntoObserverSystem,
     world::{
         error::EntityComponentError, unsafe_world_cell::UnsafeEntityCell, DeferredWorld, Mut, Ref,
@@ -1821,7 +1821,7 @@ impl<'w> EntityWorldMut<'w> {
         old_location: EntityLocation,
         entities: &mut Entities,
         archetypes: &mut Archetypes,
-        sub_storages: &mut SubStorages,
+        sub_storages: &mut SubWorlds,
         new_archetype_id: ArchetypeId,
     ) {
         let old_archetype = &mut archetypes[old_archetype_id];
@@ -4145,7 +4145,7 @@ unsafe fn insert_dynamic_bundle<
 /// Panics if the entity did not have the component.
 #[inline]
 pub(crate) unsafe fn take_component<'a>(
-    sub_storages: &'a mut SubStorages,
+    sub_storages: &'a mut SubWorlds,
     components: &Components,
     removed_components: &mut RemovedComponentEvents,
     component_id: ComponentId,

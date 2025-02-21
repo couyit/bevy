@@ -10,7 +10,7 @@ use crate::{
         QuerySingleError, QueryState, ReadOnlyQueryData,
     },
     resource::Resource,
-    storage::{ResourceData, Storage},
+    storage::{ResourceData, SubWorld, SubWorldStorage},
     system::{Query, Single, SystemMeta},
     world::{
         unsafe_world_cell::UnsafeWorldCell, DeferredWorld, FilteredResources, FilteredResourcesMut,
@@ -299,14 +299,14 @@ pub unsafe trait ReadOnlySystemParam: SystemParam {}
 pub type SystemParamItem<'w, 's, P> = <P as SystemParam>::Item<'w, 's>;
 
 // SAFETY: QueryState is constrained to read-only fetches, so it only reads World.
-unsafe impl<'w, 's, D: ReadOnlyQueryData + 'static, F: QueryFilter + 'static, S: Storage>
+unsafe impl<'w, 's, D: ReadOnlyQueryData + 'static, F: QueryFilter + 'static, S: SubWorld>
     ReadOnlySystemParam for Query<'w, 's, D, F, S>
 {
 }
 
 // SAFETY: Relevant query ComponentId and ArchetypeComponentId access is applied to SystemMeta. If
 // this Query conflicts with any prior access, a panic will occur.
-unsafe impl<D: QueryData + 'static, F: QueryFilter + 'static, S: Storage> SystemParam
+unsafe impl<D: QueryData + 'static, F: QueryFilter + 'static, S: SubWorld> SystemParam
     for Query<'_, '_, D, F, S>
 {
     type State = QueryState<D, F>;
@@ -396,7 +396,7 @@ fn assert_component_access_compatibility(
 
 // SAFETY: Relevant query ComponentId and ArchetypeComponentId access is applied to SystemMeta. If
 // this Query conflicts with any prior access, a panic will occur.
-unsafe impl<'a, D: QueryData + 'static, F: QueryFilter + 'static, S: Storage> SystemParam
+unsafe impl<'a, D: QueryData + 'static, F: QueryFilter + 'static, S: SubWorld> SystemParam
     for Single<'a, D, F, S>
 {
     type State = QueryState<D, F>;
@@ -462,7 +462,7 @@ unsafe impl<'a, D: QueryData + 'static, F: QueryFilter + 'static, S: Storage> Sy
 
 // SAFETY: Relevant query ComponentId and ArchetypeComponentId access is applied to SystemMeta. If
 // this Query conflicts with any prior access, a panic will occur.
-unsafe impl<'a, D: QueryData + 'static, F: QueryFilter + 'static, S: Storage> SystemParam
+unsafe impl<'a, D: QueryData + 'static, F: QueryFilter + 'static, S: SubWorld> SystemParam
     for Option<Single<'a, D, F, S>>
 {
     type State = QueryState<D, F>;
@@ -542,7 +542,7 @@ unsafe impl<'a, D: ReadOnlyQueryData + 'static, F: QueryFilter + 'static> ReadOn
 
 // SAFETY: Relevant query ComponentId and ArchetypeComponentId access is applied to SystemMeta. If
 // this Query conflicts with any prior access, a panic will occur.
-unsafe impl<D: QueryData + 'static, F: QueryFilter + 'static, S: Storage> SystemParam
+unsafe impl<D: QueryData + 'static, F: QueryFilter + 'static, S: SubWorld> SystemParam
     for Populated<'_, '_, D, F, S>
 {
     type State = QueryState<D, F>;

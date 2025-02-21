@@ -2,6 +2,7 @@ use crate::{
     archetype::ArchetypeComponentId,
     change_detection::{MaybeLocation, MaybeUnsafeCellLocation, MutUntyped, TicksMut},
     component::{ComponentId, ComponentTicks, Components, Tick, TickCells},
+    resource_components::{ResourceComponents, ResourceId},
     storage::{blob_vec::BlobVec, SparseSet},
 };
 use alloc::string::String;
@@ -312,7 +313,7 @@ impl<const SEND: bool> ResourceData<SEND> {
 /// [`World`]: crate::world::World
 #[derive(Default)]
 pub struct Resources<const SEND: bool> {
-    resources: SparseSet<ComponentId, ResourceData<SEND>>,
+    resources: SparseSet<ResourceId, ResourceData<SEND>>,
 }
 
 impl<const SEND: bool> Resources<SEND> {
@@ -325,7 +326,7 @@ impl<const SEND: bool> Resources<SEND> {
     }
 
     /// Iterate over all resources that have been initialized, i.e. given a [`ComponentId`]
-    pub fn iter(&self) -> impl Iterator<Item = (ComponentId, &ResourceData<SEND>)> {
+    pub fn iter(&self) -> impl Iterator<Item = (ResourceId, &ResourceData<SEND>)> {
         self.resources.iter().map(|(id, data)| (*id, data))
     }
 
@@ -340,8 +341,8 @@ impl<const SEND: bool> Resources<SEND> {
 
     /// Gets read-only access to a resource, if it exists.
     #[inline]
-    pub fn get(&self, component_id: ComponentId) -> Option<&ResourceData<SEND>> {
-        self.resources.get(component_id)
+    pub fn get(&self, resource_id: ResourceId) -> Option<&ResourceData<SEND>> {
+        self.resources.get(resource_id)
     }
 
     /// Clears all resources.
@@ -352,8 +353,8 @@ impl<const SEND: bool> Resources<SEND> {
 
     /// Gets mutable access to a resource, if it exists.
     #[inline]
-    pub(crate) fn get_mut(&mut self, component_id: ComponentId) -> Option<&mut ResourceData<SEND>> {
-        self.resources.get_mut(component_id)
+    pub(crate) fn get_mut(&mut self, resource_id: ResourceId) -> Option<&mut ResourceData<SEND>> {
+        self.resources.get_mut(resource_id)
     }
 
     /// Fetches or initializes a new resource and returns back its underlying column.
@@ -363,12 +364,12 @@ impl<const SEND: bool> Resources<SEND> {
     /// If `SEND` is true, this will panic if `component_id`'s `ComponentInfo` is not registered as being `Send` + `Sync`.
     pub(crate) fn initialize_with(
         &mut self,
-        component_id: ComponentId,
-        components: &Components,
+        resource_id: ResourceId,
+        components: &ResourceComponents,
         f: impl FnOnce() -> ArchetypeComponentId,
     ) -> &mut ResourceData<SEND> {
-        self.resources.get_or_insert_with(component_id, || {
-            let component_info = components.get_info(component_id).unwrap();
+        self.resources.get_or_insert_with(resource_id, || {
+            let component_info = components.get_info(resource_id).unwrap();
             if SEND {
                 assert!(
                     component_info.is_send_and_sync(),

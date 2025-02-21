@@ -5,7 +5,7 @@ use crate::{
     component::Tick,
     entity::{Entities, Entity, EntityBorrow, EntitySet, EntitySetIterator},
     query::{ArchetypeFilter, DebugCheckedUnwrap, QueryState, StorageId},
-    storage::{SparseSets, SubStorageId, SubStorages, Table, TableRow, Tables},
+    storage::{SparseSets, SubWorldId, SubWorlds, Table, TableRow, Tables},
     world::{
         unsafe_world_cell::UnsafeWorldCell, EntityMut, EntityMutExcept, EntityRef, EntityRefExcept,
         FilteredEntityMut, FilteredEntityRef,
@@ -31,7 +31,7 @@ pub struct QueryIter<'w, 's, D: QueryData, F: QueryFilter> {
     archetypes: &'w Archetypes,
     query_state: &'s QueryState<D, F>,
     cursor: QueryIterationCursor<'w, 's, D, F>,
-    sub_storage: SubStorageId,
+    sub_storage: SubWorldId,
 }
 
 impl<'w, 's, D: QueryData, F: QueryFilter> QueryIter<'w, 's, D, F> {
@@ -989,7 +989,7 @@ where
 {
     entity_iter: I,
     entities: &'w Entities,
-    storages: &'w SubStorages,
+    storages: &'w SubWorlds,
     archetypes: &'w Archetypes,
     fetch: D::Fetch<'w>,
     query_state: &'s QueryState<D, F>,
@@ -1137,7 +1137,7 @@ pub struct QueryManyIter<'w, 's, D: QueryData, F: QueryFilter, I: Iterator<Item:
     world: UnsafeWorldCell<'w>,
     entity_iter: I,
     entities: &'w Entities,
-    storages: &'w SubStorages,
+    storages: &'w SubWorlds,
     archetypes: &'w Archetypes,
     fetch: D::Fetch<'w>,
     filter: F::Fetch<'w>,
@@ -1185,7 +1185,7 @@ impl<'w, 's, D: QueryData, F: QueryFilter, I: Iterator<Item: EntityBorrow>>
     unsafe fn fetch_next_aliased_unchecked(
         entity_iter: impl Iterator<Item: EntityBorrow>,
         entities: &'w Entities,
-        storages: &'w SubStorages,
+        storages: &'w SubWorlds,
         archetypes: &'w Archetypes,
         fetch: &mut D::Fetch<'w>,
         filter: &mut F::Fetch<'w>,
@@ -1943,7 +1943,7 @@ impl<'w, 's, D: QueryData, F: QueryFilter, I: EntitySetIterator> Debug
 pub struct QuerySortedManyIter<'w, 's, D: QueryData, F: QueryFilter, I: Iterator<Item = Entity>> {
     entity_iter: I,
     entities: &'w Entities,
-    storages: &'w SubStorages,
+    storages: &'w SubWorlds,
     archetypes: &'w Archetypes,
     fetch: D::Fetch<'w>,
     query_state: &'s QueryState<D, F>,

@@ -9,7 +9,9 @@ use crate::{
         Access, DebugCheckedUnwrap, FilteredAccess, QueryCombinationIter, QueryIter, QueryParIter,
         WorldQuery,
     },
-    storage::{InvalidStorage, SparseSetIndex, Storage, SubStorageId, SubStorages, TableId},
+    storage::{
+        InvalidSubWorld, SparseSetIndex, SubWorld, SubWorldId, SubWorldStorage, SubWorlds, TableId,
+    },
     system::Query,
     world::{unsafe_world_cell::UnsafeWorldCell, World, WorldId},
 };
@@ -81,7 +83,7 @@ pub struct QueryState<D: QueryData, F: QueryFilter = ()> {
     pub(super) is_dense: bool,
     pub(crate) fetch_state: D::State,
     pub(crate) filter_state: F::State,
-    pub(crate) sub_storage: SubStorageId,
+    pub(crate) sub_storage: SubWorldId,
     #[cfg(feature = "trace")]
     par_iter_span: Span,
 }
@@ -159,10 +161,10 @@ impl<D: QueryData, F: QueryFilter> QueryState<D, F> {
 
     /// Creates a new [`QueryState`] from a given [`World`] and inherits the result of `world.id()`.
     pub fn new(world: &mut World) -> Self {
-        Self::new_in_sub_storage(world, SubStorages::MAIN_STORAGE)
+        Self::new_in_sub_storage(world, SubWorlds::MAIN_STORAGE)
     }
 
-    pub fn new_in_sub_storage(world: &mut World, sub_storage: SubStorageId) -> Self {
+    pub fn new_in_sub_storage(world: &mut World, sub_storage: SubWorldId) -> Self {
         let mut state = Self::new_uninitialized(world, sub_storage);
         state.update_archetypes(world);
         state
@@ -173,10 +175,10 @@ impl<D: QueryData, F: QueryFilter> QueryState<D, F> {
     /// This function may fail if, for example,
     /// the components that make up this query have not been registered into the world.
     pub fn try_new(world: &World) -> Option<Self> {
-        Self::try_new_in_sub_storage(world, SubStorages::MAIN_STORAGE)
+        Self::try_new_in_sub_storage(world, SubWorlds::MAIN_STORAGE)
     }
 
-    pub fn try_new_in_sub_storage(world: &World, sub_storage: SubStorageId) -> Option<Self> {
+    pub fn try_new_in_sub_storage(world: &World, sub_storage: SubWorldId) -> Option<Self> {
         let mut state = Self::try_new_uninitialized(world, sub_storage)?;
         state.update_archetypes(world);
         Some(state)
@@ -186,7 +188,7 @@ impl<D: QueryData, F: QueryFilter> QueryState<D, F> {
     pub(crate) fn new_with_access(
         world: &mut World,
         access: &mut Access<ArchetypeComponentId>,
-        sub_storage: SubStorageId,
+        sub_storage: SubWorldId,
     ) -> Self {
         let mut state = Self::new_uninitialized(world, sub_storage);
         for archetype in world.archetypes.iter() {
@@ -221,7 +223,7 @@ impl<D: QueryData, F: QueryFilter> QueryState<D, F> {
     ///
     /// `new_archetype` and its variants must be called on all of the World's archetypes before the
     /// state can return valid query results.
-    fn new_uninitialized(world: &mut World, sub_storage: SubStorageId) -> Self {
+    fn new_uninitialized(world: &mut World, sub_storage: SubWorldId) -> Self {
         let fetch_state = D::init_state(world);
         let filter_state = F::init_state(world);
         Self::from_states_uninitialized(world, fetch_state, filter_state, sub_storage)
@@ -231,7 +233,7 @@ impl<D: QueryData, F: QueryFilter> QueryState<D, F> {
     ///
     /// `new_archetype` and its variants must be called on all of the World's archetypes before the
     /// state can return valid query results.
-    fn try_new_uninitialized(world: &World, sub_storage: SubStorageId) -> Option<Self> {
+    fn try_new_uninitialized(world: &World, sub_storage: SubWorldId) -> Option<Self> {
         let fetch_state = D::get_state(world.components())?;
         let filter_state = F::get_state(world.components())?;
         Some(Self::from_states_uninitialized(
@@ -250,7 +252,7 @@ impl<D: QueryData, F: QueryFilter> QueryState<D, F> {
         world: &World,
         fetch_state: <D as WorldQuery>::State,
         filter_state: <F as WorldQuery>::State,
-        sub_storage: SubStorageId,
+        sub_storage: SubWorldId,
     ) -> Self {
         let mut component_access = FilteredAccess::default();
         D::update_component_access(&fetch_state, &mut component_access);
@@ -297,7 +299,7 @@ impl<D: QueryData, F: QueryFilter> QueryState<D, F> {
     }
 
     /// Creates a new [`QueryState`] from a given [`QueryBuilder`] and inherits its [`FilteredAccess`].
-    pub fn from_builder<S: Storage>(builder: &mut QueryBuilder<D, F, S>) -> Self {
+    pub fn from_builder<S: SubWorld>(builder: &mut QueryBuilder<D, F, S>) -> Self {
         let mut fetch_state = D::init_state(builder.world_mut());
         let filter_state = F::init_state(builder.world_mut());
         D::set_access(&mut fetch_state, builder.access());
@@ -351,7 +353,7 @@ impl<D: QueryData, F: QueryFilter> QueryState<D, F> {
     pub fn query<'w, 's>(
         &'s mut self,
         world: &'w World,
-    ) -> Query<'w, 's, D::ReadOnly, F, InvalidStorage> {
+    ) -> Query<'w, 's, D::ReadOnly, F, InvalidSubWorld> {
         self.update_archetypes(world);
         self.query_manual(world)
     }
@@ -370,7 +372,7 @@ impl<D: QueryData, F: QueryFilter> QueryState<D, F> {
     pub fn query_manual<'w, 's>(
         &'s self,
         world: &'w World,
-    ) -> Query<'w, 's, D::ReadOnly, F, InvalidStorage> {
+    ) -> Query<'w, 's, D::ReadOnly, F, InvalidSubWorld> {
         // SAFETY: We have read access to the entire world, and we call `as_readonly()` so the query only performs read access.
         unsafe {
             self.as_readonly()
@@ -382,7 +384,7 @@ impl<D: QueryData, F: QueryFilter> QueryState<D, F> {
     pub fn query_mut<'w, 's>(
         &'s mut self,
         world: &'w mut World,
-    ) -> Query<'w, 's, D, F, InvalidStorage> {
+    ) -> Query<'w, 's, D, F, InvalidSubWorld> {
         let last_run = world.last_change_tick();
         let this_run = world.change_tick();
         // SAFETY: We have exclusive access to the entire world.
@@ -398,7 +400,7 @@ impl<D: QueryData, F: QueryFilter> QueryState<D, F> {
     pub unsafe fn query_unchecked<'w, 's>(
         &'s mut self,
         world: UnsafeWorldCell<'w>,
-    ) -> Query<'w, 's, D, F, InvalidStorage> {
+    ) -> Query<'w, 's, D, F, InvalidSubWorld> {
         self.update_archetypes_unsafe_world_cell(world);
         // SAFETY: Caller ensures we have the required access
         unsafe { self.query_unchecked_manual(world) }
@@ -421,7 +423,7 @@ impl<D: QueryData, F: QueryFilter> QueryState<D, F> {
     pub unsafe fn query_unchecked_manual<'w, 's>(
         &'s self,
         world: UnsafeWorldCell<'w>,
-    ) -> Query<'w, 's, D, F, InvalidStorage> {
+    ) -> Query<'w, 's, D, F, InvalidSubWorld> {
         let last_run = world.last_change_tick();
         let this_run = world.change_tick();
         // SAFETY: The caller ensured we have the correct access to the world.
@@ -439,7 +441,7 @@ impl<D: QueryData, F: QueryFilter> QueryState<D, F> {
         world: UnsafeWorldCell<'w>,
         last_run: Tick,
         this_run: Tick,
-    ) -> Query<'w, 's, D, F, InvalidStorage> {
+    ) -> Query<'w, 's, D, F, InvalidSubWorld> {
         self.update_archetypes_unsafe_world_cell(world);
         // SAFETY: The caller ensured we have the correct access to the world.
         unsafe { self.query_unchecked_manual_with_ticks(world, last_run, this_run) }
@@ -464,7 +466,7 @@ impl<D: QueryData, F: QueryFilter> QueryState<D, F> {
         world: UnsafeWorldCell<'w>,
         last_run: Tick,
         this_run: Tick,
-    ) -> Query<'w, 's, D, F, InvalidStorage> {
+    ) -> Query<'w, 's, D, F, InvalidSubWorld> {
         self.validate_world(world.id());
         // SAFETY:
         // - The caller ensured we have the correct access to the world.

@@ -12,7 +12,7 @@ use crate::{
     query::{DebugCheckedUnwrap, ReadOnlyQueryData},
     removal_detection::RemovedComponentEvents,
     resource::Resource,
-    storage::{ComponentSparseSet, Resources, SubStorageId, SubStorages, Table},
+    storage::{ComponentSparseSet, Resources, SubWorldId, SubWorlds, Table},
     world::RawCommandQueue,
 };
 use bevy_platform_support::sync::atomic::Ordering;
@@ -338,7 +338,7 @@ impl<'w> UnsafeWorldCell<'w> {
     }
 
     #[inline]
-    pub fn sub_storages(self) -> &'w SubStorages {
+    pub fn sub_storages(self) -> &'w SubWorlds {
         &unsafe { self.unsafe_world() }.sub_storages
     }
 
@@ -1104,7 +1104,7 @@ impl<'w> UnsafeWorldCell<'w> {
     unsafe fn fetch_sparse_set(
         self,
         component_id: ComponentId,
-        sub_storage: SubStorageId,
+        sub_storage: SubWorldId,
     ) -> Option<&'w ComponentSparseSet> {
         // SAFETY: caller ensures returned data is not misused and we have not created any borrows
         // of component/resource data

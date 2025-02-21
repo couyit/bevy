@@ -7,10 +7,9 @@ use crate::{
     change_detection::MAX_CHANGE_AGE,
     entity::{ComponentCloneCtx, Entity},
     query::DebugCheckedUnwrap,
-    resource::Resource,
     storage::{SparseSetIndex, SparseSets, Table, TableRow},
-    system::{Commands, Local, SystemParam},
-    world::{DeferredWorld, FromWorld, World},
+    system::{Commands, Local},
+    world::{DeferredWorld, World},
 };
 #[cfg(feature = "bevy_reflect")]
 use alloc::boxed::Box;
@@ -22,13 +21,9 @@ use bevy_ptr::{OwningPtr, UnsafeCellDeref};
 #[cfg(feature = "bevy_reflect")]
 use bevy_reflect::Reflect;
 use bevy_utils::TypeIdMap;
+use core::any::Any;
 use core::{
-    alloc::Layout,
-    any::{Any, TypeId},
-    cell::UnsafeCell,
-    fmt::Debug,
-    marker::PhantomData,
-    mem::needs_drop,
+    alloc::Layout, any::TypeId, cell::UnsafeCell, fmt::Debug, marker::PhantomData, mem::needs_drop,
     panic::Location,
 };
 use disqualified::ShortName;
@@ -835,14 +830,6 @@ impl ComponentInfo {
         self.descriptor.storage_type
     }
 
-    /// Returns `true` if the underlying component type can be freely shared between threads.
-    /// If this returns `false`, then extra care must be taken to ensure that components
-    /// are not accessed from the wrong thread.
-    #[inline]
-    pub fn is_send_and_sync(&self) -> bool {
-        self.descriptor.is_send_and_sync
-    }
-
     /// Create a new [`ComponentInfo`].
     pub(crate) fn new(id: ComponentId, descriptor: ComponentDescriptor) -> Self {
         ComponentInfo {
@@ -951,9 +938,6 @@ pub struct ComponentDescriptor {
     // SAFETY: This must remain private. It must match the statically known StorageType of the
     // associated rust component type if one exists.
     storage_type: StorageType,
-    // SAFETY: This must remain private. It must only be set to "true" if this component is
-    // actually Send + Sync
-    is_send_and_sync: bool,
     type_id: Option<TypeId>,
     layout: Layout,
     // SAFETY: this function must be safe to call with pointers pointing to items of the type
@@ -970,7 +954,6 @@ impl Debug for ComponentDescriptor {
         f.debug_struct("ComponentDescriptor")
             .field("name", &self.name)
             .field("storage_type", &self.storage_type)
-            .field("is_send_and_sync", &self.is_send_and_sync)
             .field("type_id", &self.type_id)
             .field("layout", &self.layout)
             .field("mutable", &self.mutable)
@@ -995,7 +978,6 @@ impl ComponentDescriptor {
         Self {
             name: Cow::Borrowed(core::any::type_name::<T>()),
             storage_type: T::STORAGE_TYPE,
-            is_send_and_sync: true,
             type_id: Some(TypeId::of::<T>()),
             layout: Layout::new::<T>(),
             drop: needs_drop::<T>().then_some(Self::drop_ptr::<T> as _),
@@ -1020,43 +1002,11 @@ impl ComponentDescriptor {
         Self {
             name: name.into(),
             storage_type,
-            is_send_and_sync: true,
             type_id: None,
             layout,
             drop,
             mutable,
             clone_behavior,
-        }
-    }
-
-    /// Create a new `ComponentDescriptor` for a resource.
-    ///
-    /// The [`StorageType`] for resources is always [`StorageType::Table`].
-    pub fn new_resource<T: Resource>() -> Self {
-        Self {
-            name: Cow::Borrowed(core::any::type_name::<T>()),
-            // PERF: `SparseStorage` may actually be a more
-            // reasonable choice as `storage_type` for resources.
-            storage_type: StorageType::Table,
-            is_send_and_sync: true,
-            type_id: Some(TypeId::of::<T>()),
-            layout: Layout::new::<T>(),
-            drop: needs_drop::<T>().then_some(Self::drop_ptr::<T> as _),
-            mutable: true,
-            clone_behavior: ComponentCloneBehavior::Default,
-        }
-    }
-
-    fn new_non_send<T: Any>(storage_type: StorageType) -> Self {
-        Self {
-            name: Cow::Borrowed(core::any::type_name::<T>()),
-            storage_type,
-            is_send_and_sync: false,
-            type_id: Some(TypeId::of::<T>()),
-            layout: Layout::new::<T>(),
-            drop: needs_drop::<T>().then_some(Self::drop_ptr::<T> as _),
-            mutable: true,
-            clone_behavior: ComponentCloneBehavior::Default,
         }
     }
 
@@ -1145,7 +1095,6 @@ impl ComponentCloneBehavior {
 pub struct Components {
     components: Vec<ComponentInfo>,
     indices: TypeIdMap<ComponentId>,
-    resource_indices: TypeIdMap<ComponentId>,
 }
 
 impl Components {
@@ -1597,118 +1546,6 @@ impl Components {
         self.get_id(TypeId::of::<T>())
     }
 
-    /// Type-erased equivalent of [`Components::resource_id()`].
-    #[inline]
-    pub fn get_resource_id(&self, type_id: TypeId) -> Option<ComponentId> {
-        self.resource_indices.get(&type_id).copied()
-    }
-
-    /// Returns the [`ComponentId`] of the given [`Resource`] type `T`.
-    ///
-    /// The returned `ComponentId` is specific to the `Components` instance
-    /// it was retrieved from and should not be used with another `Components`
-    /// instance.
-    ///
-    /// Returns [`None`] if the `Resource` type has not
-    /// yet been initialized using [`Components::register_resource()`].
-    ///
-    /// ```
-    /// use bevy_ecs::prelude::*;
-    ///
-    /// let mut world = World::new();
-    ///
-    /// #[derive(Resource, Default)]
-    /// struct ResourceA;
-    ///
-    /// let resource_a_id = world.init_resource::<ResourceA>();
-    ///
-    /// assert_eq!(resource_a_id, world.components().resource_id::<ResourceA>().unwrap())
-    /// ```
-    ///
-    /// # See also
-    ///
-    /// * [`Components::component_id()`]
-    /// * [`Components::get_resource_id()`]
-    #[inline]
-    pub fn resource_id<T: Resource>(&self) -> Option<ComponentId> {
-        self.get_resource_id(TypeId::of::<T>())
-    }
-
-    /// Registers a [`Resource`] of type `T` with this instance.
-    /// If a resource of this type has already been registered, this will return
-    /// the ID of the pre-existing resource.
-    ///
-    /// # See also
-    ///
-    /// * [`Components::resource_id()`]
-    /// * [`Components::register_resource_with_descriptor()`]
-    #[inline]
-    pub fn register_resource<T: Resource>(&mut self) -> ComponentId {
-        // SAFETY: The [`ComponentDescriptor`] matches the [`TypeId`]
-        unsafe {
-            self.get_or_register_resource_with(TypeId::of::<T>(), || {
-                ComponentDescriptor::new_resource::<T>()
-            })
-        }
-    }
-
-    /// Registers a [`Resource`] described by `descriptor`.
-    ///
-    /// # Note
-    ///
-    /// If this method is called multiple times with identical descriptors, a distinct [`ComponentId`]
-    /// will be created for each one.
-    ///
-    /// # See also
-    ///
-    /// * [`Components::resource_id()`]
-    /// * [`Components::register_resource()`]
-    pub fn register_resource_with_descriptor(
-        &mut self,
-        descriptor: ComponentDescriptor,
-    ) -> ComponentId {
-        Components::register_resource_inner(&mut self.components, descriptor)
-    }
-
-    /// Registers a [non-send resource](crate::system::NonSend) of type `T` with this instance.
-    /// If a resource of this type has already been registered, this will return
-    /// the ID of the pre-existing resource.
-    #[inline]
-    pub fn register_non_send<T: Any>(&mut self) -> ComponentId {
-        // SAFETY: The [`ComponentDescriptor`] matches the [`TypeId`]
-        unsafe {
-            self.get_or_register_resource_with(TypeId::of::<T>(), || {
-                ComponentDescriptor::new_non_send::<T>(StorageType::default())
-            })
-        }
-    }
-
-    /// # Safety
-    ///
-    /// The [`ComponentDescriptor`] must match the [`TypeId`]
-    #[inline]
-    unsafe fn get_or_register_resource_with(
-        &mut self,
-        type_id: TypeId,
-        func: impl FnOnce() -> ComponentDescriptor,
-    ) -> ComponentId {
-        let components = &mut self.components;
-        *self.resource_indices.entry(type_id).or_insert_with(|| {
-            let descriptor = func();
-            Components::register_resource_inner(components, descriptor)
-        })
-    }
-
-    #[inline]
-    fn register_resource_inner(
-        components: &mut Vec<ComponentInfo>,
-        descriptor: ComponentDescriptor,
-    ) -> ComponentId {
-        let component_id = ComponentId(components.len());
-        components.push(ComponentInfo::new(component_id, descriptor));
-        component_id
-    }
-
     /// Gets an iterator over all components registered with this instance.
     pub fn iter(&self) -> impl Iterator<Item = &ComponentInfo> + '_ {
         self.components.iter()
@@ -1913,15 +1750,6 @@ impl<T: Component> From<ComponentIdFor<'_, T>> for ComponentId {
 struct InitComponentId<T: Component> {
     component_id: ComponentId,
     marker: PhantomData<T>,
-}
-
-impl<T: Component> FromWorld for InitComponentId<T> {
-    fn from_world(world: &mut World) -> Self {
-        Self {
-            component_id: world.register_component::<T>(),
-            marker: PhantomData,
-        }
-    }
 }
 
 /// An error returned when the registration of a required component fails.

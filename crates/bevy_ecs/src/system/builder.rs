@@ -713,7 +713,7 @@ unsafe impl<'w, 's, T: FnOnce(&mut FilteredResourcesMutBuilder)>
 #[cfg(test)]
 mod tests {
     use crate as bevy_ecs;
-    use crate::storage::MainStorage;
+    use crate::storage::MainSubWorld;
     use crate::{
         entity::Entities,
         prelude::{Component, Query},
@@ -783,7 +783,7 @@ mod tests {
         world.spawn(A);
         world.spawn_empty();
 
-        let state = QueryBuilder::<(), (), MainStorage>::new(&mut world)
+        let state = QueryBuilder::<(), (), MainSubWorld>::new(&mut world)
             .with::<A>()
             .build();
 

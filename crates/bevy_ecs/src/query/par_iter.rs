@@ -1,5 +1,5 @@
 use crate::{
-    batching::BatchingStrategy, component::Tick, storage::SubStorageId,
+    batching::BatchingStrategy, component::Tick, storage::SubWorldId,
     world::unsafe_world_cell::UnsafeWorldCell,
 };
 
@@ -15,7 +15,7 @@ pub struct QueryParIter<'w, 's, D: QueryData, F: QueryFilter> {
     pub(crate) last_run: Tick,
     pub(crate) this_run: Tick,
     pub(crate) batching_strategy: BatchingStrategy,
-    pub(crate) sub_storage: SubStorageId,
+    pub(crate) sub_storage: SubWorldId,
 }
 
 impl<'w, 's, D: QueryData, F: QueryFilter> QueryParIter<'w, 's, D, F> {
