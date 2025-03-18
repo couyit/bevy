@@ -24,7 +24,7 @@
 use crate as bevy_ecs;
 use crate::{
     component::{ComponentId, Components, StorageType},
-    query::FilteredAccess,
+    query::FilteredComponentAccess,
 };
 use bevy_ecs_macros::{Component, Resource};
 
@@ -61,7 +61,7 @@ impl DefaultQueryFilters {
         [self.disabled].into_iter().flatten()
     }
 
-    pub(super) fn apply(&self, component_access: &mut FilteredAccess<ComponentId>) {
+    pub(super) fn apply(&self, component_access: &mut FilteredComponentAccess<ComponentId>) {
         for component_id in self.ids() {
             if !component_access.contains(component_id) {
                 component_access.and_without(component_id);
@@ -102,7 +102,7 @@ mod tests {
         filters.set_disabled(ComponentId::new(1));
 
         // A component access with an unrelated component
-        let mut component_access = FilteredAccess::<ComponentId>::default();
+        let mut component_access = FilteredComponentAccess::<ComponentId>::default();
         component_access
             .access_mut()
             .add_component_read(ComponentId::new(2));

@@ -1493,7 +1493,7 @@ mod tests {
         let archetype_component_access = system.archetype_component_access();
         assert!(expected_ids
             .iter()
-            .all(|id| archetype_component_access.has_component_read(*id)));
+            .all(|id| archetype_component_access.has_read(*id)));
 
         // add some entities with archetypes that should match and save their ids
         expected_ids.insert(
@@ -1520,7 +1520,7 @@ mod tests {
         let archetype_component_access = system.archetype_component_access();
         assert!(expected_ids
             .iter()
-            .all(|id| archetype_component_access.has_component_read(*id)));
+            .all(|id| archetype_component_access.has_read(*id)));
 
         // one more round
         expected_ids.insert(
@@ -1535,7 +1535,7 @@ mod tests {
         let archetype_component_access = system.archetype_component_access();
         assert!(expected_ids
             .iter()
-            .all(|id| archetype_component_access.has_component_read(*id)));
+            .all(|id| archetype_component_access.has_read(*id)));
     }
 
     #[test]

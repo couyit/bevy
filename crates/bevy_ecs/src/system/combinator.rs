@@ -5,7 +5,7 @@ use crate::{
     archetype::ArchetypeComponentId,
     component::{ComponentId, Tick},
     prelude::World,
-    query::Access,
+    query::ComponentAccess,
     schedule::InternedSystemSet,
     system::{input::SystemInput, SystemIn},
     world::unsafe_world_cell::UnsafeWorldCell,
@@ -114,8 +114,8 @@ pub struct CombinatorSystem<Func, A, B> {
     a: A,
     b: B,
     name: Cow<'static, str>,
-    component_access: Access<ComponentId>,
-    archetype_component_access: Access<ArchetypeComponentId>,
+    component_access: ComponentAccess<ComponentId>,
+    archetype_component_access: ComponentAccess<ArchetypeComponentId>,
 }
 
 impl<Func, A, B> CombinatorSystem<Func, A, B> {
@@ -128,8 +128,8 @@ impl<Func, A, B> CombinatorSystem<Func, A, B> {
             a,
             b,
             name,
-            component_access: Access::new(),
-            archetype_component_access: Access::new(),
+            component_access: ComponentAccess::new(),
+            archetype_component_access: ComponentAccess::new(),
         }
     }
 }
@@ -147,11 +147,11 @@ where
         self.name.clone()
     }
 
-    fn component_access(&self) -> &Access<ComponentId> {
+    fn component_access(&self) -> &ComponentAccess<ComponentId> {
         &self.component_access
     }
 
-    fn archetype_component_access(&self) -> &Access<ArchetypeComponentId> {
+    fn archetype_component_access(&self) -> &ComponentAccess<ArchetypeComponentId> {
         &self.archetype_component_access
     }
 
@@ -352,8 +352,8 @@ pub struct PipeSystem<A, B> {
     a: A,
     b: B,
     name: Cow<'static, str>,
-    component_access: Access<ComponentId>,
-    archetype_component_access: Access<ArchetypeComponentId>,
+    component_access: ComponentAccess<ComponentId>,
+    archetype_component_access: ComponentAccess<ArchetypeComponentId>,
 }
 
 impl<A, B> PipeSystem<A, B>
@@ -368,8 +368,8 @@ where
             a,
             b,
             name,
-            component_access: Access::new(),
-            archetype_component_access: Access::new(),
+            component_access: ComponentAccess::new(),
+            archetype_component_access: ComponentAccess::new(),
         }
     }
 }
@@ -387,11 +387,11 @@ where
         self.name.clone()
     }
 
-    fn component_access(&self) -> &Access<ComponentId> {
+    fn component_access(&self) -> &ComponentAccess<ComponentId> {
         &self.component_access
     }
 
-    fn archetype_component_access(&self) -> &Access<ArchetypeComponentId> {
+    fn archetype_component_access(&self) -> &ComponentAccess<ArchetypeComponentId> {
         &self.archetype_component_access
     }
 

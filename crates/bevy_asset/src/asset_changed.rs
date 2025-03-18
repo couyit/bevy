@@ -10,7 +10,7 @@ use bevy_ecs::{
     archetype::Archetype,
     component::{ComponentId, Tick},
     prelude::{Entity, Resource, World},
-    query::{FilteredAccess, QueryData, QueryFilter, ReadFetch, WorldQuery},
+    query::{FilteredComponentAccess, QueryData, QueryFilter, ReadFetch, WorldQuery},
     storage::{Table, TableRow},
     world::unsafe_world_cell::UnsafeWorldCell,
 };
@@ -228,7 +228,7 @@ unsafe impl<A: AsAssetId> WorldQuery for AssetChanged<A> {
     }
 
     #[inline]
-    fn update_component_access(state: &Self::State, access: &mut FilteredAccess<ComponentId>) {
+    fn update_component_access(state: &Self::State, access: &mut FilteredComponentAccess<ComponentId>) {
         <&A>::update_component_access(&state.asset_id, access);
         access.add_resource_read(state.resource_id);
     }

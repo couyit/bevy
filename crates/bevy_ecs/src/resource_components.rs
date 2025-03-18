@@ -111,6 +111,14 @@ impl ResourceComponents {
         self.indices.get(&type_id).copied()
     }
 
+    /// Gets the metadata associated with the given component.
+    ///
+    /// This will return an incorrect result if `id` did not come from the same world as `self`. It may return `None` or a garbage value.
+    #[inline]
+    pub fn get_info(&self, id: ResourceId) -> Option<&ResourceInfo> {
+        self.resources.get(id.0)
+    }
+
     /// Returns the [`ComponentId`] of the given [`Resource`] type `T`.
     ///
     /// The returned `ComponentId` is specific to the `Components` instance

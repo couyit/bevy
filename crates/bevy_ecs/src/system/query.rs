@@ -7,8 +7,7 @@ use crate::{
         QueryIter, QueryManyIter, QueryManyUniqueIter, QueryParIter, QuerySingleError, QueryState,
         ROQueryItem, ReadOnlyQueryData,
     },
-    storage::{MainSubWorld, SubWorld, SubWorldId},
-    world::unsafe_world_cell::UnsafeWorldCell,
+    world::{unsafe_world_cell::UnsafeWorldCell, MainSubWorld, SubWorld},
 };
 use core::{
     any::TypeId,
@@ -381,7 +380,6 @@ pub struct Query<'world, 'state, D: QueryData, F: QueryFilter = (), S: SubWorld 
     state: &'state QueryState<D, F>,
     last_run: Tick,
     this_run: Tick,
-    sub_storage: SubWorldId,
     _phantom: PhantomData<S>,
 }
 
@@ -421,7 +419,7 @@ impl<'w, 's, D: QueryData, F: QueryFilter, S: SubWorld> Query<'w, 's, D, F, S> {
         this_run: Tick,
     ) -> Self {
         let &sub_storage = world
-            .sub_storages()
+            .storages()
             .indices
             .get(&TypeId::of::<S>())
             .debug_checked_unwrap();
@@ -2141,7 +2139,7 @@ impl<'w, Q: QueryData, F: QueryFilter, S: SubWorld> QueryLens<'w, Q, F, S> {
     pub fn query(&mut self) -> Query<'w, '_, Q, F, S> {
         let &sub_storage = unsafe {
             self.world
-                .sub_storages()
+                .storages()
                 .indices
                 .get(&TypeId::of::<S>())
                 .debug_checked_unwrap()

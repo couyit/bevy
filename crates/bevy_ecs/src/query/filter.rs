@@ -2,7 +2,7 @@ use crate::{
     archetype::Archetype,
     component::{Component, ComponentId, Components, StorageType, Tick},
     entity::Entity,
-    query::{DebugCheckedUnwrap, FilteredAccess, StorageSwitch, WorldQuery},
+    query::{DebugCheckedUnwrap, FilteredComponentAccess, StorageSwitch, WorldQuery},
     storage::{ComponentSparseSet, SparseSets, Table, TableRow},
     world::{unsafe_world_cell::UnsafeWorldCell, World},
 };
@@ -179,7 +179,7 @@ unsafe impl<T: Component> WorldQuery for With<T> {
     unsafe fn set_table(_fetch: &mut (), _state: &ComponentId, _table: &Table) {}
 
     #[inline]
-    fn update_component_access(&id: &ComponentId, access: &mut FilteredAccess<ComponentId>) {
+    fn update_component_access(&id: &ComponentId, access: &mut FilteredComponentAccess<ComponentId>) {
         access.and_with(id);
     }
 
@@ -280,7 +280,7 @@ unsafe impl<T: Component> WorldQuery for Without<T> {
     unsafe fn set_table(_fetch: &mut (), _state: &Self::State, _table: &Table) {}
 
     #[inline]
-    fn update_component_access(&id: &ComponentId, access: &mut FilteredAccess<ComponentId>) {
+    fn update_component_access(&id: &ComponentId, access: &mut FilteredComponentAccess<ComponentId>) {
         access.and_without(id);
     }
 
@@ -721,7 +721,7 @@ unsafe impl<T: Component> WorldQuery for Added<T> {
     }
 
     #[inline]
-    fn update_component_access(&id: &ComponentId, access: &mut FilteredAccess<ComponentId>) {
+    fn update_component_access(&id: &ComponentId, access: &mut FilteredComponentAccess<ComponentId>) {
         if access.access().has_component_write(id) {
             panic!("$state_name<{}> conflicts with a previous access in this query. Shared access cannot coincide with exclusive access.",core::any::type_name::<T>());
         }
@@ -944,7 +944,7 @@ unsafe impl<T: Component> WorldQuery for Changed<T> {
     }
 
     #[inline]
-    fn update_component_access(&id: &ComponentId, access: &mut FilteredAccess<ComponentId>) {
+    fn update_component_access(&id: &ComponentId, access: &mut FilteredComponentAccess<ComponentId>) {
         if access.access().has_component_write(id) {
             panic!("$state_name<{}> conflicts with a previous access in this query. Shared access cannot coincide with exclusive access.",core::any::type_name::<T>());
         }

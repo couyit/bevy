@@ -9,7 +9,7 @@ use crate::{
     },
     event::Event,
     observer::Observer,
-    query::{Access, DebugCheckedUnwrap, ReadOnlyQueryData},
+    query::{ComponentAccess, DebugCheckedUnwrap, ReadOnlyQueryData},
     removal_detection::RemovedComponentEvents,
     resource::Resource,
     storage::SubWorlds,
@@ -1708,7 +1708,7 @@ impl<'w> EntityWorldMut<'w> {
     pub fn take<T: Bundle>(&mut self) -> Option<T> {
         self.assert_not_despawned();
         let world = &mut self.world;
-        let sub_storages = &mut world.sub_storages;
+        let sub_storages = &mut world.sub_worlds;
         let components = &mut world.components;
         let bundle_id = world.bundles.register_info::<T>(components);
         // SAFETY: We just ensured this bundle exists
@@ -1756,7 +1756,7 @@ impl<'w> EntityWorldMut<'w> {
         }
 
         let archetypes = &mut world.archetypes;
-        let sub_storages = &mut world.sub_storages;
+        let sub_storages = &mut world.sub_worlds;
         let components = &mut world.components;
         let entities = &mut world.entities;
         let removed_components = &mut world.removed_components;
@@ -1843,21 +1843,21 @@ impl<'w> EntityWorldMut<'w> {
         }
         let old_table_row = remove_result.table_row;
         let old_table_id = old_archetype.table_id();
-        let old_sub_storage_id = old_archetype.sub_storage();
+        let old_sub_storage_id = old_archetype.sub_world();
         let new_archetype = &mut archetypes[new_archetype_id];
 
         let new_location = if old_table_id == new_archetype.table_id()
-            && old_sub_storage_id == new_archetype.sub_storage()
+            && old_sub_storage_id == new_archetype.sub_world()
         {
             new_archetype.allocate(entity, old_table_row)
         } else {
-            let (old_table, new_table) = if old_sub_storage_id == new_archetype.sub_storage() {
+            let (old_table, new_table) = if old_sub_storage_id == new_archetype.sub_world() {
                 sub_storages[old_sub_storage_id]
                     .tables
                     .get_2_mut(old_table_id, new_archetype.table_id())
             } else {
                 let (old_sub_storage, new_sub_storage) =
-                    sub_storages.get_2_mut(old_sub_storage_id, new_archetype.sub_storage());
+                    sub_storages.get_2_mut(old_sub_storage_id, new_archetype.sub_world());
 
                 (
                     &mut old_sub_storage.tables[old_table_id],
@@ -1924,7 +1924,7 @@ impl<'w> EntityWorldMut<'w> {
         let new_archetype_id = bundle_info
             .remove_bundle_from_archetype(
                 &mut world.archetypes,
-                &mut world.sub_storages,
+                &mut world.sub_worlds,
                 &world.components,
                 &world.observers,
                 location.archetype_id,
@@ -1968,7 +1968,7 @@ impl<'w> EntityWorldMut<'w> {
                 // Make sure to drop components stored in sparse sets.
                 // Dense components are dropped later in `move_to_and_drop_missing_unchecked`.
                 if let Some(StorageType::SparseSet) = old_archetype.get_storage_type(component_id) {
-                    world.sub_storages[old_archetype.sub_storage()]
+                    world.sub_worlds[old_archetype.sub_storage()]
                         .sparse_sets
                         .get_mut(component_id)
                         // Set exists because the component existed on the entity
@@ -1988,7 +1988,7 @@ impl<'w> EntityWorldMut<'w> {
             location,
             &mut world.entities,
             &mut world.archetypes,
-            &mut world.sub_storages,
+            &mut world.sub_worlds,
             new_archetype_id,
         );
 
@@ -2370,7 +2370,7 @@ impl<'w> EntityWorldMut<'w> {
 
             for component_id in archetype.sparse_set_components() {
                 // set must have existed for the component to be added.
-                let sparse_set = world.sub_storages[archetype.sub_storage()]
+                let sparse_set = world.sub_worlds[archetype.sub_storage()]
                     .sparse_sets
                     .get_mut(component_id)
                     .unwrap();
@@ -2378,7 +2378,7 @@ impl<'w> EntityWorldMut<'w> {
             }
             // SAFETY: table rows stored in archetypes always exist
             moved_entity = unsafe {
-                world.sub_storages[archetype.sub_storage()].tables[archetype.table_id()]
+                world.sub_worlds[archetype.sub_storage()].tables[archetype.table_id()]
                     .swap_remove_unchecked(table_row)
             };
         };
@@ -3176,7 +3176,7 @@ impl<'w, 'a, T: Component> VacantEntry<'w, 'a, T> {
 #[derive(Clone)]
 pub struct FilteredEntityRef<'w> {
     entity: UnsafeEntityCell<'w>,
-    access: Access<ComponentId>,
+    access: ComponentAccess<ComponentId>,
 }
 
 impl<'w> FilteredEntityRef<'w> {
@@ -3186,7 +3186,7 @@ impl<'w> FilteredEntityRef<'w> {
     ///     component can exist at the same time as the returned [`FilteredEntityMut`]
     /// - If `access` takes any access for a component `entity` must have that component.
     #[inline]
-    pub(crate) unsafe fn new(entity: UnsafeEntityCell<'w>, access: Access<ComponentId>) -> Self {
+    pub(crate) unsafe fn new(entity: UnsafeEntityCell<'w>, access: ComponentAccess<ComponentId>) -> Self {
         Self { entity, access }
     }
 
@@ -3211,7 +3211,7 @@ impl<'w> FilteredEntityRef<'w> {
 
     /// Returns a reference to the underlying [`Access`].
     #[inline]
-    pub fn access(&self) -> &Access<ComponentId> {
+    pub fn access(&self) -> &ComponentAccess<ComponentId> {
         &self.access
     }
 
@@ -3258,7 +3258,7 @@ impl<'w> FilteredEntityRef<'w> {
     pub fn get<T: Component>(&self) -> Option<&'w T> {
         let id = self.entity.world().components().get_id(TypeId::of::<T>())?;
         self.access
-            .has_component_read(id)
+            .has_read(id)
             // SAFETY: We have read access
             .then(|| unsafe { self.entity.get() })
             .flatten()
@@ -3272,7 +3272,7 @@ impl<'w> FilteredEntityRef<'w> {
     pub fn get_ref<T: Component>(&self) -> Option<Ref<'w, T>> {
         let id = self.entity.world().components().get_id(TypeId::of::<T>())?;
         self.access
-            .has_component_read(id)
+            .has_read(id)
             // SAFETY: We have read access
             .then(|| unsafe { self.entity.get_ref() })
             .flatten()
@@ -3284,7 +3284,7 @@ impl<'w> FilteredEntityRef<'w> {
     pub fn get_change_ticks<T: Component>(&self) -> Option<ComponentTicks> {
         let id = self.entity.world().components().get_id(TypeId::of::<T>())?;
         self.access
-            .has_component_read(id)
+            .has_read(id)
             // SAFETY: We have read access
             .then(|| unsafe { self.entity.get_change_ticks::<T>() })
             .flatten()
@@ -3299,7 +3299,7 @@ impl<'w> FilteredEntityRef<'w> {
     #[inline]
     pub fn get_change_ticks_by_id(&self, component_id: ComponentId) -> Option<ComponentTicks> {
         self.access
-            .has_component_read(component_id)
+            .has_read(component_id)
             // SAFETY: We have read access
             .then(|| unsafe { self.entity.get_change_ticks_by_id(component_id) })
             .flatten()
@@ -3316,7 +3316,7 @@ impl<'w> FilteredEntityRef<'w> {
     #[inline]
     pub fn get_by_id(&self, component_id: ComponentId) -> Option<Ptr<'w>> {
         self.access
-            .has_component_read(component_id)
+            .has_read(component_id)
             // SAFETY: We have read access
             .then(|| unsafe { self.entity.get_by_id(component_id) })
             .flatten()
@@ -3352,7 +3352,7 @@ impl<'a> From<EntityRef<'a>> for FilteredEntityRef<'a> {
         // SAFETY:
         // - `EntityRef` guarantees exclusive access to all components in the new `FilteredEntityRef`.
         unsafe {
-            let mut access = Access::default();
+            let mut access = ComponentAccess::default();
             access.read_all();
             FilteredEntityRef::new(entity.cell, access)
         }
@@ -3364,7 +3364,7 @@ impl<'a> From<&'a EntityRef<'_>> for FilteredEntityRef<'a> {
         // SAFETY:
         // - `EntityRef` guarantees exclusive access to all components in the new `FilteredEntityRef`.
         unsafe {
-            let mut access = Access::default();
+            let mut access = ComponentAccess::default();
             access.read_all();
             FilteredEntityRef::new(entity.cell, access)
         }
@@ -3376,7 +3376,7 @@ impl<'a> From<EntityMut<'a>> for FilteredEntityRef<'a> {
         // SAFETY:
         // - `EntityMut` guarantees exclusive access to all components in the new `FilteredEntityRef`.
         unsafe {
-            let mut access = Access::default();
+            let mut access = ComponentAccess::default();
             access.read_all();
             FilteredEntityRef::new(entity.cell, access)
         }
@@ -3388,7 +3388,7 @@ impl<'a> From<&'a EntityMut<'_>> for FilteredEntityRef<'a> {
         // SAFETY:
         // - `EntityMut` guarantees exclusive access to all components in the new `FilteredEntityRef`.
         unsafe {
-            let mut access = Access::default();
+            let mut access = ComponentAccess::default();
             access.read_all();
             FilteredEntityRef::new(entity.cell, access)
         }
@@ -3400,7 +3400,7 @@ impl<'a> From<EntityWorldMut<'a>> for FilteredEntityRef<'a> {
         // SAFETY:
         // - `EntityWorldMut` guarantees exclusive access to the entire world.
         unsafe {
-            let mut access = Access::default();
+            let mut access = ComponentAccess::default();
             access.read_all();
             FilteredEntityRef::new(entity.into_unsafe_entity_cell(), access)
         }
@@ -3412,7 +3412,7 @@ impl<'a> From<&'a EntityWorldMut<'_>> for FilteredEntityRef<'a> {
         // SAFETY:
         // - `EntityWorldMut` guarantees exclusive access to the entire world.
         unsafe {
-            let mut access = Access::default();
+            let mut access = ComponentAccess::default();
             access.read_all();
             FilteredEntityRef::new(entity.as_unsafe_entity_cell_readonly(), access)
         }
@@ -3489,7 +3489,7 @@ unsafe impl TrustedEntityBorrow for FilteredEntityRef<'_> {}
 /// ```
 pub struct FilteredEntityMut<'w> {
     entity: UnsafeEntityCell<'w>,
-    access: Access<ComponentId>,
+    access: ComponentAccess<ComponentId>,
 }
 
 impl<'w> FilteredEntityMut<'w> {
@@ -3501,7 +3501,7 @@ impl<'w> FilteredEntityMut<'w> {
     ///     may exist at the same time as the returned [`FilteredEntityMut`]
     /// - If `access` takes any access for a component `entity` must have that component.
     #[inline]
-    pub(crate) unsafe fn new(entity: UnsafeEntityCell<'w>, access: Access<ComponentId>) -> Self {
+    pub(crate) unsafe fn new(entity: UnsafeEntityCell<'w>, access: ComponentAccess<ComponentId>) -> Self {
         Self { entity, access }
     }
 
@@ -3539,7 +3539,7 @@ impl<'w> FilteredEntityMut<'w> {
 
     /// Returns a reference to the underlying [`Access`].
     #[inline]
-    pub fn access(&self) -> &Access<ComponentId> {
+    pub fn access(&self) -> &ComponentAccess<ComponentId> {
         &self.access
     }
 
@@ -3698,7 +3698,7 @@ impl<'a> From<EntityMut<'a>> for FilteredEntityMut<'a> {
         // SAFETY:
         // - `EntityMut` guarantees exclusive access to all components in the new `FilteredEntityMut`.
         unsafe {
-            let mut access = Access::default();
+            let mut access = ComponentAccess::default();
             access.read_all();
             access.write_all();
             FilteredEntityMut::new(entity.cell, access)
@@ -3711,7 +3711,7 @@ impl<'a> From<&'a mut EntityMut<'_>> for FilteredEntityMut<'a> {
         // SAFETY:
         // - `EntityMut` guarantees exclusive access to all components in the new `FilteredEntityMut`.
         unsafe {
-            let mut access = Access::default();
+            let mut access = ComponentAccess::default();
             access.read_all();
             access.write_all();
             FilteredEntityMut::new(entity.cell, access)
@@ -3724,7 +3724,7 @@ impl<'a> From<EntityWorldMut<'a>> for FilteredEntityMut<'a> {
         // SAFETY:
         // - `EntityWorldMut` guarantees exclusive access to the entire world.
         unsafe {
-            let mut access = Access::default();
+            let mut access = ComponentAccess::default();
             access.read_all();
             access.write_all();
             FilteredEntityMut::new(entity.into_unsafe_entity_cell(), access)
@@ -3737,7 +3737,7 @@ impl<'a> From<&'a mut EntityWorldMut<'_>> for FilteredEntityMut<'a> {
         // SAFETY:
         // - `EntityWorldMut` guarantees exclusive access to the entire world.
         unsafe {
-            let mut access = Access::default();
+            let mut access = ComponentAccess::default();
             access.read_all();
             access.write_all();
             FilteredEntityMut::new(entity.as_unsafe_entity_cell(), access)

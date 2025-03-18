@@ -6,15 +6,16 @@ use crate::{
     component::{ComponentId, ComponentTicks, Components, Tick},
     entity::Entities,
     query::{
-        Access, DebugCheckedUnwrap, FilteredAccess, FilteredAccessSet, QueryData, QueryFilter,
+        ComponentAccess, FilteredAccessSet, FilteredComponentAccess, QueryData, QueryFilter,
         QuerySingleError, QueryState, ReadOnlyQueryData,
     },
     resource::Resource,
-    storage::{ResourceData, SubWorld, SubWorldStorage},
+    resource_components::ResourceId,
+    storage::ResourceData,
     system::{Query, Single, SystemMeta},
     world::{
         unsafe_world_cell::UnsafeWorldCell, DeferredWorld, FilteredResources, FilteredResourcesMut,
-        FromWorld, World,
+        FromWorld, SubWorld, World,
     },
 };
 use alloc::{borrow::ToOwned, boxed::Box, vec::Vec};
@@ -24,7 +25,7 @@ use bevy_utils::synccell::SyncCell;
 #[cfg(feature = "track_location")]
 use core::panic::Location;
 use core::{
-    any::{Any, TypeId},
+    any::Any,
     fmt::Debug,
     marker::PhantomData,
     ops::{Deref, DerefMut},
@@ -193,6 +194,8 @@ pub unsafe trait SystemParam: Sized {
     /// You could think of [`SystemParam::Item<'w, 's>`] as being an *operation* that changes the lifetimes bound to `Self`.
     type Item<'world, 'state>: SystemParam<State = Self::State>;
 
+    type SubWorld: SubWorld;
+
     /// Registers any [`World`] access used by this [`SystemParam`]
     /// and creates a new instance of this param's [`State`](SystemParam::State).
     fn init_state(world: &mut World, system_meta: &mut SystemMeta) -> Self::State;
@@ -311,21 +314,10 @@ unsafe impl<D: QueryData + 'static, F: QueryFilter + 'static, S: SubWorld> Syste
 {
     type State = QueryState<D, F>;
     type Item<'w, 's> = Query<'w, 's, D, F, S>;
+    type SubWorld = S;
 
     fn init_state(world: &mut World, system_meta: &mut SystemMeta) -> Self::State {
-        let &sub_storage = unsafe {
-            world
-                .sub_storages()
-                .indices
-                .get(&TypeId::of::<S>())
-                .debug_checked_unwrap()
-        };
-
-        let state = QueryState::new_with_access(
-            world,
-            &mut system_meta.archetype_component_access,
-            sub_storage,
-        );
+        let state = QueryState::new_with_access(world, &mut system_meta.archetype_component_access);
         init_query_param(world, system_meta, &state);
         state
     }
@@ -379,7 +371,7 @@ fn assert_component_access_compatibility(
     query_type: &'static str,
     filter_type: &'static str,
     system_access: &FilteredAccessSet<ComponentId>,
-    current: &FilteredAccess<ComponentId>,
+    current: &FilteredComponentAccess<ComponentId>,
     world: &World,
 ) {
     let conflicts = system_access.get_conflicts_single(current);
@@ -828,29 +820,24 @@ unsafe impl<'a, T: Resource> ReadOnlySystemParam for Res<'a, T> {}
 // SAFETY: Res ComponentId and ArchetypeComponentId access is applied to SystemMeta. If this Res
 // conflicts with any prior access, a panic will occur.
 unsafe impl<'a, T: Resource> SystemParam for Res<'a, T> {
-    type State = ComponentId;
+    type State = ResourceId;
     type Item<'w, 's> = Res<'w, T>;
+    type SubWorld = ();
 
     fn init_state(world: &mut World, system_meta: &mut SystemMeta) -> Self::State {
-        let component_id = world.components.register_resource::<T>();
-        let archetype_component_id = world.initialize_resource_internal(component_id).id();
+        let resource_id = world.resource_components.register_resource::<T>();
+        world.initialize_resource_internal(resource_id);
 
-        let combined_access = system_meta.component_access_set.combined_access();
         assert!(
-            !combined_access.has_resource_write(component_id),
+            !system_meta.resource_access.has_write(resource_id),
             "error[B0002]: Res<{}> in system {} conflicts with a previous ResMut<{0}> access. Consider removing the duplicate access. See: https://bevyengine.org/learn/errors/b0002",
             core::any::type_name::<T>(),
             system_meta.name,
         );
-        system_meta
-            .component_access_set
-            .add_unfiltered_resource_read(component_id);
 
-        system_meta
-            .archetype_component_access
-            .add_resource_read(archetype_component_id);
+        system_meta.resource_access.add_read(resource_id);
 
-        component_id
+        resource_id
     }
 
     #[inline]
@@ -906,8 +893,9 @@ unsafe impl<'a, T: Resource> ReadOnlySystemParam for Option<Res<'a, T>> {}
 
 // SAFETY: this impl defers to `Res`, which initializes and validates the correct world access.
 unsafe impl<'a, T: Resource> SystemParam for Option<Res<'a, T>> {
-    type State = ComponentId;
+    type State = ResourceId;
     type Item<'w, 's> = Option<Res<'w, T>>;
+    type SubWorld = ();
 
     fn init_state(world: &mut World, system_meta: &mut SystemMeta) -> Self::State {
         Res::<T>::init_state(world, system_meta)
@@ -1055,7 +1043,7 @@ unsafe impl SystemParam for &'_ World {
     type Item<'w, 's> = &'w World;
 
     fn init_state(_world: &mut World, system_meta: &mut SystemMeta) -> Self::State {
-        let mut access = Access::default();
+        let mut access = ComponentAccess::default();
         access.read_all();
         if !system_meta
             .archetype_component_access
@@ -1065,7 +1053,7 @@ unsafe impl SystemParam for &'_ World {
         }
         system_meta.archetype_component_access.extend(&access);
 
-        let mut filtered_access = FilteredAccess::default();
+        let mut filtered_access = FilteredComponentAccess::default();
 
         filtered_access.read_all();
         if !system_meta
@@ -1618,7 +1606,7 @@ unsafe impl<'a, T: 'static> SystemParam for NonSendMut<'a, T> {
             panic!(
                 "error[B0002]: NonSendMut<{}> in system {} conflicts with a previous mutable resource access ({0}). Consider removing the duplicate access. See: https://bevyengine.org/learn/errors/b0002",
                 core::any::type_name::<T>(), system_meta.name);
-        } else if combined_access.has_component_read(component_id) {
+        } else if combined_access.has_read(component_id) {
             panic!(
                 "error[B0002]: NonSendMut<{}> in system {} conflicts with a previous immutable resource access ({0}). Consider removing the duplicate access. See: https://bevyengine.org/learn/errors/b0002",
                 core::any::type_name::<T>(), system_meta.name);
@@ -2552,12 +2540,12 @@ unsafe impl SystemParam for DynSystemParam<'_, '_> {
 // Therefore, `init_state` trivially registers all access, and no accesses can conflict.
 // Note that the safety requirements for non-empty access are handled by the `SystemParamBuilder` impl that builds them.
 unsafe impl SystemParam for FilteredResources<'_, '_> {
-    type State = Access<ComponentId>;
+    type State = ComponentAccess<ComponentId>;
 
     type Item<'world, 'state> = FilteredResources<'world, 'state>;
 
     fn init_state(_world: &mut World, _system_meta: &mut SystemMeta) -> Self::State {
-        Access::new()
+        ComponentAccess::new()
     }
 
     unsafe fn get_param<'world, 'state>(
@@ -2579,12 +2567,12 @@ unsafe impl ReadOnlySystemParam for FilteredResources<'_, '_> {}
 // Therefore, `init_state` trivially registers all access, and no accesses can conflict.
 // Note that the safety requirements for non-empty access are handled by the `SystemParamBuilder` impl that builds them.
 unsafe impl SystemParam for FilteredResourcesMut<'_, '_> {
-    type State = Access<ComponentId>;
+    type State = ComponentAccess<ComponentId>;
 
     type Item<'world, 'state> = FilteredResourcesMut<'world, 'state>;
 
     fn init_state(_world: &mut World, _system_meta: &mut SystemMeta) -> Self::State {
-        Access::new()
+        ComponentAccess::new()
     }
 
     unsafe fn get_param<'world, 'state>(

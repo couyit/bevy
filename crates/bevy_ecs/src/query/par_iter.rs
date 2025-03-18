@@ -1,7 +1,4 @@
-use crate::{
-    batching::BatchingStrategy, component::Tick, storage::SubWorldId,
-    world::unsafe_world_cell::UnsafeWorldCell,
-};
+use crate::{batching::BatchingStrategy, component::Tick, world::Storage};
 
 use super::{QueryData, QueryFilter, QueryItem, QueryState};
 
@@ -10,12 +7,11 @@ use super::{QueryData, QueryFilter, QueryItem, QueryState};
 /// This struct is created by the [`Query::par_iter`](crate::system::Query::par_iter) and
 /// [`Query::par_iter_mut`](crate::system::Query::par_iter_mut) methods.
 pub struct QueryParIter<'w, 's, D: QueryData, F: QueryFilter> {
-    pub(crate) world: UnsafeWorldCell<'w>,
+    pub(crate) storage: &'w Storage,
     pub(crate) state: &'s QueryState<D, F>,
     pub(crate) last_run: Tick,
     pub(crate) this_run: Tick,
     pub(crate) batching_strategy: BatchingStrategy,
-    pub(crate) sub_storage: SubWorldId,
 }
 
 impl<'w, 's, D: QueryData, F: QueryFilter> QueryParIter<'w, 's, D, F> {
@@ -131,7 +127,7 @@ impl<'w, 's, D: QueryData, F: QueryFilter> QueryParIter<'w, 's, D, F> {
             if self.state.is_dense {
                 // SAFETY: We only access table metadata.
                 let tables =
-                    unsafe { &self.world.world_metadata().sub_storages()[self.sub_storage].tables };
+                    unsafe { &self.world.world_metadata().sub_worlds()[self.sub_storage].tables };
                 id_iter
                     // SAFETY: The if check ensures that matched_storage_ids stores TableIds
                     .map(|id| unsafe { tables[id.table_id].entity_count() })

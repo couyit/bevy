@@ -17,7 +17,7 @@ use crate::{
     archetype::ArchetypeComponentId,
     component::{ComponentId, Tick},
     prelude::{IntoSystemSet, SystemSet},
-    query::Access,
+    query::ComponentAccess,
     result::Result,
     schedule::{BoxedCondition, InternedSystemSet, NodeId, SystemTypeSet},
     system::{ScheduleSystem, System, SystemIn},
@@ -168,14 +168,14 @@ impl System for ApplyDeferred {
         Cow::Borrowed("bevy_ecs::apply_deferred")
     }
 
-    fn component_access(&self) -> &Access<ComponentId> {
+    fn component_access(&self) -> &ComponentAccess<ComponentId> {
         // This system accesses no components.
-        const { &Access::new() }
+        const { &ComponentAccess::new() }
     }
 
-    fn archetype_component_access(&self) -> &Access<ArchetypeComponentId> {
+    fn archetype_component_access(&self) -> &ComponentAccess<ArchetypeComponentId> {
         // This system accesses no archetype components.
-        const { &Access::new() }
+        const { &ComponentAccess::new() }
     }
 
     fn is_send(&self) -> bool {

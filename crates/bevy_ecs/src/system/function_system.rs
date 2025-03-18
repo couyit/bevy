@@ -2,7 +2,7 @@ use crate::{
     archetype::{ArchetypeComponentId, ArchetypeGeneration},
     component::{ComponentId, Tick},
     prelude::FromWorld,
-    query::{Access, FilteredAccessSet},
+    query::{ComponentAccess, FilteredAccessSet, ResourceAccess},
     schedule::{InternedSystemSet, SystemSet},
     system::{
         check_system_change_tick, ReadOnlySystemParam, System, SystemIn, SystemInput, SystemParam,
@@ -12,7 +12,7 @@ use crate::{
 };
 
 use alloc::{borrow::Cow, vec, vec::Vec};
-use core::marker::PhantomData;
+use core::{any::TypeId, marker::PhantomData};
 use variadics_please::all_tuples;
 
 #[cfg(feature = "trace")]
@@ -37,7 +37,8 @@ pub struct SystemMeta {
     /// both `A`, `B` and `T` then in practice there's no risk of conflict. By using [`ArchetypeComponentId`]
     /// we can be more precise because we can check if the existing archetypes of the [`World`]
     /// cause a conflict
-    pub(crate) archetype_component_access: Access<ArchetypeComponentId>,
+    pub(crate) archetype_component_access: ComponentAccess<ArchetypeComponentId>,
+    pub(crate) resource_access: ResourceAccess,
     // NOTE: this must be kept private. making a SystemMeta non-send is irreversible to prevent
     // SystemParams from overriding each other
     is_send: bool,
@@ -55,8 +56,9 @@ impl SystemMeta {
         let name = core::any::type_name::<T>();
         Self {
             name: name.into(),
-            archetype_component_access: Access::default(),
+            archetype_component_access: ComponentAccess::default(),
             component_access_set: FilteredAccessSet::default(),
+            resource_access: ResourceAccess::default(),
             is_send: true,
             has_deferred: false,
             last_run: Tick::new(0),
@@ -146,7 +148,7 @@ impl SystemMeta {
     /// but no archetype that matches the first query will match the second and vice versa,
     /// which means there's no risk of conflict.
     #[inline]
-    pub fn archetype_component_access(&self) -> &Access<ArchetypeComponentId> {
+    pub fn archetype_component_access(&self) -> &ComponentAccess<ArchetypeComponentId> {
         &self.archetype_component_access
     }
 
@@ -164,7 +166,9 @@ impl SystemMeta {
     ///
     /// No access can be removed from the returned [`Access`].
     #[inline]
-    pub unsafe fn archetype_component_access_mut(&mut self) -> &mut Access<ArchetypeComponentId> {
+    pub unsafe fn archetype_component_access_mut(
+        &mut self,
+    ) -> &mut ComponentAccess<ArchetypeComponentId> {
         &mut self.archetype_component_access
     }
 
@@ -184,6 +188,16 @@ impl SystemMeta {
     #[inline]
     pub unsafe fn component_access_set_mut(&mut self) -> &mut FilteredAccessSet<ComponentId> {
         &mut self.component_access_set
+    }
+
+    #[inline]
+    pub fn resource_access(&self) -> &ResourceAccess {
+        &self.resource_access
+    }
+
+    #[inline]
+    pub unsafe fn resource_access_mut(&mut self) -> &mut ResourceAccess {
+        &mut self.resource_access
     }
 }
 
@@ -570,13 +584,19 @@ impl<Param: SystemParam> SystemState<Param> {
     pub fn update_archetypes_unsafe_world_cell(&mut self, world: UnsafeWorldCell) {
         assert_eq!(self.world_id, world.id(), "Encountered a mismatched World. A System cannot be used with Worlds other than the one it was initialized with.");
 
-        let archetypes = world.archetypes();
-        let old_generation =
-            core::mem::replace(&mut self.archetype_generation, archetypes.generation());
+        if let Some(&id) = world
+            .sub_worlds()
+            .indices
+            .get(&TypeId::of::<Param::SubWorld>())
+        {
+            let archetypes = world.sub_worlds()[id].archetypes();
+            let old_generation =
+                core::mem::replace(&mut self.archetype_generation, archetypes.generation());
 
-        for archetype in &archetypes[old_generation..] {
-            // SAFETY: The assertion above ensures that the param_state was initialized from `world`.
-            unsafe { Param::new_archetype(&mut self.param_state, archetype, &mut self.meta) };
+            for archetype in &archetypes[old_generation..] {
+                // SAFETY: The assertion above ensures that the param_state was initialized from `world`.
+                unsafe { Param::new_archetype(&mut self.param_state, archetype, &mut self.meta) };
+            }
         }
     }
 
@@ -786,12 +806,12 @@ where
     }
 
     #[inline]
-    fn component_access(&self) -> &Access<ComponentId> {
+    fn component_access(&self) -> &ComponentAccess<ComponentId> {
         self.system_meta.component_access_set.combined_access()
     }
 
     #[inline]
-    fn archetype_component_access(&self) -> &Access<ArchetypeComponentId> {
+    fn archetype_component_access(&self) -> &ComponentAccess<ArchetypeComponentId> {
         &self.system_meta.archetype_component_access
     }
 

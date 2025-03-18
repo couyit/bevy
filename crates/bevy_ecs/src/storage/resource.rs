@@ -1,7 +1,6 @@
 use crate::{
-    archetype::ArchetypeComponentId,
     change_detection::{MaybeLocation, MaybeUnsafeCellLocation, MutUntyped, TicksMut},
-    component::{ComponentId, ComponentTicks, Components, Tick, TickCells},
+    component::{ComponentTicks, Tick, TickCells},
     resource_components::{ResourceComponents, ResourceId},
     storage::{blob_vec::BlobVec, SparseSet},
 };
@@ -28,7 +27,6 @@ pub struct ResourceData<const SEND: bool> {
         expect(dead_code, reason = "currently only used with the std feature")
     )]
     type_name: String,
-    id: ArchetypeComponentId,
     #[cfg(feature = "std")]
     origin_thread_id: Option<ThreadId>,
     #[cfg(feature = "track_location")]
@@ -94,12 +92,6 @@ impl<const SEND: bool> ResourceData<SEND> {
     #[inline]
     pub fn is_present(&self) -> bool {
         !self.data.is_empty()
-    }
-
-    /// Gets the [`ArchetypeComponentId`] for the resource.
-    #[inline]
-    pub fn id(&self) -> ArchetypeComponentId {
-        self.id
     }
 
     /// Returns a reference to the resource, if it exists.
@@ -366,7 +358,6 @@ impl<const SEND: bool> Resources<SEND> {
         &mut self,
         resource_id: ResourceId,
         components: &ResourceComponents,
-        f: impl FnOnce() -> ArchetypeComponentId,
     ) -> &mut ResourceData<SEND> {
         self.resources.get_or_insert_with(resource_id, || {
             let component_info = components.get_info(resource_id).unwrap();
@@ -390,7 +381,6 @@ impl<const SEND: bool> Resources<SEND> {
                 added_ticks: UnsafeCell::new(Tick::new(0)),
                 changed_ticks: UnsafeCell::new(Tick::new(0)),
                 type_name: String::from(component_info.name()),
-                id: f(),
                 #[cfg(feature = "std")]
                 origin_thread_id: None,
                 #[cfg(feature = "track_location")]

@@ -137,7 +137,7 @@ mod tests {
         entity::Entity,
         entity_disabling::DefaultQueryFilters,
         prelude::Or,
-        query::{Added, Changed, FilteredAccess, QueryFilter, With, Without},
+        query::{Added, Changed, FilteredComponentAccess, QueryFilter, With, Without},
         resource::Resource,
         world::{EntityMut, EntityRef, Mut, World},
     };
@@ -1523,7 +1523,7 @@ mod tests {
         world.remove_resource::<DefaultQueryFilters>();
         let query = world.query_filtered::<&mut A, Changed<B>>();
 
-        let mut expected = FilteredAccess::<ComponentId>::default();
+        let mut expected = FilteredComponentAccess::<ComponentId>::default();
         let a_id = world.components.get_id(TypeId::of::<A>()).unwrap();
         let b_id = world.components.get_id(TypeId::of::<B>()).unwrap();
         expected.add_component_write(a_id);

@@ -277,7 +277,7 @@ mod render_entities_world_query_impls {
         archetype::Archetype,
         component::{ComponentId, Components, Tick},
         entity::Entity,
-        query::{FilteredAccess, QueryData, ReadOnlyQueryData, WorldQuery},
+        query::{FilteredComponentAccess, QueryData, ReadOnlyQueryData, WorldQuery},
         storage::{SparseSets, Table, TableRow},
         world::{unsafe_world_cell::UnsafeWorldCell, World},
     };
@@ -341,7 +341,7 @@ mod render_entities_world_query_impls {
 
         fn update_component_access(
             &component_id: &ComponentId,
-            access: &mut FilteredAccess<ComponentId>,
+            access: &mut FilteredComponentAccess<ComponentId>,
         ) {
             <&RenderEntity as WorldQuery>::update_component_access(&component_id, access);
         }
@@ -447,7 +447,7 @@ mod render_entities_world_query_impls {
 
         fn update_component_access(
             &component_id: &ComponentId,
-            access: &mut FilteredAccess<ComponentId>,
+            access: &mut FilteredComponentAccess<ComponentId>,
         ) {
             <&MainEntity as WorldQuery>::update_component_access(&component_id, access);
         }

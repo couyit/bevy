@@ -1,9 +1,9 @@
 use crate::{
     archetype::Archetype,
     component::{ComponentId, Components, Tick},
-    query::FilteredAccess,
+    query::FilteredComponentAccess,
     storage::{SparseSets, Table},
-    world::{unsafe_world_cell::UnsafeWorldCell, World},
+    world::{unsafe_world_cell::UnsafeWorldCell, Storage, World},
 };
 use variadics_please::all_tuples;
 
@@ -106,17 +106,17 @@ pub unsafe trait WorldQuery {
     /// or [`FilteredEntityMut`](crate::world::FilteredEntityMut).
     ///
     /// Called when constructing a [`QueryLens`](crate::system::QueryLens) or calling [`QueryState::from_builder`](super::QueryState::from_builder)
-    fn set_access(_state: &mut Self::State, _access: &FilteredAccess<ComponentId>) {}
+    fn set_access(_state: &mut Self::State, _access: &FilteredComponentAccess<ComponentId>) {}
 
     /// Adds any component accesses used by this [`WorldQuery`] to `access`.
     ///
     /// Used to check which queries are disjoint and can run in parallel
     // This does not have a default body of `{}` because 99% of cases need to add accesses
     // and forgetting to do so would be unsound.
-    fn update_component_access(state: &Self::State, access: &mut FilteredAccess<ComponentId>);
+    fn update_component_access(state: &Self::State, access: &mut FilteredComponentAccess<ComponentId>);
 
     /// Creates and initializes a [`State`](WorldQuery::State) for this [`WorldQuery`] type.
-    fn init_state(world: &mut World) -> Self::State;
+    fn init_state(storage: &mut Storage) -> Self::State;
 
     /// Attempts to initialize a [`State`](WorldQuery::State) for this [`WorldQuery`] type using read-only
     /// access to [`Components`].

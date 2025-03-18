@@ -64,7 +64,7 @@ use crate::{
     entity::{Entity, EntityMapper},
     prelude::Component,
     world::{
-        unsafe_world_cell::UnsafeEntityCell, EntityMut, EntityWorldMut, FilteredEntityMut,
+        unsafe_storage_cell::UnsafeEntityCell, EntityMut, EntityWorldMut, FilteredEntityMut,
         FilteredEntityRef, World,
     },
 };

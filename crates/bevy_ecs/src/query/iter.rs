@@ -5,10 +5,10 @@ use crate::{
     component::Tick,
     entity::{Entities, Entity, EntityBorrow, EntitySet, EntitySetIterator},
     query::{ArchetypeFilter, DebugCheckedUnwrap, QueryState, StorageId},
-    storage::{SparseSets, SubWorldId, SubWorlds, Table, TableRow, Tables},
+    storage::{SparseSets, Table, TableRow, Tables},
     world::{
         unsafe_world_cell::UnsafeWorldCell, EntityMut, EntityMutExcept, EntityRef, EntityRefExcept,
-        FilteredEntityMut, FilteredEntityRef,
+        FilteredEntityMut, FilteredEntityRef, Storage, SubWorlds,
     },
 };
 use alloc::vec::Vec;
@@ -25,13 +25,12 @@ use core::{
 /// This struct is created by the [`Query::iter`](crate::system::Query::iter) and
 /// [`Query::iter_mut`](crate::system::Query::iter_mut) methods.
 pub struct QueryIter<'w, 's, D: QueryData, F: QueryFilter> {
-    world: UnsafeWorldCell<'w>,
+    storage: &'w mut Storage,
     tables: &'w Tables,
     sparse_sets: &'w SparseSets,
     archetypes: &'w Archetypes,
     query_state: &'s QueryState<D, F>,
     cursor: QueryIterationCursor<'w, 's, D, F>,
-    sub_storage: SubWorldId,
 }
 
 impl<'w, 's, D: QueryData, F: QueryFilter> QueryIter<'w, 's, D, F> {
@@ -39,21 +38,20 @@ impl<'w, 's, D: QueryData, F: QueryFilter> QueryIter<'w, 's, D, F> {
     /// - `world` must have permission to access any of the components registered in `query_state`.
     /// - `world` must be the same one used to initialize `query_state`.
     pub(crate) unsafe fn new(
-        world: UnsafeWorldCell<'w>,
+        storage: &'w mut Storage,
         query_state: &'s QueryState<D, F>,
         last_run: Tick,
         this_run: Tick,
     ) -> Self {
         QueryIter {
-            world,
+            storage,
             query_state,
             // SAFETY: We only access table data that has been registered in `query_state`.
-            tables: &world.sub_storages()[query_state.sub_storage].tables,
-            sparse_sets: &world.sub_storages()[query_state.sub_storage].sparse_sets,
-            archetypes: world.archetypes(),
+            tables: &storage.tables,
+            sparse_sets: &storage.sparse_sets,
+            archetypes: storage.archetypes(),
             // SAFETY: The invariants are upheld by the caller.
-            cursor: unsafe { QueryIterationCursor::init(world, query_state, last_run, this_run) },
-            sub_storage: query_state.sub_storage,
+            cursor: unsafe { QueryIterationCursor::init(storage, query_state, last_run, this_run) },
         }
     }
 
@@ -87,13 +85,12 @@ impl<'w, 's, D: QueryData, F: QueryFilter> QueryIter<'w, 's, D, F> {
         D: ReadOnlyQueryData,
     {
         QueryIter {
-            world: self.world,
+            storage: self.storage,
             tables: self.tables,
             sparse_sets: self.sparse_sets,
             archetypes: self.archetypes,
             query_state: self.query_state,
             cursor: self.cursor.clone(),
-            sub_storage: self.sub_storage,
         }
     }
 
@@ -123,13 +120,12 @@ impl<'w, 's, D: QueryData, F: QueryFilter> QueryIter<'w, 's, D, F> {
     /// ```
     pub fn remaining_mut(&mut self) -> QueryIter<'_, 's, D, F> {
         QueryIter {
-            world: self.world,
+            storage: self.storage,
             tables: self.tables,
             sparse_sets: self.sparse_sets,
             archetypes: self.archetypes,
             query_state: self.query_state,
             cursor: self.cursor.reborrow(),
-            sub_storage: self.sub_storage,
         }
     }
 
@@ -1017,7 +1013,7 @@ where
             archetypes: world.archetypes(),
             // SAFETY: We only access table data that has been registered in `query_state`.
             // This means `world` has permission to access the data we use.
-            storages: world.sub_storages(),
+            storages: world.storages(),
             fetch,
             entity_iter: entity_list.into_iter(),
         }
@@ -1166,7 +1162,7 @@ impl<'w, 's, D: QueryData, F: QueryFilter, I: Iterator<Item: EntityBorrow>>
             archetypes: world.archetypes(),
             // SAFETY: We only access table data that has been registered in `query_state`.
             // This means `world` has permission to access the data we use.
-            storages: world.sub_storages(),
+            storages: world.storages(),
             fetch,
             filter,
             entity_iter: entity_list.into_iter(),
@@ -1970,7 +1966,7 @@ impl<'w, 's, D: QueryData, F: QueryFilter, I: Iterator<Item = Entity>>
             archetypes: world.archetypes(),
             // SAFETY: We only access table data that has been registered in `query_state`.
             // This means `world` has permission to access the data we use.
-            storages: world.sub_storages(),
+            storages: world.storages(),
             fetch,
             entity_iter: entity_list.into_iter(),
         }
@@ -2208,8 +2204,8 @@ impl<'w, 's, D: QueryData, F: QueryFilter, const K: usize> QueryCombinationIter<
         QueryCombinationIter {
             query_state,
             // SAFETY: We only access table data that has been registered in `query_state`.
-            tables: &world.sub_storages()[query_state.sub_storage].tables,
-            sparse_sets: &world.sub_storages()[query_state.sub_storage].sparse_sets,
+            tables: &world.storages()[query_state.sub_storage].tables,
+            sparse_sets: &world.storages()[query_state.sub_storage].sparse_sets,
             archetypes: world.archetypes(),
             cursors: array.assume_init(),
         }
@@ -2384,14 +2380,14 @@ impl<'w, 's, D: QueryData, F: QueryFilter> QueryIterationCursor<'w, 's, D, F> {
     /// - `world` must have permission to access any of the components registered in `query_state`.
     /// - `world` must be the same one used to initialize `query_state`.
     unsafe fn init_empty(
-        world: UnsafeWorldCell<'w>,
+        storage: &'w mut Storage,
         query_state: &'s QueryState<D, F>,
         last_run: Tick,
         this_run: Tick,
     ) -> Self {
         QueryIterationCursor {
             storage_id_iter: [].iter(),
-            ..Self::init(world, query_state, last_run, this_run)
+            ..Self::init(storage, query_state, last_run, this_run)
         }
     }
 
@@ -2399,13 +2395,13 @@ impl<'w, 's, D: QueryData, F: QueryFilter> QueryIterationCursor<'w, 's, D, F> {
     /// - `world` must have permission to access any of the components registered in `query_state`.
     /// - `world` must be the same one used to initialize `query_state`.
     unsafe fn init(
-        world: UnsafeWorldCell<'w>,
+        storage: &'w mut Storage,
         query_state: &'s QueryState<D, F>,
         last_run: Tick,
         this_run: Tick,
     ) -> Self {
-        let fetch = D::init_fetch(world, &query_state.fetch_state, last_run, this_run);
-        let filter = F::init_fetch(world, &query_state.filter_state, last_run, this_run);
+        let fetch = D::init_fetch(storage, &query_state.fetch_state, last_run, this_run);
+        let filter = F::init_fetch(storage, &query_state.filter_state, last_run, this_run);
         QueryIterationCursor {
             fetch,
             filter,

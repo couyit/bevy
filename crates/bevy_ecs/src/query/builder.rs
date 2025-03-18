@@ -3,10 +3,10 @@ use core::marker::PhantomData;
 use crate::{
     component::{ComponentId, StorageType},
     prelude::*,
-    storage::{MainSubWorld, SubWorld, SubWorldStorage},
+    world::Storage,
 };
 
-use super::{FilteredAccess, QueryData, QueryFilter};
+use super::{FilteredComponentAccess, QueryData, QueryFilter};
 
 /// Builder struct to create [`QueryState`] instances at runtime.
 ///
@@ -36,27 +36,27 @@ use super::{FilteredAccess, QueryData, QueryFilter};
 /// // Consume the QueryState
 /// let (entity, b) = query.single(&world);
 /// ```
-pub struct QueryBuilder<'w, D: QueryData = (), F: QueryFilter = (), S: SubWorld = MainSubWorld> {
-    access: FilteredAccess<ComponentId>,
-    world: &'w mut World,
+pub struct QueryBuilder<'w, D: QueryData = (), F: QueryFilter = ()> {
+    access: FilteredComponentAccess<ComponentId>,
+    storage: &'w mut Storage,
     or: bool,
     first: bool,
-    _marker: PhantomData<(D, F, S)>,
+    _marker: PhantomData<(D, F)>,
 }
 
-impl<'w, D: QueryData, F: QueryFilter, S: SubWorld> QueryBuilder<'w, D, F, S> {
+impl<'w, D: QueryData, F: QueryFilter> QueryBuilder<'w, D, F> {
     /// Creates a new builder with the accesses required for `Q` and `F`
-    pub fn new(world: &'w mut World) -> Self {
-        let fetch_state = D::init_state(world);
-        let filter_state = F::init_state(world);
+    pub fn new(storage: &'w mut Storage) -> Self {
+        let fetch_state = D::init_state(storage);
+        let filter_state = F::init_state(storage);
 
-        let mut access = FilteredAccess::default();
+        let mut access = FilteredComponentAccess::default();
         D::update_component_access(&fetch_state, &mut access);
 
         // Use a temporary empty FilteredAccess for filters. This prevents them from conflicting with the
         // main Query's `fetch_state` access. Filters are allowed to conflict with the main query fetch
         // because they are evaluated *before* a specific reference is constructed.
-        let mut filter_access = FilteredAccess::default();
+        let mut filter_access = FilteredComponentAccess::default();
         F::update_component_access(&filter_state, &mut filter_access);
 
         // Merge the temporary filter access with the main access. This ensures that filter access is
@@ -65,10 +65,10 @@ impl<'w, D: QueryData, F: QueryFilter, S: SubWorld> QueryBuilder<'w, D, F, S> {
 
         Self {
             access,
-            world,
+            storage,
             or: false,
             first: false,
-            _marker: PhantomData::<(D, F, S)>,
+            _marker: PhantomData::<(D, F)>,
         }
     }
 
@@ -95,18 +95,18 @@ impl<'w, D: QueryData, F: QueryFilter, S: SubWorld> QueryBuilder<'w, D, F, S> {
             && self.access.without_filters().all(is_dense)
     }
 
-    /// Returns a reference to the world passed to [`Self::new`].
-    pub fn world(&self) -> &World {
-        self.world
+    /// Returns a reference to the storage passed to [`Self::new`].
+    pub fn storage(&self) -> &Storage {
+        self.storage
     }
 
     /// Returns a mutable reference to the world passed to [`Self::new`].
-    pub fn world_mut(&mut self) -> &mut World {
-        self.world
+    pub fn storage_mut(&mut self) -> &mut Storage {
+        self.storage
     }
 
     /// Adds access to self's underlying [`FilteredAccess`] respecting [`Self::or`] and [`Self::and`]
-    pub fn extend_access(&mut self, mut access: FilteredAccess<ComponentId>) {
+    pub fn extend_access(&mut self, mut access: FilteredComponentAccess<ComponentId>) {
         if self.or {
             if self.first {
                 access.required.clear();
@@ -123,7 +123,7 @@ impl<'w, D: QueryData, F: QueryFilter, S: SubWorld> QueryBuilder<'w, D, F, S> {
     /// Adds accesses required for `T` to self.
     pub fn data<T: QueryData>(&mut self) -> &mut Self {
         let state = T::init_state(self.world);
-        let mut access = FilteredAccess::default();
+        let mut access = FilteredComponentAccess::default();
         T::update_component_access(&state, &mut access);
         self.extend_access(access);
         self
@@ -132,7 +132,7 @@ impl<'w, D: QueryData, F: QueryFilter, S: SubWorld> QueryBuilder<'w, D, F, S> {
     /// Adds filter from `T` to self.
     pub fn filter<T: QueryFilter>(&mut self) -> &mut Self {
         let state = T::init_state(self.world);
-        let mut access = FilteredAccess::default();
+        let mut access = FilteredComponentAccess::default();
         T::update_component_access(&state, &mut access);
         self.extend_access(access);
         self
@@ -146,7 +146,7 @@ impl<'w, D: QueryData, F: QueryFilter, S: SubWorld> QueryBuilder<'w, D, F, S> {
 
     /// Adds [`With<T>`] to the [`FilteredAccess`] of self from a runtime [`ComponentId`].
     pub fn with_id(&mut self, id: ComponentId) -> &mut Self {
-        let mut access = FilteredAccess::default();
+        let mut access = FilteredComponentAccess::default();
         access.and_with(id);
         self.extend_access(access);
         self
@@ -160,7 +160,7 @@ impl<'w, D: QueryData, F: QueryFilter, S: SubWorld> QueryBuilder<'w, D, F, S> {
 
     /// Adds [`Without<T>`] to the [`FilteredAccess`] of self from a runtime [`ComponentId`].
     pub fn without_id(&mut self, id: ComponentId) -> &mut Self {
-        let mut access = FilteredAccess::default();
+        let mut access = FilteredComponentAccess::default();
         access.and_without(id);
         self.extend_access(access);
         self
@@ -232,7 +232,7 @@ impl<'w, D: QueryData, F: QueryFilter, S: SubWorld> QueryBuilder<'w, D, F, S> {
     }
 
     /// Returns a reference to the [`FilteredAccess`] that will be provided to the built [`Query`].
-    pub fn access(&self) -> &FilteredAccess<ComponentId> {
+    pub fn access(&self) -> &FilteredComponentAccess<ComponentId> {
         &self.access
     }
 
@@ -254,7 +254,7 @@ impl<'w, D: QueryData, F: QueryFilter, S: SubWorld> QueryBuilder<'w, D, F, S> {
 
         NewD::set_access(&mut fetch_state, &self.access);
 
-        let mut access = FilteredAccess::default();
+        let mut access = FilteredComponentAccess::default();
         NewD::update_component_access(&fetch_state, &mut access);
         NewF::update_component_access(&filter_state, &mut access);
 

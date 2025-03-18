@@ -78,14 +78,12 @@ use crate::{
         masks::{IdentifierMask, HIGH_MASK},
         Identifier,
     },
-    query::DebugCheckedUnwrap,
-    storage::{SparseSetIndex, SubWorldId, SubWorlds, TableId, TableRow},
+    storage::{SparseSetIndex, TableId, TableRow},
 };
 use alloc::vec::Vec;
 use bevy_platform_support::sync::atomic::Ordering;
-use core::{fmt, hash::Hash, mem, num::NonZero, sync::atomic::AtomicU32};
+use core::{fmt, hash::Hash, mem, num::NonZero};
 use log::warn;
-use std::sync::Arc;
 
 #[cfg(feature = "track_location")]
 use core::panic::Location;
@@ -579,21 +577,16 @@ pub struct Entities {
     /// [`flush`]: Entities::flush
     pending: Vec<u32>,
     free_cursor: AtomicIdCursor,
-    reserved_counts: Arc<Vec<AtomicU32>>,
     /// Stores the number of free entities for [`len`](Entities::len)
     len: u32,
 }
 
 impl Entities {
-    pub(crate) fn new() -> Self {
-        let mut reserved_counts = Vec::new();
-        reserved_counts.push(AtomicU32::new(0));
-
+    pub(crate) const fn new() -> Self {
         Entities {
             meta: Vec::new(),
             pending: Vec::new(),
             free_cursor: AtomicIdCursor::new(0),
-            reserved_counts: Arc::new(reserved_counts),
             len: 0,
         }
     }
@@ -609,11 +602,7 @@ impl Entities {
         clippy::unnecessary_fallible_conversions,
         reason = "`IdCursor::try_from` may fail on 32-bit platforms."
     )]
-    pub fn reserve_entities(
-        &self,
-        count: u32,
-        sub_storage: SubWorldId,
-    ) -> ReserveEntitiesIterator {
+    pub fn reserve_entities(&self, count: u32) -> ReserveEntitiesIterator {
         // Use one atomic subtract to grab a range of new IDs. The range might be
         // entirely nonnegative, meaning all IDs come from the freelist, or entirely
         // negative, meaning they are all new IDs to allocate, or a mix of both.
@@ -651,8 +640,6 @@ impl Entities {
             (new_id_start, new_id_end)
         };
 
-        self.reserved_counts[sub_storage.as_usize()].fetch_add(count, Ordering::Relaxed);
-
         ReserveEntitiesIterator {
             meta: &self.meta[..],
             freelist_indices: self.pending[freelist_range].iter(),
@@ -663,16 +650,12 @@ impl Entities {
     /// Reserve one entity ID concurrently.
     ///
     /// Equivalent to `self.reserve_entities(1).next().unwrap()`, but more efficient.
-    pub fn reserve_entity(&self) -> Entity {
-        self.reserve_entity_in_sub_storage(SubWorlds::MAIN_STORAGE)
-    }
 
-    pub fn reserve_entity_in_sub_storage(&self, sub_storage: SubWorldId) -> Entity {
+    pub fn reserve_entity(&self) -> Entity {
         let n = self.free_cursor.fetch_sub(1, Ordering::Relaxed);
         if n > 0 {
             // Allocate from the freelist.
             let index = self.pending[(n - 1) as usize];
-            self.reserved_counts[sub_storage.as_usize()].fetch_add(1, Ordering::Relaxed);
             Entity::from_raw_and_generation(index, self.meta[index as usize].generation)
         } else {
             // Grab a new ID, outside the range of `meta.len()`. `flush()` must
@@ -680,7 +663,6 @@ impl Entities {
             //
             // As `self.free_cursor` goes more and more negative, we return IDs farther
             // and farther beyond `meta.len()`.
-            self.reserved_counts[sub_storage.as_usize()].fetch_add(1, Ordering::Relaxed);
             Entity::from_raw(
                 u32::try_from(self.meta.len() as IdCursor - n).expect("too many entities"),
             )
@@ -933,22 +915,9 @@ impl Entities {
     ///
     /// Note: freshly-allocated entities (ones which don't come from the pending list) are guaranteed
     /// to be initialized with the invalid archetype.
-    pub unsafe fn flush(
-        &mut self,
-        mut init: impl FnMut(Entity, &mut EntityLocation, SubWorldId),
-    ) {
+    pub unsafe fn flush(&mut self, mut init: impl FnMut(Entity, &mut EntityLocation)) {
         let free_cursor = self.free_cursor.get_mut();
         let current_free_cursor = *free_cursor;
-
-        let reserved_counts = self.reserved_counts.clone();
-        let mut reserved_counts =
-            reserved_counts
-                .iter()
-                .enumerate()
-                .flat_map(|(sub_storage, count)| {
-                    (0..count.load(Ordering::Relaxed))
-                        .map(move |_| SubWorldId(sub_storage as u32))
-                });
 
         let new_free_cursor = if current_free_cursor >= 0 {
             current_free_cursor as usize
@@ -961,7 +930,6 @@ impl Entities {
                 init(
                     Entity::from_raw_and_generation(index as u32, meta.generation),
                     &mut meta.location,
-                    reserved_counts.next().debug_checked_unwrap(),
                 );
             }
 
@@ -975,13 +943,8 @@ impl Entities {
             init(
                 Entity::from_raw_and_generation(index, meta.generation),
                 &mut meta.location,
-                reserved_counts.next().debug_checked_unwrap(),
             );
         }
-
-        self.reserved_counts.iter().for_each(|count| {
-            count.store(0, Ordering::Relaxed);
-        });
     }
 
     /// Flushes all reserved entities to an "invalid" state. Attempting to retrieve them will return `None`
@@ -990,7 +953,7 @@ impl Entities {
         // SAFETY: as per `flush` safety docs, the archetype id can be set to [`ArchetypeId::INVALID`] if
         // the [`Entity`] has not been assigned to an [`Archetype`][crate::archetype::Archetype], which is the case here
         unsafe {
-            self.flush(|_entity, location, _sub_storage| {
+            self.flush(|_entity, location| {
                 location.archetype_id = ArchetypeId::INVALID;
             });
         }
@@ -1123,8 +1086,6 @@ pub struct EntityLocation {
     /// [`Archetype`]: crate::archetype::Archetype
     pub archetype_row: ArchetypeRow,
 
-    pub sub_storage: SubWorldId,
-
     /// The ID of the [`Table`] the [`Entity`] belongs to.
     ///
     /// [`Table`]: crate::storage::Table
@@ -1141,7 +1102,6 @@ impl EntityLocation {
     pub(crate) const INVALID: EntityLocation = EntityLocation {
         archetype_id: ArchetypeId::INVALID,
         archetype_row: ArchetypeRow::INVALID,
-        sub_storage: SubWorldId::INVALID,
         table_id: TableId::INVALID,
         table_row: TableRow::INVALID,
     };

@@ -8,8 +8,8 @@ use crate::{
     entity::{ComponentCloneCtx, Entity},
     query::DebugCheckedUnwrap,
     storage::{SparseSetIndex, SparseSets, Table, TableRow},
-    system::{Commands, Local},
-    world::{DeferredWorld, World},
+    system::{Commands, Local, SystemParam},
+    world::{DeferredWorld, FromWorld, SubWorld, World},
 };
 #[cfg(feature = "bevy_reflect")]
 use alloc::boxed::Box;
@@ -21,11 +21,11 @@ use bevy_ptr::{OwningPtr, UnsafeCellDeref};
 #[cfg(feature = "bevy_reflect")]
 use bevy_reflect::Reflect;
 use bevy_utils::TypeIdMap;
-use core::any::Any;
 use core::{
     alloc::Layout, any::TypeId, cell::UnsafeCell, fmt::Debug, marker::PhantomData, mem::needs_drop,
     panic::Location,
 };
+use core::{any::Any, sync::atomic::AtomicU32};
 use disqualified::ShortName;
 use thiserror::Error;
 
@@ -1722,9 +1722,9 @@ impl ComponentTicks {
 /// }
 /// ```
 #[derive(SystemParam)]
-pub struct ComponentIdFor<'s, T: Component>(Local<'s, InitComponentId<T>>);
+pub struct ComponentIdFor<'s, T: Component, S: SubWorld>(Local<'s, InitComponentId<T, S>>);
 
-impl<T: Component> ComponentIdFor<'_, T> {
+impl<T: Component, S: SubWorld> ComponentIdFor<'_, T, S> {
     /// Gets the [`ComponentId`] for the type `T`.
     #[inline]
     pub fn get(&self) -> ComponentId {
@@ -1732,14 +1732,14 @@ impl<T: Component> ComponentIdFor<'_, T> {
     }
 }
 
-impl<T: Component> core::ops::Deref for ComponentIdFor<'_, T> {
+impl<T: Component, S: SubWorld> core::ops::Deref for ComponentIdFor<'_, T, S> {
     type Target = ComponentId;
     fn deref(&self) -> &Self::Target {
         &self.0.component_id
     }
 }
 
-impl<T: Component> From<ComponentIdFor<'_, T>> for ComponentId {
+impl<T: Component, S: SubWorld> From<ComponentIdFor<'_, T, S>> for ComponentId {
     #[inline]
     fn from(to_component_id: ComponentIdFor<T>) -> ComponentId {
         *to_component_id
@@ -1747,9 +1747,26 @@ impl<T: Component> From<ComponentIdFor<'_, T>> for ComponentId {
 }
 
 /// Initializes the [`ComponentId`] for a specific type when used with [`FromWorld`].
-struct InitComponentId<T: Component> {
+struct InitComponentId<T: Component, S: SubWorld> {
     component_id: ComponentId,
-    marker: PhantomData<T>,
+    marker: PhantomData<(T, S)>,
+}
+
+impl<T: Component, S: SubWorld> FromWorld for InitComponentId<T, S> {
+    fn from_world(world: &mut World) -> Self {
+        let id = unsafe {
+            world
+                .sub_worlds
+                .indices
+                .get(&TypeId::of::<S>())
+                .debug_checked_unwrap()
+        };
+
+        Self {
+            component_id: world.sub_worlds[id].register_component::<T>(),
+            marker: PhantomData,
+        }
+    }
 }
 
 /// An error returned when the registration of a required component fails.

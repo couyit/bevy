@@ -109,7 +109,7 @@ mod tests {
         component::{Component, ComponentId, Components, Tick},
         prelude::{AnyOf, Changed, Entity, Or, QueryState, Res, ResMut, Resource, With, Without},
         query::{
-            ArchetypeFilter, FilteredAccess, Has, QueryCombinationIter, QueryData,
+            ArchetypeFilter, FilteredComponentAccess, Has, QueryCombinationIter, QueryData,
             ReadOnlyQueryData, WorldQuery,
         },
         schedule::{IntoSystemConfigs, Schedule},
@@ -844,7 +844,7 @@ mod tests {
 
         fn update_component_access(
             &component_id: &Self::State,
-            access: &mut FilteredAccess<ComponentId>,
+            access: &mut FilteredComponentAccess<ComponentId>,
         ) {
             assert!(
                 !access.access().has_resource_write(component_id),
