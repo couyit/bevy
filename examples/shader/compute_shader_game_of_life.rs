@@ -158,7 +158,7 @@ struct GameOfLifePipeline {
 }
 
 impl FromWorld for GameOfLifePipeline {
-    fn from_world(world: &mut World) -> Self {
+    fn from_world(world: &mut SubWorld) -> Self {
         let render_device = world.resource::<RenderDevice>();
         let texture_bind_group_layout = render_device.create_bind_group_layout(
             "GameOfLifeImages",
@@ -218,7 +218,7 @@ impl Default for GameOfLifeNode {
 }
 
 impl render_graph::Node for GameOfLifeNode {
-    fn update(&mut self, world: &mut World) {
+    fn update(&mut self, world: &mut SubWorld) {
         let pipeline = world.resource::<GameOfLifePipeline>();
         let pipeline_cache = world.resource::<PipelineCache>();
 
@@ -256,7 +256,7 @@ impl render_graph::Node for GameOfLifeNode {
         &self,
         _graph: &mut render_graph::RenderGraphContext,
         render_context: &mut RenderContext,
-        world: &World,
+        world: &SubWorld,
     ) -> Result<(), render_graph::NodeRunError> {
         let bind_groups = &world.resource::<GameOfLifeImageBindGroups>().0;
         let pipeline_cache = world.resource::<PipelineCache>();

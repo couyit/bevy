@@ -49,7 +49,7 @@ query, q  Query for entities
     e.g. &A || &B, &mut C, D, ?E";
 
 fn main() {
-    let mut world = World::new();
+    let mut world = SubWorld::new();
     let mut lines = std::io::stdin().lines();
     let mut component_names = HashMap::<String, ComponentId>::new();
     let mut component_info = HashMap::<ComponentId, ComponentInfo>::new();

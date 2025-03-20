@@ -5,7 +5,7 @@ use bevy_ecs::{
     component::Component,
     entity::Entity,
     system::{Query, SystemState},
-    world::World,
+    world::SubWorld,
 };
 use criterion::Criterion;
 use rand::{prelude::SliceRandom, SeedableRng};
@@ -30,14 +30,14 @@ fn deterministic_rand() -> ChaCha8Rng {
     ChaCha8Rng::seed_from_u64(42)
 }
 
-fn setup<T: Component + Default>(entity_count: u32) -> World {
-    let mut world = World::default();
+fn setup<T: Component + Default>(entity_count: u32) -> SubWorld {
+    let mut world = SubWorld::default();
     world.spawn_batch((0..entity_count).map(|_| T::default()));
     black_box(world)
 }
 
-fn setup_wide<T: Bundle<Effect: NoBundleEffect> + Default>(entity_count: u32) -> World {
-    let mut world = World::default();
+fn setup_wide<T: Bundle<Effect: NoBundleEffect> + Default>(entity_count: u32) -> SubWorld {
+    let mut world = SubWorld::default();
     world.spawn_batch((0..entity_count).map(|_| T::default()));
     black_box(world)
 }
@@ -265,7 +265,7 @@ pub fn query_get(criterion: &mut Criterion) {
 
     for entity_count in RANGE.map(|i| i * 10_000) {
         group.bench_function(format!("{}_entities_table", entity_count), |bencher| {
-            let mut world = World::default();
+            let mut world = SubWorld::default();
             let mut entities: Vec<_> = world
                 .spawn_batch((0..entity_count).map(|_| Table::default()))
                 .collect();
@@ -284,7 +284,7 @@ pub fn query_get(criterion: &mut Criterion) {
             });
         });
         group.bench_function(format!("{}_entities_sparse", entity_count), |bencher| {
-            let mut world = World::default();
+            let mut world = SubWorld::default();
             let mut entities: Vec<_> = world
                 .spawn_batch((0..entity_count).map(|_| Sparse::default()))
                 .collect();
@@ -314,7 +314,7 @@ pub fn query_get_many<const N: usize>(criterion: &mut Criterion) {
 
     for entity_count in RANGE.map(|i| i * 10_000) {
         group.bench_function(format!("{}_calls_table", entity_count), |bencher| {
-            let mut world = World::default();
+            let mut world = SubWorld::default();
             let mut entity_groups: Vec<_> = (0..entity_count)
                 .map(|_| [(); N].map(|_| world.spawn(Table::default()).id()))
                 .collect();
@@ -337,7 +337,7 @@ pub fn query_get_many<const N: usize>(criterion: &mut Criterion) {
             });
         });
         group.bench_function(format!("{}_calls_sparse", entity_count), |bencher| {
-            let mut world = World::default();
+            let mut world = SubWorld::default();
             let mut entity_groups: Vec<_> = (0..entity_count)
                 .map(|_| [(); N].map(|_| world.spawn(Sparse::default()).id()))
                 .collect();

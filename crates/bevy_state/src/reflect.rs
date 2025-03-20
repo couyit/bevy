@@ -1,6 +1,6 @@
 use crate::state::{FreelyMutableState, NextState, State, States};
 
-use bevy_ecs::{reflect::from_reflect_with_fallback, world::World};
+use bevy_ecs::{reflect::from_reflect_with_fallback, world::SubWorld};
 use bevy_reflect::{FromType, Reflect, TypePath, TypeRegistry};
 
 /// A struct used to operate on the reflected [`States`] trait of a type.
@@ -14,7 +14,7 @@ pub struct ReflectState(ReflectStateFns);
 #[derive(Clone)]
 pub struct ReflectStateFns {
     /// Function pointer implementing [`ReflectState::reflect()`].
-    pub reflect: fn(&World) -> Option<&dyn Reflect>,
+    pub reflect: fn(&SubWorld) -> Option<&dyn Reflect>,
 }
 
 impl ReflectStateFns {
@@ -30,7 +30,7 @@ impl ReflectStateFns {
 
 impl ReflectState {
     /// Gets the value of this [`States`] type from the world as a reflected reference.
-    pub fn reflect<'a>(&self, world: &'a World) -> Option<&'a dyn Reflect> {
+    pub fn reflect<'a>(&self, world: &'a SubWorld) -> Option<&'a dyn Reflect> {
         (self.0.reflect)(world)
     }
 }
@@ -58,7 +58,7 @@ pub struct ReflectFreelyMutableState(ReflectFreelyMutableStateFns);
 #[derive(Clone)]
 pub struct ReflectFreelyMutableStateFns {
     /// Function pointer implementing [`ReflectFreelyMutableState::set_next_state()`].
-    pub set_next_state: fn(&mut World, &dyn Reflect, &TypeRegistry),
+    pub set_next_state: fn(&mut SubWorld, &dyn Reflect, &TypeRegistry),
 }
 
 impl ReflectFreelyMutableStateFns {
@@ -74,7 +74,7 @@ impl ReflectFreelyMutableStateFns {
 
 impl ReflectFreelyMutableState {
     /// Tentatively set a pending state transition to a reflected [`ReflectFreelyMutableState`].
-    pub fn set_next_state(&self, world: &mut World, state: &dyn Reflect, registry: &TypeRegistry) {
+    pub fn set_next_state(&self, world: &mut SubWorld, state: &dyn Reflect, registry: &TypeRegistry) {
         (self.0.set_next_state)(world, state, registry);
     }
 }

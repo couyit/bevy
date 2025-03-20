@@ -37,7 +37,7 @@ use super::{FilteredAccess, QueryData, QueryFilter};
 /// ```
 pub struct QueryBuilder<'w, D: QueryData = (), F: QueryFilter = ()> {
     access: FilteredAccess<ComponentId>,
-    world: &'w mut World,
+    world: &'w mut SubWorld,
     or: bool,
     first: bool,
     _marker: PhantomData<(D, F)>,
@@ -45,7 +45,7 @@ pub struct QueryBuilder<'w, D: QueryData = (), F: QueryFilter = ()> {
 
 impl<'w, D: QueryData, F: QueryFilter> QueryBuilder<'w, D, F> {
     /// Creates a new builder with the accesses required for `Q` and `F`
-    pub fn new(world: &'w mut World) -> Self {
+    pub fn new(world: &'w mut SubWorld) -> Self {
         let fetch_state = D::init_state(world);
         let filter_state = F::init_state(world);
 
@@ -95,12 +95,12 @@ impl<'w, D: QueryData, F: QueryFilter> QueryBuilder<'w, D, F> {
     }
 
     /// Returns a reference to the world passed to [`Self::new`].
-    pub fn world(&self) -> &World {
+    pub fn world(&self) -> &SubWorld {
         self.world
     }
 
     /// Returns a mutable reference to the world passed to [`Self::new`].
-    pub fn world_mut(&mut self) -> &mut World {
+    pub fn world_mut(&mut self) -> &mut SubWorld {
         self.world
     }
 
@@ -289,7 +289,7 @@ mod tests {
 
     #[test]
     fn builder_with_without_static() {
-        let mut world = World::new();
+        let mut world = SubWorld::new();
         let entity_a = world.spawn((A(0), B(0))).id();
         let entity_b = world.spawn((A(0), C(0))).id();
 
@@ -308,7 +308,7 @@ mod tests {
 
     #[test]
     fn builder_with_without_dynamic() {
-        let mut world = World::new();
+        let mut world = SubWorld::new();
         let entity_a = world.spawn((A(0), B(0))).id();
         let entity_b = world.spawn((A(0), C(0))).id();
         let component_id_a = world.register_component::<A>();
@@ -330,7 +330,7 @@ mod tests {
 
     #[test]
     fn builder_or() {
-        let mut world = World::new();
+        let mut world = SubWorld::new();
         world.spawn((A(0), B(0)));
         world.spawn(B(0));
         world.spawn(C(0));
@@ -364,7 +364,7 @@ mod tests {
 
     #[test]
     fn builder_transmute() {
-        let mut world = World::new();
+        let mut world = SubWorld::new();
         world.spawn(A(0));
         world.spawn((A(1), B(0)));
         let mut query = QueryBuilder::<()>::new(&mut world)
@@ -377,7 +377,7 @@ mod tests {
 
     #[test]
     fn builder_static_components() {
-        let mut world = World::new();
+        let mut world = SubWorld::new();
         let entity = world.spawn((A(0), B(1))).id();
 
         let mut query = QueryBuilder::<FilteredEntityRef>::new(&mut world)
@@ -398,7 +398,7 @@ mod tests {
 
     #[test]
     fn builder_dynamic_components() {
-        let mut world = World::new();
+        let mut world = SubWorld::new();
         let entity = world.spawn((A(0), B(1))).id();
         let component_id_a = world.register_component::<A>();
         let component_id_b = world.register_component::<B>();
@@ -432,7 +432,7 @@ mod tests {
         #[component(storage = "SparseSet")]
         struct Sparse;
 
-        let mut world = World::new();
+        let mut world = SubWorld::new();
 
         world.spawn(Dense);
         world.spawn((Dense, Sparse));

@@ -5,7 +5,7 @@ use crate::{
     },
     renderer::RenderContext,
 };
-use bevy_ecs::{define_label, intern::Interned, prelude::World, resource::Resource};
+use bevy_ecs::{define_label, intern::Interned, prelude::SubWorld, resource::Resource};
 use bevy_platform_support::collections::HashMap;
 use core::fmt::Debug;
 
@@ -83,7 +83,7 @@ pub struct GraphInput;
 
 impl RenderGraph {
     /// Updates all nodes and sub graphs of the render graph. Should be called before executing it.
-    pub fn update(&mut self, world: &mut World) {
+    pub fn update(&mut self, world: &mut SubWorld) {
         for node in self.nodes.values_mut() {
             node.node.update(world);
         }
@@ -660,7 +660,7 @@ impl Node for GraphInputNode {
         &self,
         graph: &mut RenderGraphContext,
         _render_context: &mut RenderContext,
-        _world: &World,
+        _world: &SubWorld,
     ) -> Result<(), NodeRunError> {
         for i in 0..graph.inputs().len() {
             let input = graph.inputs()[i].clone();
@@ -679,7 +679,7 @@ mod tests {
         },
         renderer::RenderContext,
     };
-    use bevy_ecs::world::{FromWorld, World};
+    use bevy_ecs::world::{FromWorld, SubWorld};
     use bevy_platform_support::collections::HashSet;
 
     #[derive(Debug, Hash, PartialEq, Eq, Clone, RenderLabel)]
@@ -722,7 +722,7 @@ mod tests {
             &self,
             _: &mut RenderGraphContext,
             _: &mut RenderContext,
-            _: &World,
+            _: &SubWorld,
         ) -> Result<(), NodeRunError> {
             Ok(())
         }
@@ -809,7 +809,7 @@ mod tests {
                 &self,
                 _: &mut RenderGraphContext,
                 _: &mut RenderContext,
-                _: &World,
+                _: &SubWorld,
             ) -> Result<(), NodeRunError> {
                 Ok(())
             }
@@ -878,13 +878,13 @@ mod tests {
                 &self,
                 _graph: &mut RenderGraphContext,
                 _render_context: &mut RenderContext,
-                _world: &World,
+                _world: &SubWorld,
             ) -> Result<(), NodeRunError> {
                 Ok(())
             }
         }
         impl FromWorld for SimpleNode {
-            fn from_world(_world: &mut World) -> Self {
+            fn from_world(_world: &mut SubWorld) -> Self {
                 Self
             }
         }

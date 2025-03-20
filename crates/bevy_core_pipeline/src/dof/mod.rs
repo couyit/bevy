@@ -25,7 +25,7 @@ use bevy_ecs::{
     resource::Resource,
     schedule::IntoScheduleConfigs as _,
     system::{lifetimeless::Read, Commands, Query, Res, ResMut},
-    world::{FromWorld, World},
+    world::{FromWorld, SubWorld},
 };
 use bevy_image::BevyDefault as _;
 use bevy_math::ops;
@@ -353,7 +353,7 @@ impl ViewNode for DepthOfFieldNode {
             depth_of_field_uniform_index,
             auxiliary_dof_texture,
         ): QueryItem<'w, Self::ViewQuery>,
-        world: &'w World,
+        world: &'w SubWorld,
     ) -> Result<(), NodeRunError> {
         let pipeline_cache = world.resource::<PipelineCache>();
         let view_uniforms = world.resource::<ViewUniforms>();
@@ -503,7 +503,7 @@ impl DepthOfField {
 }
 
 impl FromWorld for DepthOfFieldGlobalBindGroupLayout {
-    fn from_world(world: &mut World) -> Self {
+    fn from_world(world: &mut SubWorld) -> Self {
         let render_device = world.resource::<RenderDevice>();
 
         // Create the bind group layout that will be shared among all instances

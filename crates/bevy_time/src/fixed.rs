@@ -1,5 +1,5 @@
 use bevy_app::FixedMain;
-use bevy_ecs::world::World;
+use bevy_ecs::world::SubWorld;
 #[cfg(feature = "bevy_reflect")]
 use bevy_reflect::Reflect;
 use core::time::Duration;
@@ -236,7 +236,7 @@ impl Default for Fixed {
 /// [`Time<Virtual>`](Virtual) and [`Time::overstep`].
 /// You can order your systems relative to this by using
 /// [`RunFixedMainLoopSystem`](bevy_app::prelude::RunFixedMainLoopSystem).
-pub(super) fn run_fixed_main_schedule(world: &mut World) {
+pub(super) fn run_fixed_main_schedule(world: &mut SubWorld) {
     let delta = world.resource::<Time<Virtual>>().delta();
     world.resource_mut::<Time<Fixed>>().accumulate(delta);
 

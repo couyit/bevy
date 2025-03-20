@@ -38,7 +38,7 @@ impl ViewNode for TonemappingNode {
         (view_uniform_offset, target, view_tonemapping_pipeline, tonemapping): QueryItem<
             Self::ViewQuery,
         >,
-        world: &World,
+        world: &SubWorld,
     ) -> Result<(), NodeRunError> {
         let pipeline_cache = world.resource::<PipelineCache>();
         let tonemapping_pipeline = world.resource::<TonemappingPipeline>();

@@ -291,7 +291,7 @@ all_tuples!(
 mod tests {
     use crate::{
         system::{In, InMut, InRef, IntoSystem, System},
-        world::World,
+        world::SubWorld,
     };
 
     #[test]
@@ -306,7 +306,7 @@ mod tests {
             *a += b;
         }
 
-        let mut world = World::new();
+        let mut world = SubWorld::new();
         let mut by_value = IntoSystem::into_system(by_value);
         let mut by_ref = IntoSystem::into_system(by_ref);
         let mut by_mut = IntoSystem::into_system(by_mut);

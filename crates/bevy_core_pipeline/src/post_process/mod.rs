@@ -13,7 +13,7 @@ use bevy_ecs::{
     resource::Resource,
     schedule::IntoScheduleConfigs as _,
     system::{lifetimeless::Read, Commands, Query, Res, ResMut},
-    world::{FromWorld, World},
+    world::{FromWorld, SubWorld},
 };
 use bevy_image::{BevyDefault, Image};
 use bevy_reflect::{std_traits::ReflectDefault, Reflect};
@@ -277,7 +277,7 @@ impl Default for ChromaticAberration {
 }
 
 impl FromWorld for PostProcessingPipeline {
-    fn from_world(world: &mut World) -> Self {
+    fn from_world(world: &mut SubWorld) -> Self {
         let render_device = world.resource::<RenderDevice>();
 
         // Create our single bind group layout.
@@ -365,7 +365,7 @@ impl ViewNode for PostProcessingNode {
         _: &mut RenderGraphContext,
         render_context: &mut RenderContext<'w>,
         (view_target, pipeline_id, chromatic_aberration, post_processing_uniform_buffer_offsets): QueryItem<'w, Self::ViewQuery>,
-        world: &'w World,
+        world: &'w SubWorld,
     ) -> Result<(), NodeRunError> {
         let pipeline_cache = world.resource::<PipelineCache>();
         let post_processing_pipeline = world.resource::<PostProcessingPipeline>();

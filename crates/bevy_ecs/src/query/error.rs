@@ -62,12 +62,12 @@ pub enum QuerySingleError {
 
 #[cfg(test)]
 mod test {
-    use crate::{prelude::World, query::QueryEntityError};
+    use crate::{prelude::SubWorld, query::QueryEntityError};
     use bevy_ecs_macros::Component;
 
     #[test]
     fn query_does_not_match() {
-        let mut world = World::new();
+        let mut world = SubWorld::new();
 
         #[derive(Component)]
         struct Present1;

@@ -5,7 +5,7 @@ use crate::{
     bundle::{Bundle, BundleEffect, DynamicBundle, NoBundleEffect},
     entity::Entity,
     relationship::{RelatedSpawner, Relationship, RelationshipTarget},
-    world::{EntityWorldMut, World},
+    world::{EntityWorldMut, SubWorld},
 };
 use alloc::vec::Vec;
 use core::marker::PhantomData;
@@ -40,14 +40,14 @@ pub struct Spawn<B: Bundle>(pub B);
 pub trait SpawnableList<R> {
     /// Spawn this list of changes in a given [`World`] and relative to a given [`Entity`]. This is generally used
     /// for spawning "related" entities, such as children.
-    fn spawn(self, world: &mut World, entity: Entity);
+    fn spawn(self, world: &mut SubWorld, entity: Entity);
     /// Returns a size hint, which is used to reserve space for this list in a [`RelationshipTarget`]. This should be
     /// less than or equal to the actual size of the list. When in doubt, just use 0.
     fn size_hint(&self) -> usize;
 }
 
 impl<R: Relationship, B: Bundle<Effect: NoBundleEffect>> SpawnableList<R> for Vec<B> {
-    fn spawn(self, world: &mut World, entity: Entity) {
+    fn spawn(self, world: &mut SubWorld, entity: Entity) {
         let mapped_bundles = self.into_iter().map(|b| (R::from(entity), b));
         world.spawn_batch(mapped_bundles);
     }
@@ -58,7 +58,7 @@ impl<R: Relationship, B: Bundle<Effect: NoBundleEffect>> SpawnableList<R> for Ve
 }
 
 impl<R: Relationship, B: Bundle> SpawnableList<R> for Spawn<B> {
-    fn spawn(self, world: &mut World, entity: Entity) {
+    fn spawn(self, world: &mut SubWorld, entity: Entity) {
         world.spawn((R::from(entity), self.0));
     }
 
@@ -88,7 +88,7 @@ pub struct SpawnIter<I>(pub I);
 impl<R: Relationship, I: Iterator<Item = B> + Send + Sync + 'static, B: Bundle> SpawnableList<R>
     for SpawnIter<I>
 {
-    fn spawn(self, world: &mut World, entity: Entity) {
+    fn spawn(self, world: &mut SubWorld, entity: Entity) {
         for bundle in self.0 {
             world.spawn((R::from(entity), bundle));
         }
@@ -124,7 +124,7 @@ pub struct SpawnWith<F>(pub F);
 impl<R: Relationship, F: FnOnce(&mut RelatedSpawner<R>) + Send + Sync + 'static> SpawnableList<R>
     for SpawnWith<F>
 {
-    fn spawn(self, world: &mut World, entity: Entity) {
+    fn spawn(self, world: &mut SubWorld, entity: Entity) {
         world.entity_mut(entity).with_related(self.0);
     }
 
@@ -176,7 +176,7 @@ pub struct SpawnRelatedBundle<R: Relationship, L: SpawnableList<R>> {
 impl<R: Relationship, L: SpawnableList<R>> BundleEffect for SpawnRelatedBundle<R, L> {
     fn apply(self, entity: &mut EntityWorldMut) {
         let id = entity.id();
-        entity.world_scope(|world: &mut World| {
+        entity.world_scope(|world: &mut SubWorld| {
             self.list.spawn(world, id);
         });
     }

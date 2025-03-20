@@ -12,7 +12,7 @@ use bevy_ecs::{
     reflect::{AppTypeRegistry, ReflectComponent, ReflectResource},
     removal_detection::RemovedComponentEntity,
     system::{In, Local},
-    world::{EntityRef, EntityWorldMut, FilteredEntityRef, World},
+    world::{EntityRef, EntityWorldMut, FilteredEntityRef, SubWorld},
 };
 use bevy_platform_support::collections::HashMap;
 use bevy_reflect::{
@@ -481,7 +481,7 @@ fn parse_some<T: for<'de> Deserialize<'de>>(value: Option<Value>) -> Result<T, B
 }
 
 /// Handles a `bevy/get` request coming from a client.
-pub fn process_remote_get_request(In(params): In<Option<Value>>, world: &World) -> BrpResult {
+pub fn process_remote_get_request(In(params): In<Option<Value>>, world: &SubWorld) -> BrpResult {
     let BrpGetParams {
         entity,
         components,
@@ -500,7 +500,7 @@ pub fn process_remote_get_request(In(params): In<Option<Value>>, world: &World) 
 /// Handles a `bevy/get_resource` request coming from a client.
 pub fn process_remote_get_resource_request(
     In(params): In<Option<Value>>,
-    world: &World,
+    world: &SubWorld,
 ) -> BrpResult {
     let BrpGetResourceParams {
         resource: resource_path,
@@ -539,7 +539,7 @@ pub fn process_remote_get_resource_request(
 /// Handles a `bevy/get+watch` request coming from a client.
 pub fn process_remote_get_watching_request(
     In(params): In<Option<Value>>,
-    world: &World,
+    world: &SubWorld,
     mut removal_cursors: Local<HashMap<ComponentId, EventCursor<RemovedComponentEntity>>>,
 ) -> BrpResult<Option<Value>> {
     let BrpGetParams {
@@ -705,7 +705,7 @@ fn reflect_component(
 }
 
 /// Handles a `bevy/query` request coming from a client.
-pub fn process_remote_query_request(In(params): In<Option<Value>>, world: &mut World) -> BrpResult {
+pub fn process_remote_query_request(In(params): In<Option<Value>>, world: &mut SubWorld) -> BrpResult {
     let BrpQueryParams {
         data: BrpQuery {
             components,
@@ -797,7 +797,7 @@ pub fn process_remote_query_request(In(params): In<Option<Value>>, world: &mut W
 }
 
 /// Handles a `bevy/spawn` request coming from a client.
-pub fn process_remote_spawn_request(In(params): In<Option<Value>>, world: &mut World) -> BrpResult {
+pub fn process_remote_spawn_request(In(params): In<Option<Value>>, world: &mut SubWorld) -> BrpResult {
     let BrpSpawnParams { components } = parse_some(params)?;
 
     let app_type_registry = world.resource::<AppTypeRegistry>().clone();
@@ -818,7 +818,7 @@ pub fn process_remote_spawn_request(In(params): In<Option<Value>>, world: &mut W
 /// Handles a `rpc.discover` request coming from a client.
 pub fn process_remote_list_methods_request(
     In(_params): In<Option<Value>>,
-    world: &mut World,
+    world: &mut SubWorld,
 ) -> BrpResult {
     let remote_methods = world.resource::<crate::RemoteMethods>();
     let servers = match (
@@ -850,7 +850,7 @@ pub fn process_remote_list_methods_request(
 /// Handles a `bevy/insert` request (insert components) coming from a client.
 pub fn process_remote_insert_request(
     In(params): In<Option<Value>>,
-    world: &mut World,
+    world: &mut SubWorld,
 ) -> BrpResult {
     let BrpInsertParams { entity, components } = parse_some(params)?;
 
@@ -873,7 +873,7 @@ pub fn process_remote_insert_request(
 /// Handles a `bevy/insert_resource` request coming from a client.
 pub fn process_remote_insert_resource_request(
     In(params): In<Option<Value>>,
-    world: &mut World,
+    world: &mut SubWorld,
 ) -> BrpResult {
     let BrpInsertResourceParams {
         resource: resource_path,
@@ -899,7 +899,7 @@ pub fn process_remote_insert_resource_request(
 /// component.
 pub fn process_remote_mutate_component_request(
     In(params): In<Option<Value>>,
-    world: &mut World,
+    world: &mut SubWorld,
 ) -> BrpResult {
     let BrpMutateComponentParams {
         entity,
@@ -960,7 +960,7 @@ pub fn process_remote_mutate_component_request(
 /// Handles a `bevy/mutate_resource` request coming from a client.
 pub fn process_remote_mutate_resource_request(
     In(params): In<Option<Value>>,
-    world: &mut World,
+    world: &mut SubWorld,
 ) -> BrpResult {
     let BrpMutateResourceParams {
         resource: resource_path,
@@ -1011,7 +1011,7 @@ pub fn process_remote_mutate_resource_request(
 /// Handles a `bevy/remove` request (remove components) coming from a client.
 pub fn process_remote_remove_request(
     In(params): In<Option<Value>>,
-    world: &mut World,
+    world: &mut SubWorld,
 ) -> BrpResult {
     let BrpRemoveParams { entity, components } = parse_some(params)?;
 
@@ -1033,7 +1033,7 @@ pub fn process_remote_remove_request(
 /// Handles a `bevy/remove_resource` request coming from a client.
 pub fn process_remote_remove_resource_request(
     In(params): In<Option<Value>>,
-    world: &mut World,
+    world: &mut SubWorld,
 ) -> BrpResult {
     let BrpRemoveResourceParams {
         resource: resource_path,
@@ -1052,7 +1052,7 @@ pub fn process_remote_remove_resource_request(
 /// Handles a `bevy/destroy` (despawn entity) request coming from a client.
 pub fn process_remote_destroy_request(
     In(params): In<Option<Value>>,
-    world: &mut World,
+    world: &mut SubWorld,
 ) -> BrpResult {
     let BrpDestroyParams { entity } = parse_some(params)?;
 
@@ -1064,7 +1064,7 @@ pub fn process_remote_destroy_request(
 /// Handles a `bevy/reparent` request coming from a client.
 pub fn process_remote_reparent_request(
     In(params): In<Option<Value>>,
-    world: &mut World,
+    world: &mut SubWorld,
 ) -> BrpResult {
     let BrpReparentParams {
         entities,
@@ -1093,7 +1093,7 @@ pub fn process_remote_reparent_request(
 }
 
 /// Handles a `bevy/list` request (list all components) coming from a client.
-pub fn process_remote_list_request(In(params): In<Option<Value>>, world: &World) -> BrpResult {
+pub fn process_remote_list_request(In(params): In<Option<Value>>, world: &SubWorld) -> BrpResult {
     let app_type_registry = world.resource::<AppTypeRegistry>();
     let type_registry = app_type_registry.read();
 
@@ -1128,7 +1128,7 @@ pub fn process_remote_list_request(In(params): In<Option<Value>>, world: &World)
 /// Handles a `bevy/list_resources` request coming from a client.
 pub fn process_remote_list_resources_request(
     In(_params): In<Option<Value>>,
-    world: &World,
+    world: &SubWorld,
 ) -> BrpResult {
     let mut response = BrpListResourcesResponse::default();
 
@@ -1149,7 +1149,7 @@ pub fn process_remote_list_resources_request(
 /// Handles a `bevy/list+watch` request coming from a client.
 pub fn process_remote_list_watching_request(
     In(params): In<Option<Value>>,
-    world: &World,
+    world: &SubWorld,
     mut removal_cursors: Local<HashMap<ComponentId, EventCursor<RemovedComponentEntity>>>,
 ) -> BrpResult<Option<Value>> {
     let BrpListParams { entity } = parse_some(params)?;
@@ -1193,7 +1193,7 @@ pub fn process_remote_list_watching_request(
 }
 
 /// Handles a `bevy/registry/schema` request (list all registry types in form of schema) coming from a client.
-pub fn export_registry_types(In(params): In<Option<Value>>, world: &World) -> BrpResult {
+pub fn export_registry_types(In(params): In<Option<Value>>, world: &SubWorld) -> BrpResult {
     let filter: BrpJsonSchemaQueryFilter = match params {
         None => Default::default(),
         Some(params) => parse(params)?,
@@ -1245,7 +1245,7 @@ pub fn export_registry_types(In(params): In<Option<Value>>, world: &World) -> Br
 
 /// Immutably retrieves an entity from the [`World`], returning an error if the
 /// entity isn't present.
-fn get_entity(world: &World, entity: Entity) -> Result<EntityRef<'_>, BrpError> {
+fn get_entity(world: &SubWorld, entity: Entity) -> Result<EntityRef<'_>, BrpError> {
     world
         .get_entity(entity)
         .map_err(|_| BrpError::entity_not_found(entity))
@@ -1253,7 +1253,7 @@ fn get_entity(world: &World, entity: Entity) -> Result<EntityRef<'_>, BrpError> 
 
 /// Mutably retrieves an entity from the [`World`], returning an error if the
 /// entity isn't present.
-fn get_entity_mut(world: &mut World, entity: Entity) -> Result<EntityWorldMut<'_>, BrpError> {
+fn get_entity_mut(world: &mut SubWorld, entity: Entity) -> Result<EntityWorldMut<'_>, BrpError> {
     world
         .get_entity_mut(entity)
         .map_err(|_| BrpError::entity_not_found(entity))
@@ -1266,7 +1266,7 @@ fn get_entity_mut(world: &mut World, entity: Entity) -> Result<EntityWorldMut<'_
 /// `bevy_transform::components::transform::Transform` instead of `Transform`.
 fn get_component_ids(
     type_registry: &TypeRegistry,
-    world: &World,
+    world: &SubWorld,
     component_paths: Vec<String>,
     strict: bool,
 ) -> AnyhowResult<Vec<(TypeId, ComponentId)>> {

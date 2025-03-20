@@ -263,12 +263,12 @@ impl<'de> Visitor<'de> for NameVisitor {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::world::World;
+    use crate::world::SubWorld;
     use alloc::string::ToString;
 
     #[test]
     fn test_display_of_debug_name() {
-        let mut world = World::new();
+        let mut world = SubWorld::new();
         let e1 = world.spawn_empty().id();
         let name = Name::new("MyName");
         let e2 = world.spawn(name.clone()).id();

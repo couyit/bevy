@@ -221,7 +221,7 @@ struct ParticleAssets {
 }
 
 impl FromWorld for ParticleAssets {
-    fn from_world(world: &mut World) -> Self {
+    fn from_world(world: &mut SubWorld) -> Self {
         Self {
             mesh: world.add_asset::<Mesh>(Sphere::new(10.0)),
             material: world.add_asset::<StandardMaterial>(StandardMaterial {

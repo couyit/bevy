@@ -10,7 +10,7 @@ use crate::{
     resource::Resource,
     storage::{SparseSetIndex, SparseSets, Table, TableRow},
     system::{Commands, Local, SystemParam},
-    world::{DeferredWorld, FromWorld, World},
+    world::{DeferredWorld, FromWorld, SubWorld},
 };
 use alloc::boxed::Box;
 use alloc::{borrow::Cow, format, vec::Vec};
@@ -2609,7 +2609,7 @@ struct InitComponentId<T: Component> {
 }
 
 impl<T: Component> FromWorld for InitComponentId<T> {
-    fn from_world(world: &mut World) -> Self {
+    fn from_world(world: &mut SubWorld) -> Self {
         Self {
             component_id: world.register_component::<T>(),
             marker: PhantomData,
@@ -3002,7 +3002,7 @@ pub fn component_clone_via_reflect(
             *entity = ctx.entity_mapper().get_mapped(*entity);
         }
         drop(registry);
-        commands.queue(move |world: &mut World| {
+        commands.queue(move |world: &mut SubWorld| {
             let mut component = reflect_from_world.from_world(world);
             assert_eq!(type_id, (*component).type_id());
             component.apply(source_component_cloned.as_partial_reflect());

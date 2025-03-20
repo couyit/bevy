@@ -6,7 +6,7 @@ use crate::{
     error::Result,
     query::Access,
     system::{input::SystemIn, BoxedSystem, System},
-    world::{unsafe_world_cell::UnsafeWorldCell, DeferredWorld, World},
+    world::{unsafe_world_cell::UnsafeWorldCell, DeferredWorld, SubWorld},
 };
 
 use super::IntoSystem;
@@ -66,13 +66,13 @@ impl<S: System<In = (), Out = ()>> System for InfallibleSystemWrapper<S> {
     }
 
     #[inline]
-    fn run(&mut self, input: SystemIn<'_, Self>, world: &mut World) -> Self::Out {
+    fn run(&mut self, input: SystemIn<'_, Self>, world: &mut SubWorld) -> Self::Out {
         self.0.run(input, world);
         Ok(())
     }
 
     #[inline]
-    fn apply_deferred(&mut self, world: &mut World) {
+    fn apply_deferred(&mut self, world: &mut SubWorld) {
         self.0.apply_deferred(world);
     }
 
@@ -87,7 +87,7 @@ impl<S: System<In = (), Out = ()>> System for InfallibleSystemWrapper<S> {
     }
 
     #[inline]
-    fn initialize(&mut self, world: &mut World) {
+    fn initialize(&mut self, world: &mut SubWorld) {
         self.0.initialize(world);
     }
 

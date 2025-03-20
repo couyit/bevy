@@ -34,7 +34,7 @@ impl ViewNode for MainTransmissivePass3dNode {
         graph: &mut RenderGraphContext,
         render_context: &mut RenderContext,
         (camera, view, camera_3d, target, transmission, depth): QueryItem<Self::ViewQuery>,
-        world: &World,
+        world: &SubWorld,
     ) -> Result<(), NodeRunError> {
         let view_entity = graph.view_entity();
 

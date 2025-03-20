@@ -19,7 +19,7 @@ use crate::{
     query::Access,
     schedule::{is_apply_deferred, BoxedCondition, ExecutorKind, SystemExecutor, SystemSchedule},
     system::ScheduleSystem,
-    world::{unsafe_world_cell::UnsafeWorldCell, World},
+    world::{unsafe_world_cell::UnsafeWorldCell, SubWorld},
 };
 
 use super::__rust_begin_short_backtrace;
@@ -43,7 +43,7 @@ impl<'env, 'sys> Environment<'env, 'sys> {
     fn new(
         executor: &'env MultiThreadedExecutor,
         schedule: &'sys mut SystemSchedule,
-        world: &'env mut World,
+        world: &'env mut SubWorld,
     ) -> Self {
         Environment {
             executor,
@@ -180,7 +180,7 @@ impl SystemExecutor for MultiThreadedExecutor {
     fn run(
         &mut self,
         schedule: &mut SystemSchedule,
-        world: &mut World,
+        world: &mut SubWorld,
         _skip_systems: Option<&FixedBitSet>,
         error_handler: fn(BevyError, ErrorContext),
     ) {
@@ -735,7 +735,7 @@ impl ExecutorState {
 fn apply_deferred(
     unapplied_systems: &FixedBitSet,
     systems: &[SyncUnsafeCell<ScheduleSystem>],
-    world: &mut World,
+    world: &mut SubWorld,
 ) -> Result<(), Box<dyn Any + Send>> {
     for system_index in unapplied_systems.ones() {
         // SAFETY: none of these systems are running, no other references exist
@@ -813,7 +813,7 @@ mod tests {
         prelude::Resource,
         schedule::{ExecutorKind, IntoScheduleConfigs, Schedule},
         system::Commands,
-        world::World,
+        world::SubWorld,
     };
 
     #[derive(Resource)]
@@ -821,7 +821,7 @@ mod tests {
 
     #[test]
     fn skipped_systems_notify_dependents() {
-        let mut world = World::new();
+        let mut world = SubWorld::new();
         let mut schedule = Schedule::default();
         schedule.set_executor_kind(ExecutorKind::MultiThreaded);
         schedule.add_systems(
@@ -843,7 +843,7 @@ mod tests {
     /// inside an `async` block and somehow remaining alive even after its last use.
     #[test]
     fn check_spawn_exclusive_system_task_miri() {
-        let mut world = World::new();
+        let mut world = SubWorld::new();
         let mut schedule = Schedule::default();
         schedule.set_executor_kind(ExecutorKind::MultiThreaded);
         schedule.add_systems(((|_: Commands| {}), |_: Commands| {}).chain());

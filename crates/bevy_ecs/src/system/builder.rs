@@ -11,7 +11,7 @@ use crate::{
     },
     world::{
         FilteredResources, FilteredResourcesBuilder, FilteredResourcesMut,
-        FilteredResourcesMutBuilder, FromWorld, World,
+        FilteredResourcesMutBuilder, FromWorld, SubWorld,
     },
 };
 use core::fmt::Debug;
@@ -115,11 +115,11 @@ use super::{init_query_param, Res, ResMut, SystemState};
 pub unsafe trait SystemParamBuilder<P: SystemParam>: Sized {
     /// Registers any [`World`] access used by this [`SystemParam`]
     /// and creates a new instance of this param's [`State`](SystemParam::State).
-    fn build(self, world: &mut World, meta: &mut SystemMeta) -> P::State;
+    fn build(self, world: &mut SubWorld, meta: &mut SystemMeta) -> P::State;
 
     /// Create a [`SystemState`] from a [`SystemParamBuilder`].
     /// To create a system, call [`SystemState::build_system`] on the result.
-    fn build_state(self, world: &mut World) -> SystemState<P> {
+    fn build_state(self, world: &mut SubWorld) -> SystemState<P> {
         SystemState::from_builder(world, self)
     }
 }
@@ -168,7 +168,7 @@ pub struct ParamBuilder;
 
 // SAFETY: Calls `SystemParam::init_state`
 unsafe impl<P: SystemParam> SystemParamBuilder<P> for ParamBuilder {
-    fn build(self, world: &mut World, meta: &mut SystemMeta) -> P::State {
+    fn build(self, world: &mut SubWorld, meta: &mut SystemMeta) -> P::State {
         P::init_state(world, meta)
     }
 }
@@ -211,7 +211,7 @@ impl ParamBuilder {
 unsafe impl<'w, 's, D: QueryData + 'static, F: QueryFilter + 'static>
     SystemParamBuilder<Query<'w, 's, D, F>> for QueryState<D, F>
 {
-    fn build(self, world: &mut World, system_meta: &mut SystemMeta) -> QueryState<D, F> {
+    fn build(self, world: &mut SubWorld, system_meta: &mut SystemMeta) -> QueryState<D, F> {
         self.validate_world(world.id());
         init_query_param(world, system_meta, &self);
         self
@@ -290,7 +290,7 @@ unsafe impl<
         T: FnOnce(&mut QueryBuilder<D, F>),
     > SystemParamBuilder<Query<'w, 's, D, F>> for QueryParamBuilder<T>
 {
-    fn build(self, world: &mut World, system_meta: &mut SystemMeta) -> QueryState<D, F> {
+    fn build(self, world: &mut SubWorld, system_meta: &mut SystemMeta) -> QueryState<D, F> {
         let mut builder = QueryBuilder::new(world);
         (self.0)(&mut builder);
         let state = builder.build();
@@ -339,7 +339,7 @@ all_tuples!(
 
 // SAFETY: implementors of each `SystemParamBuilder` in the vec have validated their impls
 unsafe impl<P: SystemParam, B: SystemParamBuilder<P>> SystemParamBuilder<Vec<P>> for Vec<B> {
-    fn build(self, world: &mut World, meta: &mut SystemMeta) -> <Vec<P> as SystemParam>::State {
+    fn build(self, world: &mut SubWorld, meta: &mut SystemMeta) -> <Vec<P> as SystemParam>::State {
         self.into_iter()
             .map(|builder| builder.build(world, meta))
             .collect()
@@ -478,7 +478,7 @@ unsafe impl<'w, 's, P: SystemParam, B: SystemParamBuilder<P>>
 {
     fn build(
         self,
-        world: &mut World,
+        world: &mut SubWorld,
         system_meta: &mut SystemMeta,
     ) -> <Vec<P> as SystemParam>::State {
         let mut states = Vec::with_capacity(self.0.len());
@@ -506,7 +506,7 @@ unsafe impl<'w, 's, P: SystemParam, B: SystemParamBuilder<P>>
 /// A [`SystemParamBuilder`] for a [`DynSystemParam`].
 /// See the [`DynSystemParam`] docs for examples.
 pub struct DynParamBuilder<'a>(
-    Box<dyn FnOnce(&mut World, &mut SystemMeta) -> DynSystemParamState + 'a>,
+    Box<dyn FnOnce(&mut SubWorld, &mut SystemMeta) -> DynSystemParamState + 'a>,
 );
 
 impl<'a> DynParamBuilder<'a> {
@@ -525,7 +525,7 @@ impl<'a> DynParamBuilder<'a> {
 unsafe impl<'a, 'w, 's> SystemParamBuilder<DynSystemParam<'w, 's>> for DynParamBuilder<'a> {
     fn build(
         self,
-        world: &mut World,
+        world: &mut SubWorld,
         meta: &mut SystemMeta,
     ) -> <DynSystemParam<'w, 's> as SystemParam>::State {
         (self.0)(world, meta)
@@ -560,7 +560,7 @@ unsafe impl<'s, T: FromWorld + Send + 'static> SystemParamBuilder<Local<'s, T>>
 {
     fn build(
         self,
-        _world: &mut World,
+        _world: &mut SubWorld,
         _meta: &mut SystemMeta,
     ) -> <Local<'s, T> as SystemParam>::State {
         SyncCell::new(self.0)
@@ -597,7 +597,7 @@ unsafe impl<'w, 's, T: FnOnce(&mut FilteredResourcesBuilder)>
 {
     fn build(
         self,
-        world: &mut World,
+        world: &mut SubWorld,
         meta: &mut SystemMeta,
     ) -> <FilteredResources<'w, 's> as SystemParam>::State {
         let mut builder = FilteredResourcesBuilder::new(world);
@@ -661,7 +661,7 @@ unsafe impl<'w, 's, T: FnOnce(&mut FilteredResourcesMutBuilder)>
 {
     fn build(
         self,
-        world: &mut World,
+        world: &mut SubWorld,
         meta: &mut SystemMeta,
     ) -> <FilteredResourcesMut<'w, 's> as SystemParam>::State {
         let mut builder = FilteredResourcesMutBuilder::new(world);
@@ -752,7 +752,7 @@ mod tests {
 
     #[test]
     fn local_builder() {
-        let mut world = World::new();
+        let mut world = SubWorld::new();
 
         let system = (LocalBuilder(10),)
             .build_state(&mut world)
@@ -764,7 +764,7 @@ mod tests {
 
     #[test]
     fn query_builder() {
-        let mut world = World::new();
+        let mut world = SubWorld::new();
 
         world.spawn(A);
         world.spawn_empty();
@@ -781,7 +781,7 @@ mod tests {
 
     #[test]
     fn query_builder_state() {
-        let mut world = World::new();
+        let mut world = SubWorld::new();
 
         world.spawn(A);
         world.spawn_empty();
@@ -796,7 +796,7 @@ mod tests {
 
     #[test]
     fn multi_param_builder() {
-        let mut world = World::new();
+        let mut world = SubWorld::new();
 
         world.spawn(A);
         world.spawn_empty();
@@ -811,7 +811,7 @@ mod tests {
 
     #[test]
     fn vec_builder() {
-        let mut world = World::new();
+        let mut world = SubWorld::new();
 
         world.spawn((A, B, C));
         world.spawn((A, B));
@@ -842,7 +842,7 @@ mod tests {
 
     #[test]
     fn multi_param_builder_inference() {
-        let mut world = World::new();
+        let mut world = SubWorld::new();
 
         world.spawn(A);
         world.spawn_empty();
@@ -857,7 +857,7 @@ mod tests {
 
     #[test]
     fn param_set_builder() {
-        let mut world = World::new();
+        let mut world = SubWorld::new();
 
         world.spawn((A, B, C));
         world.spawn((A, B));
@@ -884,7 +884,7 @@ mod tests {
 
     #[test]
     fn param_set_vec_builder() {
-        let mut world = World::new();
+        let mut world = SubWorld::new();
 
         world.spawn((A, B, C));
         world.spawn((A, B));
@@ -913,7 +913,7 @@ mod tests {
 
     #[test]
     fn dyn_builder() {
-        let mut world = World::new();
+        let mut world = SubWorld::new();
 
         world.spawn(A);
         world.spawn_empty();
@@ -949,7 +949,7 @@ mod tests {
 
     #[test]
     fn custom_param_builder() {
-        let mut world = World::new();
+        let mut world = SubWorld::new();
 
         world.spawn(A);
         world.spawn_empty();
@@ -969,7 +969,7 @@ mod tests {
 
     #[test]
     fn filtered_resource_conflicts_read_with_res() {
-        let mut world = World::new();
+        let mut world = SubWorld::new();
         (
             ParamBuilder::resource(),
             FilteredResourcesParamBuilder::new(|builder| {
@@ -983,7 +983,7 @@ mod tests {
     #[test]
     #[should_panic]
     fn filtered_resource_conflicts_read_with_resmut() {
-        let mut world = World::new();
+        let mut world = SubWorld::new();
         (
             ParamBuilder::resource_mut(),
             FilteredResourcesParamBuilder::new(|builder| {
@@ -997,7 +997,7 @@ mod tests {
     #[test]
     #[should_panic]
     fn filtered_resource_conflicts_read_all_with_resmut() {
-        let mut world = World::new();
+        let mut world = SubWorld::new();
         (
             ParamBuilder::resource_mut(),
             FilteredResourcesParamBuilder::new(|builder| {
@@ -1010,7 +1010,7 @@ mod tests {
 
     #[test]
     fn filtered_resource_mut_conflicts_read_with_res() {
-        let mut world = World::new();
+        let mut world = SubWorld::new();
         (
             ParamBuilder::resource(),
             FilteredResourcesMutParamBuilder::new(|builder| {
@@ -1024,7 +1024,7 @@ mod tests {
     #[test]
     #[should_panic]
     fn filtered_resource_mut_conflicts_read_with_resmut() {
-        let mut world = World::new();
+        let mut world = SubWorld::new();
         (
             ParamBuilder::resource_mut(),
             FilteredResourcesMutParamBuilder::new(|builder| {
@@ -1038,7 +1038,7 @@ mod tests {
     #[test]
     #[should_panic]
     fn filtered_resource_mut_conflicts_write_with_res() {
-        let mut world = World::new();
+        let mut world = SubWorld::new();
         (
             ParamBuilder::resource(),
             FilteredResourcesMutParamBuilder::new(|builder| {
@@ -1052,7 +1052,7 @@ mod tests {
     #[test]
     #[should_panic]
     fn filtered_resource_mut_conflicts_write_all_with_res() {
-        let mut world = World::new();
+        let mut world = SubWorld::new();
         (
             ParamBuilder::resource(),
             FilteredResourcesMutParamBuilder::new(|builder| {
@@ -1066,7 +1066,7 @@ mod tests {
     #[test]
     #[should_panic]
     fn filtered_resource_mut_conflicts_write_with_resmut() {
-        let mut world = World::new();
+        let mut world = SubWorld::new();
         (
             ParamBuilder::resource_mut(),
             FilteredResourcesMutParamBuilder::new(|builder| {
@@ -1079,7 +1079,7 @@ mod tests {
 
     #[test]
     fn filtered_resource_reflect() {
-        let mut world = World::new();
+        let mut world = SubWorld::new();
         world.insert_resource(R { foo: 7 });
 
         let system = (FilteredResourcesParamBuilder::new(|builder| {

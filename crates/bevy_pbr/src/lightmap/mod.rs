@@ -43,7 +43,7 @@ use bevy_ecs::{
     resource::Resource,
     schedule::IntoScheduleConfigs,
     system::{Query, Res, ResMut},
-    world::{FromWorld, World},
+    world::{FromWorld, SubWorld},
 };
 use bevy_image::Image;
 use bevy_math::{uvec2, vec4, Rect, UVec2};
@@ -342,7 +342,7 @@ impl Default for Lightmap {
 }
 
 impl FromWorld for RenderLightmaps {
-    fn from_world(world: &mut World) -> Self {
+    fn from_world(world: &mut SubWorld) -> Self {
         let render_device = world.resource::<RenderDevice>();
         let render_adapter = world.resource::<RenderAdapter>();
 

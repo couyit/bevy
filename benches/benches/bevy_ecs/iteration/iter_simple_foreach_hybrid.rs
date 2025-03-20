@@ -12,11 +12,11 @@ struct SparseData(f32);
 fn deterministic_rand() -> ChaCha8Rng {
     ChaCha8Rng::seed_from_u64(42)
 }
-pub struct Benchmark<'w>(World, QueryState<(&'w mut TableData, &'w SparseData)>);
+pub struct Benchmark<'w>(SubWorld, QueryState<(&'w mut TableData, &'w SparseData)>);
 
 impl<'w> Benchmark<'w> {
     pub fn new() -> Self {
-        let mut world = World::new();
+        let mut world = SubWorld::new();
 
         let mut v = vec![];
         for _ in 0..10000 {

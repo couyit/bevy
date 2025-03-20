@@ -1,4 +1,4 @@
-use bevy_ecs::{query::QueryItem, world::World};
+use bevy_ecs::{query::QueryItem, world::SubWorld};
 use bevy_render::{
     extract_component::ComponentUniforms,
     globals::GlobalsBuffer,
@@ -34,7 +34,7 @@ impl ViewNode for MotionBlurNode {
         _graph: &mut RenderGraphContext,
         render_context: &mut RenderContext,
         (view_target, pipeline_id, prepass_textures, motion_blur, msaa): QueryItem<Self::ViewQuery>,
-        world: &World,
+        world: &SubWorld,
     ) -> Result<(), NodeRunError> {
         if motion_blur.samples == 0 || motion_blur.shutter_angle <= 0.0 {
             return Ok(()); // We can skip running motion blur in these cases.

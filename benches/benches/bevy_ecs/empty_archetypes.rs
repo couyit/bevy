@@ -1,6 +1,6 @@
 use core::hint::black_box;
 
-use bevy_ecs::{component::Component, prelude::*, schedule::ExecutorKind, world::World};
+use bevy_ecs::{component::Component, prelude::*, schedule::ExecutorKind, world::SubWorld};
 use criterion::{criterion_group, BenchmarkId, Criterion};
 
 criterion_group!(benches, empty_archetypes);
@@ -74,8 +74,8 @@ fn par_for_each(
     });
 }
 
-fn setup(parallel: bool, setup: impl FnOnce(&mut Schedule)) -> (World, Schedule) {
-    let world = World::new();
+fn setup(parallel: bool, setup: impl FnOnce(&mut Schedule)) -> (SubWorld, Schedule) {
+    let world = SubWorld::new();
     let mut schedule = Schedule::default();
 
     schedule.set_executor_kind(match parallel {
@@ -89,7 +89,7 @@ fn setup(parallel: bool, setup: impl FnOnce(&mut Schedule)) -> (World, Schedule)
 }
 
 /// create `count` entities with distinct archetypes
-fn add_archetypes(world: &mut World, count: u16) {
+fn add_archetypes(world: &mut SubWorld, count: u16) {
     for i in 0..count {
         let mut e = world.spawn_empty();
         e.insert(A::<0>(1.0));

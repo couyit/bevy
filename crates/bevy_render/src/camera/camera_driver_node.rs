@@ -4,7 +4,7 @@ use crate::{
     renderer::RenderContext,
     view::ExtractedWindows,
 };
-use bevy_ecs::{entity::EntityBorrow, prelude::QueryState, world::World};
+use bevy_ecs::{entity::EntityBorrow, prelude::QueryState, world::SubWorld};
 use bevy_platform_support::collections::HashSet;
 use wgpu::{LoadOp, Operations, RenderPassColorAttachment, RenderPassDescriptor, StoreOp};
 
@@ -13,7 +13,7 @@ pub struct CameraDriverNode {
 }
 
 impl CameraDriverNode {
-    pub fn new(world: &mut World) -> Self {
+    pub fn new(world: &mut SubWorld) -> Self {
         Self {
             cameras: world.query(),
         }
@@ -21,14 +21,14 @@ impl CameraDriverNode {
 }
 
 impl Node for CameraDriverNode {
-    fn update(&mut self, world: &mut World) {
+    fn update(&mut self, world: &mut SubWorld) {
         self.cameras.update_archetypes(world);
     }
     fn run(
         &self,
         graph: &mut RenderGraphContext,
         render_context: &mut RenderContext,
-        world: &World,
+        world: &SubWorld,
     ) -> Result<(), NodeRunError> {
         let sorted_cameras = world.resource::<SortedCameras>();
         let windows = world.resource::<ExtractedWindows>();

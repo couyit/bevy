@@ -5,11 +5,11 @@ struct A(f32);
 #[derive(Component)]
 struct B(f32);
 
-pub struct Benchmark(World, Vec<Entity>);
+pub struct Benchmark(SubWorld, Vec<Entity>);
 
 impl Benchmark {
     pub fn new() -> Self {
-        let mut world = World::default();
+        let mut world = SubWorld::default();
 
         let entities = world
             .spawn_batch(core::iter::repeat_n(A(0.), 10_000))

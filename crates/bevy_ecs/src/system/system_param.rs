@@ -14,7 +14,7 @@ use crate::{
     system::{Query, Single, SystemMeta},
     world::{
         unsafe_world_cell::UnsafeWorldCell, DeferredWorld, FilteredResources, FilteredResourcesMut,
-        FromWorld, World,
+        FromWorld, SubWorld,
     },
 };
 use alloc::{borrow::ToOwned, boxed::Box, vec::Vec};
@@ -309,7 +309,7 @@ unsafe impl<D: QueryData + 'static, F: QueryFilter + 'static> SystemParam for Qu
     type State = QueryState<D, F>;
     type Item<'w, 's> = Query<'w, 's, D, F>;
 
-    fn init_state(world: &mut World, system_meta: &mut SystemMeta) -> Self::State {
+    fn init_state(world: &mut SubWorld, system_meta: &mut SystemMeta) -> Self::State {
         let state = QueryState::new_with_access(world, &mut system_meta.archetype_component_access);
         init_query_param(world, system_meta, &state);
         state
@@ -339,7 +339,7 @@ unsafe impl<D: QueryData + 'static, F: QueryFilter + 'static> SystemParam for Qu
 }
 
 pub(crate) fn init_query_param<D: QueryData + 'static, F: QueryFilter + 'static>(
-    world: &mut World,
+    world: &mut SubWorld,
     system_meta: &mut SystemMeta,
     state: &QueryState<D, F>,
 ) {
@@ -362,7 +362,7 @@ fn assert_component_access_compatibility(
     filter_type: &'static str,
     system_access: &FilteredAccessSet<ComponentId>,
     current: &FilteredAccess<ComponentId>,
-    world: &World,
+    world: &SubWorld,
 ) {
     let conflicts = system_access.get_conflicts_single(current);
     if conflicts.is_empty() {
@@ -382,7 +382,7 @@ unsafe impl<'a, D: QueryData + 'static, F: QueryFilter + 'static> SystemParam fo
     type State = QueryState<D, F>;
     type Item<'w, 's> = Single<'w, D, F>;
 
-    fn init_state(world: &mut World, system_meta: &mut SystemMeta) -> Self::State {
+    fn init_state(world: &mut SubWorld, system_meta: &mut SystemMeta) -> Self::State {
         Query::init_state(world, system_meta)
     }
 
@@ -448,7 +448,7 @@ unsafe impl<'a, D: QueryData + 'static, F: QueryFilter + 'static> SystemParam
     type State = QueryState<D, F>;
     type Item<'w, 's> = Option<Single<'w, D, F>>;
 
-    fn init_state(world: &mut World, system_meta: &mut SystemMeta) -> Self::State {
+    fn init_state(world: &mut SubWorld, system_meta: &mut SystemMeta) -> Self::State {
         Single::init_state(world, system_meta)
     }
 
@@ -529,7 +529,7 @@ unsafe impl<D: QueryData + 'static, F: QueryFilter + 'static> SystemParam
     type State = QueryState<D, F>;
     type Item<'w, 's> = Populated<'w, 's, D, F>;
 
-    fn init_state(world: &mut World, system_meta: &mut SystemMeta) -> Self::State {
+    fn init_state(world: &mut SubWorld, system_meta: &mut SystemMeta) -> Self::State {
         Query::init_state(world, system_meta)
     }
 
@@ -816,7 +816,7 @@ unsafe impl<'a, T: Resource> SystemParam for Res<'a, T> {
     type State = ComponentId;
     type Item<'w, 's> = Res<'w, T>;
 
-    fn init_state(world: &mut World, system_meta: &mut SystemMeta) -> Self::State {
+    fn init_state(world: &mut SubWorld, system_meta: &mut SystemMeta) -> Self::State {
         let component_id = world.components_registrator().register_resource::<T>();
         let archetype_component_id = world.initialize_resource_internal(component_id).id();
 
@@ -893,7 +893,7 @@ unsafe impl<'a, T: Resource> SystemParam for Option<Res<'a, T>> {
     type State = ComponentId;
     type Item<'w, 's> = Option<Res<'w, T>>;
 
-    fn init_state(world: &mut World, system_meta: &mut SystemMeta) -> Self::State {
+    fn init_state(world: &mut SubWorld, system_meta: &mut SystemMeta) -> Self::State {
         Res::<T>::init_state(world, system_meta)
     }
 
@@ -925,7 +925,7 @@ unsafe impl<'a, T: Resource> SystemParam for ResMut<'a, T> {
     type State = ComponentId;
     type Item<'w, 's> = ResMut<'w, T>;
 
-    fn init_state(world: &mut World, system_meta: &mut SystemMeta) -> Self::State {
+    fn init_state(world: &mut SubWorld, system_meta: &mut SystemMeta) -> Self::State {
         let component_id = world.components_registrator().register_resource::<T>();
         let archetype_component_id = world.initialize_resource_internal(component_id).id();
 
@@ -1001,7 +1001,7 @@ unsafe impl<'a, T: Resource> SystemParam for Option<ResMut<'a, T>> {
     type State = ComponentId;
     type Item<'w, 's> = Option<ResMut<'w, T>>;
 
-    fn init_state(world: &mut World, system_meta: &mut SystemMeta) -> Self::State {
+    fn init_state(world: &mut SubWorld, system_meta: &mut SystemMeta) -> Self::State {
         ResMut::<T>::init_state(world, system_meta)
     }
 
@@ -1028,14 +1028,14 @@ unsafe impl<'a, T: Resource> SystemParam for Option<ResMut<'a, T>> {
 }
 
 /// SAFETY: only reads world
-unsafe impl<'w> ReadOnlySystemParam for &'w World {}
+unsafe impl<'w> ReadOnlySystemParam for &'w SubWorld {}
 
 // SAFETY: `read_all` access is set and conflicts result in a panic
-unsafe impl SystemParam for &'_ World {
+unsafe impl SystemParam for &'_ SubWorld {
     type State = ();
-    type Item<'w, 's> = &'w World;
+    type Item<'w, 's> = &'w SubWorld;
 
-    fn init_state(_world: &mut World, system_meta: &mut SystemMeta) -> Self::State {
+    fn init_state(_world: &mut SubWorld, system_meta: &mut SystemMeta) -> Self::State {
         let mut access = Access::default();
         access.read_all();
         if !system_meta
@@ -1076,7 +1076,7 @@ unsafe impl<'w> SystemParam for DeferredWorld<'w> {
     type State = ();
     type Item<'world, 'state> = DeferredWorld<'world>;
 
-    fn init_state(_world: &mut World, system_meta: &mut SystemMeta) -> Self::State {
+    fn init_state(_world: &mut SubWorld, system_meta: &mut SystemMeta) -> Self::State {
         assert!(
             !system_meta
                 .component_access_set
@@ -1216,7 +1216,7 @@ unsafe impl<'a, T: FromWorld + Send + 'static> SystemParam for Local<'a, T> {
     type State = SyncCell<T>;
     type Item<'w, 's> = Local<'s, T>;
 
-    fn init_state(world: &mut World, _system_meta: &mut SystemMeta) -> Self::State {
+    fn init_state(world: &mut SubWorld, _system_meta: &mut SystemMeta) -> Self::State {
         SyncCell::new(T::from_world(world))
     }
 
@@ -1239,7 +1239,7 @@ unsafe impl<'a, T: FromWorld + Send + 'static> SystemParam for Local<'a, T> {
 /// so you should try to minimize the time spent in [`SystemBuffer::apply`].
 pub trait SystemBuffer: FromWorld + Send + 'static {
     /// Applies any deferred mutations to the [`World`].
-    fn apply(&mut self, system_meta: &SystemMeta, world: &mut World);
+    fn apply(&mut self, system_meta: &SystemMeta, world: &mut SubWorld);
     /// Queues any deferred mutations to be applied at the next [`ApplyDeferred`](crate::prelude::ApplyDeferred).
     fn queue(&mut self, _system_meta: &SystemMeta, _world: DeferredWorld) {}
 }
@@ -1396,12 +1396,12 @@ unsafe impl<T: SystemBuffer> SystemParam for Deferred<'_, T> {
     type State = SyncCell<T>;
     type Item<'w, 's> = Deferred<'s, T>;
 
-    fn init_state(world: &mut World, system_meta: &mut SystemMeta) -> Self::State {
+    fn init_state(world: &mut SubWorld, system_meta: &mut SystemMeta) -> Self::State {
         system_meta.set_has_deferred();
         SyncCell::new(T::from_world(world))
     }
 
-    fn apply(state: &mut Self::State, system_meta: &SystemMeta, world: &mut World) {
+    fn apply(state: &mut Self::State, system_meta: &SystemMeta, world: &mut SubWorld) {
         state.get().apply(system_meta, world);
     }
 
@@ -1496,7 +1496,7 @@ unsafe impl<'a, T: 'static> SystemParam for NonSend<'a, T> {
     type State = ComponentId;
     type Item<'w, 's> = NonSend<'w, T>;
 
-    fn init_state(world: &mut World, system_meta: &mut SystemMeta) -> Self::State {
+    fn init_state(world: &mut SubWorld, system_meta: &mut SystemMeta) -> Self::State {
         system_meta.set_non_send();
 
         let component_id = world.components_registrator().register_non_send::<T>();
@@ -1573,7 +1573,7 @@ unsafe impl<T: 'static> SystemParam for Option<NonSend<'_, T>> {
     type State = ComponentId;
     type Item<'w, 's> = Option<NonSend<'w, T>>;
 
-    fn init_state(world: &mut World, system_meta: &mut SystemMeta) -> Self::State {
+    fn init_state(world: &mut SubWorld, system_meta: &mut SystemMeta) -> Self::State {
         NonSend::<T>::init_state(world, system_meta)
     }
 
@@ -1602,7 +1602,7 @@ unsafe impl<'a, T: 'static> SystemParam for NonSendMut<'a, T> {
     type State = ComponentId;
     type Item<'w, 's> = NonSendMut<'w, T>;
 
-    fn init_state(world: &mut World, system_meta: &mut SystemMeta) -> Self::State {
+    fn init_state(world: &mut SubWorld, system_meta: &mut SystemMeta) -> Self::State {
         system_meta.set_non_send();
 
         let component_id = world.components_registrator().register_non_send::<T>();
@@ -1676,7 +1676,7 @@ unsafe impl<'a, T: 'static> SystemParam for Option<NonSendMut<'a, T>> {
     type State = ComponentId;
     type Item<'w, 's> = Option<NonSendMut<'w, T>>;
 
-    fn init_state(world: &mut World, system_meta: &mut SystemMeta) -> Self::State {
+    fn init_state(world: &mut SubWorld, system_meta: &mut SystemMeta) -> Self::State {
         NonSendMut::<T>::init_state(world, system_meta)
     }
 
@@ -1705,7 +1705,7 @@ unsafe impl<'a> SystemParam for &'a Archetypes {
     type State = ();
     type Item<'w, 's> = &'w Archetypes;
 
-    fn init_state(_world: &mut World, _system_meta: &mut SystemMeta) -> Self::State {}
+    fn init_state(_world: &mut SubWorld, _system_meta: &mut SystemMeta) -> Self::State {}
 
     #[inline]
     unsafe fn get_param<'w, 's>(
@@ -1726,7 +1726,7 @@ unsafe impl<'a> SystemParam for &'a Components {
     type State = ();
     type Item<'w, 's> = &'w Components;
 
-    fn init_state(_world: &mut World, _system_meta: &mut SystemMeta) -> Self::State {}
+    fn init_state(_world: &mut SubWorld, _system_meta: &mut SystemMeta) -> Self::State {}
 
     #[inline]
     unsafe fn get_param<'w, 's>(
@@ -1747,7 +1747,7 @@ unsafe impl<'a> SystemParam for &'a Entities {
     type State = ();
     type Item<'w, 's> = &'w Entities;
 
-    fn init_state(_world: &mut World, _system_meta: &mut SystemMeta) -> Self::State {}
+    fn init_state(_world: &mut SubWorld, _system_meta: &mut SystemMeta) -> Self::State {}
 
     #[inline]
     unsafe fn get_param<'w, 's>(
@@ -1768,7 +1768,7 @@ unsafe impl<'a> SystemParam for &'a Bundles {
     type State = ();
     type Item<'w, 's> = &'w Bundles;
 
-    fn init_state(_world: &mut World, _system_meta: &mut SystemMeta) -> Self::State {}
+    fn init_state(_world: &mut SubWorld, _system_meta: &mut SystemMeta) -> Self::State {}
 
     #[inline]
     unsafe fn get_param<'w, 's>(
@@ -1818,7 +1818,7 @@ unsafe impl SystemParam for SystemChangeTick {
     type State = ();
     type Item<'w, 's> = SystemChangeTick;
 
-    fn init_state(_world: &mut World, _system_meta: &mut SystemMeta) -> Self::State {}
+    fn init_state(_world: &mut SubWorld, _system_meta: &mut SystemMeta) -> Self::State {}
 
     #[inline]
     unsafe fn get_param<'w, 's>(
@@ -1842,7 +1842,7 @@ unsafe impl<T: SystemParam> SystemParam for Vec<T> {
 
     type Item<'world, 'state> = Vec<T::Item<'world, 'state>>;
 
-    fn init_state(_world: &mut World, _system_meta: &mut SystemMeta) -> Self::State {
+    fn init_state(_world: &mut SubWorld, _system_meta: &mut SystemMeta) -> Self::State {
         Vec::new()
     }
 
@@ -1884,7 +1884,7 @@ unsafe impl<T: SystemParam> SystemParam for Vec<T> {
         }
     }
 
-    fn apply(state: &mut Self::State, system_meta: &SystemMeta, world: &mut World) {
+    fn apply(state: &mut Self::State, system_meta: &SystemMeta, world: &mut SubWorld) {
         for state in state {
             T::apply(state, system_meta, world);
         }
@@ -1905,7 +1905,7 @@ unsafe impl<T: SystemParam> SystemParam for ParamSet<'_, '_, Vec<T>> {
 
     type Item<'world, 'state> = ParamSet<'world, 'state, Vec<T>>;
 
-    fn init_state(_world: &mut World, _system_meta: &mut SystemMeta) -> Self::State {
+    fn init_state(_world: &mut SubWorld, _system_meta: &mut SystemMeta) -> Self::State {
         Vec::new()
     }
 
@@ -1935,7 +1935,7 @@ unsafe impl<T: SystemParam> SystemParam for ParamSet<'_, '_, Vec<T>> {
         }
     }
 
-    fn apply(state: &mut Self::State, system_meta: &SystemMeta, world: &mut World) {
+    fn apply(state: &mut Self::State, system_meta: &SystemMeta, world: &mut SubWorld) {
         for state in state {
             T::apply(state, system_meta, world);
         }
@@ -2181,7 +2181,7 @@ unsafe impl<P: SystemParam + 'static> SystemParam for StaticSystemParam<'_, '_, 
     type State = P::State;
     type Item<'world, 'state> = StaticSystemParam<'world, 'state, P>;
 
-    fn init_state(world: &mut World, system_meta: &mut SystemMeta) -> Self::State {
+    fn init_state(world: &mut SubWorld, system_meta: &mut SystemMeta) -> Self::State {
         P::init_state(world, system_meta)
     }
 
@@ -2194,7 +2194,7 @@ unsafe impl<P: SystemParam + 'static> SystemParam for StaticSystemParam<'_, '_, 
         unsafe { P::new_archetype(state, archetype, system_meta) };
     }
 
-    fn apply(state: &mut Self::State, system_meta: &SystemMeta, world: &mut World) {
+    fn apply(state: &mut Self::State, system_meta: &SystemMeta, world: &mut SubWorld) {
         P::apply(state, system_meta, world);
     }
 
@@ -2228,7 +2228,7 @@ unsafe impl<T: ?Sized> SystemParam for PhantomData<T> {
     type State = ();
     type Item<'world, 'state> = Self;
 
-    fn init_state(_world: &mut World, _system_meta: &mut SystemMeta) -> Self::State {}
+    fn init_state(_world: &mut SubWorld, _system_meta: &mut SystemMeta) -> Self::State {}
 
     #[inline]
     unsafe fn get_param<'world, 'state>(
@@ -2444,7 +2444,7 @@ trait DynParamState: Sync + Send {
     /// This is used to apply [`Commands`] during [`ApplyDeferred`](crate::prelude::ApplyDeferred).
     ///
     /// [`Commands`]: crate::prelude::Commands
-    fn apply(&mut self, system_meta: &SystemMeta, world: &mut World);
+    fn apply(&mut self, system_meta: &SystemMeta, world: &mut SubWorld);
 
     /// Queues any deferred mutations to be applied at the next [`ApplyDeferred`](crate::prelude::ApplyDeferred).
     fn queue(&mut self, system_meta: &SystemMeta, world: DeferredWorld);
@@ -2469,7 +2469,7 @@ impl<T: SystemParam + 'static> DynParamState for ParamState<T> {
         unsafe { T::new_archetype(&mut self.0, archetype, system_meta) };
     }
 
-    fn apply(&mut self, system_meta: &SystemMeta, world: &mut World) {
+    fn apply(&mut self, system_meta: &SystemMeta, world: &mut SubWorld) {
         T::apply(&mut self.0, system_meta, world);
     }
 
@@ -2488,7 +2488,7 @@ unsafe impl SystemParam for DynSystemParam<'_, '_> {
 
     type Item<'world, 'state> = DynSystemParam<'world, 'state>;
 
-    fn init_state(_world: &mut World, _system_meta: &mut SystemMeta) -> Self::State {
+    fn init_state(_world: &mut SubWorld, _system_meta: &mut SystemMeta) -> Self::State {
         DynSystemParamState::new::<()>(())
     }
 
@@ -2532,7 +2532,7 @@ unsafe impl SystemParam for DynSystemParam<'_, '_> {
         unsafe { state.0.new_archetype(archetype, system_meta) };
     }
 
-    fn apply(state: &mut Self::State, system_meta: &SystemMeta, world: &mut World) {
+    fn apply(state: &mut Self::State, system_meta: &SystemMeta, world: &mut SubWorld) {
         state.0.apply(system_meta, world);
     }
 
@@ -2549,7 +2549,7 @@ unsafe impl SystemParam for FilteredResources<'_, '_> {
 
     type Item<'world, 'state> = FilteredResources<'world, 'state>;
 
-    fn init_state(_world: &mut World, _system_meta: &mut SystemMeta) -> Self::State {
+    fn init_state(_world: &mut SubWorld, _system_meta: &mut SystemMeta) -> Self::State {
         Access::new()
     }
 
@@ -2576,7 +2576,7 @@ unsafe impl SystemParam for FilteredResourcesMut<'_, '_> {
 
     type Item<'world, 'state> = FilteredResourcesMut<'world, 'state>;
 
-    fn init_state(_world: &mut World, _system_meta: &mut SystemMeta) -> Self::State {
+    fn init_state(_world: &mut SubWorld, _system_meta: &mut SystemMeta) -> Self::State {
         Access::new()
     }
 
@@ -2782,7 +2782,7 @@ mod tests {
             assert_eq!(*cell.borrow(), 0);
         }
 
-        let mut world = World::new();
+        let mut world = SubWorld::new();
         let mut schedule = crate::schedule::Schedule::default();
         schedule.add_systems(non_sync_system);
         schedule.run(&mut world);
@@ -2796,7 +2796,7 @@ mod tests {
             p.p1();
         }
 
-        let mut world = World::new();
+        let mut world = SubWorld::new();
         world.insert_non_send_resource(core::ptr::null_mut::<u8>());
         let mut schedule = crate::schedule::Schedule::default();
         schedule.add_systems((non_send_param_set, non_send_param_set, non_send_param_set));
@@ -2811,7 +2811,7 @@ mod tests {
             let _ = p.p1();
         }
 
-        let mut world = World::new();
+        let mut world = SubWorld::new();
         world.insert_non_send_resource(core::ptr::null_mut::<u8>());
         let mut schedule = crate::schedule::Schedule::default();
         schedule.add_systems((non_send_param_set, non_send_param_set, non_send_param_set));

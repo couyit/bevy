@@ -204,7 +204,7 @@ pub struct OitBuffers {
 }
 
 impl FromWorld for OitBuffers {
-    fn from_world(world: &mut World) -> Self {
+    fn from_world(world: &mut SubWorld) -> Self {
         let render_device = world.resource::<RenderDevice>();
         let render_queue = world.resource::<RenderQueue>();
 

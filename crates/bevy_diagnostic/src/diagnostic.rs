@@ -373,7 +373,7 @@ impl SystemBuffer for DiagnosticsBuffer {
     fn apply(
         &mut self,
         _system_meta: &bevy_ecs::system::SystemMeta,
-        world: &mut bevy_ecs::world::World,
+        world: &mut bevy_ecs::world::SubWorld,
     ) {
         let mut diagnostics = world.resource_mut::<DiagnosticsStore>();
         for (path, measurement) in self.0.drain() {

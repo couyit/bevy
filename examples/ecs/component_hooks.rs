@@ -57,7 +57,7 @@ fn main() {
         .run();
 }
 
-fn setup(world: &mut World) {
+fn setup(world: &mut SubWorld) {
     // In order to register component hooks the component must:
     // - not be currently in use by any entities in the world
     // - not already have a hook of that kind registered

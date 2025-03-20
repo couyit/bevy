@@ -10,7 +10,7 @@ use bevy_ecs::{
     resource::Resource,
     schedule::IntoScheduleConfigs as _,
     system::{Query, Res, ResMut, StaticSystemParam},
-    world::{FromWorld, World},
+    world::{FromWorld, SubWorld},
 };
 use bevy_encase_derive::ShaderType;
 use bevy_math::UVec4;
@@ -1084,7 +1084,7 @@ impl Default for IndirectParametersBuffers {
 }
 
 impl FromWorld for GpuPreprocessingSupport {
-    fn from_world(world: &mut World) -> Self {
+    fn from_world(world: &mut SubWorld) -> Self {
         let adapter = world.resource::<RenderAdapter>();
         let device = world.resource::<RenderDevice>();
 

@@ -2,7 +2,7 @@ use crate::{
     bundle::{Bundle, BundleSpawner, NoBundleEffect},
     change_detection::MaybeLocation,
     entity::{Entity, EntitySetIterator},
-    world::World,
+    world::SubWorld,
 };
 use core::iter::FusedIterator;
 
@@ -27,7 +27,7 @@ where
 {
     #[inline]
     #[track_caller]
-    pub(crate) fn new(world: &'w mut World, iter: I, caller: MaybeLocation) -> Self {
+    pub(crate) fn new(world: &'w mut SubWorld, iter: I, caller: MaybeLocation) -> Self {
         // Ensure all entity allocations are accounted for so `self.entities` can realloc if
         // necessary
         world.flush();

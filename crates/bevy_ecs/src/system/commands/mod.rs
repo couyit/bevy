@@ -28,7 +28,7 @@ use crate::{
     system::{Deferred, IntoObserverSystem, IntoSystem, RegisteredSystem, SystemId, SystemInput},
     world::{
         command_queue::RawCommandQueue, unsafe_world_cell::UnsafeWorldCell, CommandQueue,
-        EntityWorldMut, FromWorld, World,
+        EntityWorldMut, FromWorld, SubWorld,
     },
 };
 
@@ -124,7 +124,7 @@ const _: () = {
         type Item<'w, 's> = Commands<'w, 's>;
 
         fn init_state(
-            world: &mut World,
+            world: &mut SubWorld,
             system_meta: &mut bevy_ecs::system::SystemMeta,
         ) -> Self::State {
             FetchState {
@@ -153,7 +153,7 @@ const _: () = {
         fn apply(
             state: &mut Self::State,
             system_meta: &bevy_ecs::system::SystemMeta,
-            world: &mut World,
+            world: &mut SubWorld,
         ) {
             <__StructFieldsAlias<'_, '_> as bevy_ecs::system::SystemParam>::apply(
                 &mut state.state,
@@ -221,7 +221,7 @@ impl<'w, 's> Commands<'w, 's> {
     /// It is not required to call this constructor when using `Commands` as a [system parameter].
     ///
     /// [system parameter]: crate::system::SystemParam
-    pub fn new(queue: &'s mut CommandQueue, world: &'w World) -> Self {
+    pub fn new(queue: &'s mut CommandQueue, world: &'w SubWorld) -> Self {
         Self::new_from_entities(queue, &world.entities)
     }
 
@@ -686,7 +686,7 @@ impl<'w, 's> Commands<'w, 's> {
         B: Bundle<Effect: NoBundleEffect>,
     {
         let caller = MaybeLocation::caller();
-        self.queue(move |world: &mut World| {
+        self.queue(move |world: &mut SubWorld| {
 
             #[expect(
                 deprecated,
@@ -2214,7 +2214,7 @@ mod tests {
         component::Component,
         resource::Resource,
         system::Commands,
-        world::{CommandQueue, FromWorld, World},
+        world::{CommandQueue, FromWorld, SubWorld},
     };
     use alloc::{string::String, sync::Arc, vec, vec::Vec};
     use core::{
@@ -2248,12 +2248,12 @@ mod tests {
     #[derive(Component, Resource)]
     struct W<T>(T);
 
-    fn simple_command(world: &mut World) {
+    fn simple_command(world: &mut SubWorld) {
         world.spawn((W(0u32), W(42u64)));
     }
 
     impl FromWorld for W<String> {
-        fn from_world(world: &mut World) -> Self {
+        fn from_world(world: &mut SubWorld) -> Self {
             let v = world.resource::<W<usize>>();
             Self("*".repeat(v.0))
         }
@@ -2261,7 +2261,7 @@ mod tests {
 
     #[test]
     fn entity_commands_entry() {
-        let mut world = World::default();
+        let mut world = SubWorld::default();
         let mut queue = CommandQueue::default();
         let mut commands = Commands::new(&mut queue, &world);
         let entity = commands.spawn_empty().id();
@@ -2302,7 +2302,7 @@ mod tests {
 
     #[test]
     fn commands() {
-        let mut world = World::default();
+        let mut world = SubWorld::default();
         let mut command_queue = CommandQueue::default();
         let entity = Commands::new(&mut command_queue, &world)
             .spawn((W(1u32), W(2u64)))
@@ -2334,7 +2334,7 @@ mod tests {
             let mut commands = Commands::new(&mut command_queue, &world);
 
             // set up a simple command using a closure that adds one additional entity
-            commands.queue(|world: &mut World| {
+            commands.queue(|world: &mut SubWorld| {
                 world.spawn((W(42u32), W(0u64)));
             });
 
@@ -2353,7 +2353,7 @@ mod tests {
 
     #[test]
     fn insert_components() {
-        let mut world = World::default();
+        let mut world = SubWorld::default();
         let mut command_queue1 = CommandQueue::default();
 
         // insert components
@@ -2392,7 +2392,7 @@ mod tests {
 
     #[test]
     fn remove_components() {
-        let mut world = World::default();
+        let mut world = SubWorld::default();
 
         let mut command_queue = CommandQueue::default();
         let (dense_dropck, dense_is_dropped) = DropCk::new_pair();
@@ -2438,7 +2438,7 @@ mod tests {
 
     #[test]
     fn remove_components_by_id() {
-        let mut world = World::default();
+        let mut world = SubWorld::default();
 
         let mut command_queue = CommandQueue::default();
         let (dense_dropck, dense_is_dropped) = DropCk::new_pair();
@@ -2491,7 +2491,7 @@ mod tests {
 
     #[test]
     fn remove_resources() {
-        let mut world = World::default();
+        let mut world = SubWorld::default();
         let mut queue = CommandQueue::default();
         {
             let mut commands = Commands::new(&mut queue, &world);
@@ -2525,7 +2525,7 @@ mod tests {
         #[derive(Component)]
         struct Z;
 
-        let mut world = World::default();
+        let mut world = SubWorld::default();
         let mut queue = CommandQueue::default();
         let e = {
             let mut commands = Commands::new(&mut queue, &world);
@@ -2551,7 +2551,7 @@ mod tests {
 
     #[test]
     fn unregister_system_cached_commands() {
-        let mut world = World::default();
+        let mut world = SubWorld::default();
         let mut queue = CommandQueue::default();
 
         fn nothing() {}
@@ -2579,7 +2579,7 @@ mod tests {
 
     #[test]
     fn append() {
-        let mut world = World::default();
+        let mut world = SubWorld::default();
         let mut queue_1 = CommandQueue::default();
         {
             let mut commands = Commands::new(&mut queue_1, &world);

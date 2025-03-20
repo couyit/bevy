@@ -29,7 +29,7 @@ struct AppAssets {
 }
 
 impl FromWorld for AppAssets {
-    fn from_world(world: &mut World) -> Self {
+    fn from_world(world: &mut SubWorld) -> Self {
         let asset_server = world.resource::<AssetServer>();
         Self {
             noise_texture: asset_server.load("textures/AlphaNoise.png"),

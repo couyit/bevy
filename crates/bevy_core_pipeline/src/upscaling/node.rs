@@ -28,7 +28,7 @@ impl ViewNode for UpscalingNode {
         _graph: &mut RenderGraphContext,
         render_context: &mut RenderContext,
         (target, upscaling_target, camera): QueryItem<Self::ViewQuery>,
-        world: &World,
+        world: &SubWorld,
     ) -> Result<(), NodeRunError> {
         let pipeline_cache = world.get_resource::<PipelineCache>().unwrap();
         let blit_pipeline = world.get_resource::<BlitPipeline>().unwrap();

@@ -225,7 +225,7 @@ mod tests {
 
     #[test]
     fn test_schedule_label() {
-        use crate::world::World;
+        use crate::world::SubWorld;
 
         #[derive(Resource)]
         struct Flag(bool);
@@ -236,7 +236,7 @@ mod tests {
         #[derive(ScheduleLabel, Debug, Default, Clone, Copy, PartialEq, Eq, Hash)]
         struct B;
 
-        let mut world = World::new();
+        let mut world = SubWorld::new();
 
         let mut schedule = Schedule::new(A);
         schedule.add_systems(|mut flag: ResMut<Flag>| flag.0 = true);

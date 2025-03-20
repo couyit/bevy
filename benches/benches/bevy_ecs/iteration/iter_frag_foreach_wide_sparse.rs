@@ -16,7 +16,7 @@ macro_rules! create_entities {
 struct Data<const X: usize>(f32);
 
 pub struct Benchmark<'w>(
-    World,
+    SubWorld,
     QueryState<(
         &'w mut Data<0>,
         &'w mut Data<1>,
@@ -34,7 +34,7 @@ pub struct Benchmark<'w>(
 
 impl<'w> Benchmark<'w> {
     pub fn new() -> Self {
-        let mut world = World::new();
+        let mut world = SubWorld::new();
         for _ in 0..5 {
             world.spawn((
                 Data::<0>(1.0),

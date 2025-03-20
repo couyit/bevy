@@ -14,7 +14,7 @@ use crate::{
     resource::Resource,
     schedule::ScheduleLabel,
     system::{IntoSystem, SystemId, SystemInput},
-    world::{FromWorld, SpawnBatchIter, World},
+    world::{FromWorld, SpawnBatchIter, SubWorld},
 };
 
 /// A [`World`] mutation.
@@ -51,14 +51,14 @@ pub trait Command<Out = ()>: Send + 'static {
     /// This method is used to define what a command "does" when it is ultimately applied.
     /// Because this method takes `self`, you can store data or settings on the type that implements this trait.
     /// This data is set by the system or other source of the command, and then ultimately read in this method.
-    fn apply(self, world: &mut World) -> Out;
+    fn apply(self, world: &mut SubWorld) -> Out;
 }
 
 impl<F, Out> Command<Out> for F
 where
-    F: FnOnce(&mut World) -> Out + Send + 'static,
+    F: FnOnce(&mut SubWorld) -> Out + Send + 'static,
 {
-    fn apply(self, world: &mut World) -> Out {
+    fn apply(self, world: &mut SubWorld) -> Out {
         self(world)
     }
 }
@@ -73,7 +73,7 @@ where
     I::Item: Bundle<Effect: NoBundleEffect>,
 {
     let caller = MaybeLocation::caller();
-    move |world: &mut World| {
+    move |world: &mut SubWorld| {
         SpawnBatchIter::new(world, bundles_iter.into_iter(), caller);
     }
 }
@@ -91,7 +91,7 @@ where
     B: Bundle<Effect: NoBundleEffect>,
 {
     let caller = MaybeLocation::caller();
-    move |world: &mut World| -> Result {
+    move |world: &mut SubWorld| -> Result {
         world.try_insert_batch_with_caller(batch, insert_mode, caller)?;
         Ok(())
     }
@@ -101,7 +101,7 @@ where
 /// created with the [`FromWorld`] trait.
 #[track_caller]
 pub fn init_resource<R: Resource + FromWorld>() -> impl Command {
-    move |world: &mut World| {
+    move |world: &mut SubWorld| {
         world.init_resource::<R>();
     }
 }
@@ -110,21 +110,21 @@ pub fn init_resource<R: Resource + FromWorld>() -> impl Command {
 #[track_caller]
 pub fn insert_resource<R: Resource>(resource: R) -> impl Command {
     let caller = MaybeLocation::caller();
-    move |world: &mut World| {
+    move |world: &mut SubWorld| {
         world.insert_resource_with_caller(resource, caller);
     }
 }
 
 /// A [`Command`] that removes a [`Resource`] from the world.
 pub fn remove_resource<R: Resource>() -> impl Command {
-    move |world: &mut World| {
+    move |world: &mut SubWorld| {
         world.remove_resource::<R>();
     }
 }
 
 /// A [`Command`] that runs the system corresponding to the given [`SystemId`].
 pub fn run_system<O: 'static>(id: SystemId<(), O>) -> impl Command<Result> {
-    move |world: &mut World| -> Result {
+    move |world: &mut SubWorld| -> Result {
         world.run_system(id)?;
         Ok(())
     }
@@ -136,7 +136,7 @@ pub fn run_system_with<I>(id: SystemId<I>, input: I::Inner<'static>) -> impl Com
 where
     I: SystemInput<Inner<'static>: Send> + 'static,
 {
-    move |world: &mut World| -> Result {
+    move |world: &mut SubWorld| -> Result {
         world.run_system_with(id, input)?;
         Ok(())
     }
@@ -149,7 +149,7 @@ where
     M: 'static,
     S: IntoSystem<(), (), M> + Send + 'static,
 {
-    move |world: &mut World| -> Result {
+    move |world: &mut SubWorld| -> Result {
         world.run_system_cached(system)?;
         Ok(())
     }
@@ -163,7 +163,7 @@ where
     M: 'static,
     S: IntoSystem<I, (), M> + Send + 'static,
 {
-    move |world: &mut World| -> Result {
+    move |world: &mut SubWorld| -> Result {
         world.run_system_cached_with(system, input)?;
         Ok(())
     }
@@ -177,7 +177,7 @@ where
     I: SystemInput + Send + 'static,
     O: Send + 'static,
 {
-    move |world: &mut World| -> Result {
+    move |world: &mut SubWorld| -> Result {
         world.unregister_system(system_id)?;
         Ok(())
     }
@@ -192,7 +192,7 @@ where
     M: 'static,
     S: IntoSystem<I, O, M> + Send + 'static,
 {
-    move |world: &mut World| -> Result {
+    move |world: &mut SubWorld| -> Result {
         world.unregister_system_cached(system)?;
         Ok(())
     }
@@ -200,7 +200,7 @@ where
 
 /// A [`Command`] that runs the schedule corresponding to the given [`ScheduleLabel`].
 pub fn run_schedule(label: impl ScheduleLabel) -> impl Command<Result> {
-    move |world: &mut World| -> Result {
+    move |world: &mut SubWorld| -> Result {
         world.try_run_schedule(label)?;
         Ok(())
     }
@@ -210,7 +210,7 @@ pub fn run_schedule(label: impl ScheduleLabel) -> impl Command<Result> {
 #[track_caller]
 pub fn trigger(event: impl Event) -> impl Command {
     let caller = MaybeLocation::caller();
-    move |world: &mut World| {
+    move |world: &mut SubWorld| {
         world.trigger_with_caller(event, caller);
     }
 }
@@ -221,7 +221,7 @@ pub fn trigger_targets(
     targets: impl TriggerTargets + Send + Sync + 'static,
 ) -> impl Command {
     let caller = MaybeLocation::caller();
-    move |world: &mut World| {
+    move |world: &mut SubWorld| {
         world.trigger_targets_with_caller(event, targets, caller);
     }
 }
@@ -230,7 +230,7 @@ pub fn trigger_targets(
 #[track_caller]
 pub fn send_event<E: Event>(event: E) -> impl Command {
     let caller = MaybeLocation::caller();
-    move |world: &mut World| {
+    move |world: &mut SubWorld| {
         let mut events = world.resource_mut::<Events<E>>();
         events.send_with_caller(event, caller);
     }

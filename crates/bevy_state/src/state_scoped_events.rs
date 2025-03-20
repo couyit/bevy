@@ -6,13 +6,13 @@ use bevy_ecs::{
     event::{Event, EventReader, Events},
     resource::Resource,
     system::Commands,
-    world::World,
+    world::SubWorld,
 };
 use bevy_platform_support::collections::HashMap;
 
 use crate::state::{FreelyMutableState, OnExit, StateTransitionEvent};
 
-fn clear_event_queue<E: Event>(w: &mut World) {
+fn clear_event_queue<E: Event>(w: &mut SubWorld) {
     if let Some(mut queue) = w.get_resource_mut::<Events<E>>() {
         queue.clear();
     }
@@ -20,7 +20,7 @@ fn clear_event_queue<E: Event>(w: &mut World) {
 
 #[derive(Resource)]
 struct StateScopedEvents<S: FreelyMutableState> {
-    cleanup_fns: HashMap<S, Vec<fn(&mut World)>>,
+    cleanup_fns: HashMap<S, Vec<fn(&mut SubWorld)>>,
 }
 
 impl<S: FreelyMutableState> StateScopedEvents<S> {
@@ -31,7 +31,7 @@ impl<S: FreelyMutableState> StateScopedEvents<S> {
             .push(clear_event_queue::<E>);
     }
 
-    fn cleanup(&self, w: &mut World, state: S) {
+    fn cleanup(&self, w: &mut SubWorld, state: S) {
         let Some(fns) = self.cleanup_fns.get(&state) else {
             return;
         };
@@ -63,7 +63,7 @@ fn cleanup_state_scoped_event<S: FreelyMutableState>(
         return;
     };
 
-    c.queue(move |w: &mut World| {
+    c.queue(move |w: &mut SubWorld| {
         w.resource_scope::<StateScopedEvents<S>, ()>(|w, events| {
             events.cleanup(w, exited);
         });

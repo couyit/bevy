@@ -21,7 +21,7 @@ use crate::{
     query::Access,
     schedule::{BoxedCondition, InternedSystemSet, NodeId, SystemTypeSet},
     system::{ScheduleSystem, System, SystemIn},
-    world::{unsafe_world_cell::UnsafeWorldCell, DeferredWorld, World},
+    world::{unsafe_world_cell::UnsafeWorldCell, DeferredWorld, SubWorld},
 };
 
 /// Types that can run a [`SystemSchedule`] on a [`World`].
@@ -31,7 +31,7 @@ pub(super) trait SystemExecutor: Send + Sync {
     fn run(
         &mut self,
         schedule: &mut SystemSchedule,
-        world: &mut World,
+        world: &mut SubWorld,
         skip_systems: Option<&FixedBitSet>,
         error_handler: fn(BevyError, ErrorContext),
     );
@@ -211,13 +211,13 @@ impl System for ApplyDeferred {
         Ok(())
     }
 
-    fn run(&mut self, _input: SystemIn<'_, Self>, _world: &mut World) -> Self::Out {
+    fn run(&mut self, _input: SystemIn<'_, Self>, _world: &mut SubWorld) -> Self::Out {
         // This system does nothing on its own. The executor will apply deferred
         // commands from other systems instead of running this system.
         Ok(())
     }
 
-    fn apply_deferred(&mut self, _world: &mut World) {}
+    fn apply_deferred(&mut self, _world: &mut SubWorld) {}
 
     fn queue_deferred(&mut self, _world: DeferredWorld) {}
 
@@ -227,7 +227,7 @@ impl System for ApplyDeferred {
         true
     }
 
-    fn initialize(&mut self, _world: &mut World) {}
+    fn initialize(&mut self, _world: &mut SubWorld) {}
 
     fn update_archetype_component_access(&mut self, _world: UnsafeWorldCell) {}
 
@@ -267,7 +267,7 @@ mod __rust_begin_short_backtrace {
     use crate::{
         error::Result,
         system::{ReadOnlySystem, ScheduleSystem},
-        world::{unsafe_world_cell::UnsafeWorldCell, World},
+        world::{unsafe_world_cell::UnsafeWorldCell, SubWorld},
     };
 
     /// # Safety
@@ -294,7 +294,7 @@ mod __rust_begin_short_backtrace {
     }
 
     #[inline(never)]
-    pub(super) fn run(system: &mut ScheduleSystem, world: &mut World) -> Result {
+    pub(super) fn run(system: &mut ScheduleSystem, world: &mut SubWorld) -> Result {
         let result = system.run((), world);
         black_box(());
         result
@@ -303,7 +303,7 @@ mod __rust_begin_short_backtrace {
     #[inline(never)]
     pub(super) fn readonly_run<O: 'static>(
         system: &mut dyn ReadOnlySystem<In = (), Out = O>,
-        world: &mut World,
+        world: &mut SubWorld,
     ) -> O {
         black_box(system.run((), world))
     }
@@ -315,7 +315,7 @@ mod tests {
         prelude::{IntoScheduleConfigs, Resource, Schedule, SystemSet},
         schedule::ExecutorKind,
         system::{Commands, Res, WithParamWarnPolicy},
-        world::World,
+        world::SubWorld,
     };
 
     #[derive(Resource)]
@@ -338,7 +338,7 @@ mod tests {
     }
 
     fn invalid_system_param_skips_core(executor: ExecutorKind) {
-        let mut world = World::new();
+        let mut world = SubWorld::new();
         let mut schedule = Schedule::default();
         schedule.set_executor_kind(executor);
         schedule.add_systems(
@@ -367,7 +367,7 @@ mod tests {
     }
 
     fn invalid_condition_param_skips_system_core(executor: ExecutorKind) {
-        let mut world = World::new();
+        let mut world = SubWorld::new();
         let mut schedule = Schedule::default();
         schedule.set_executor_kind(executor);
         schedule.configure_sets(S1.run_if((|_: Res<R1>| true).warn_param_missing()));

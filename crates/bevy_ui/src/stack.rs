@@ -130,7 +130,7 @@ mod tests {
         component::Component,
         schedule::Schedule,
         system::Commands,
-        world::{CommandQueue, World},
+        world::{CommandQueue, SubWorld},
     };
 
     use crate::{GlobalZIndex, Node, UiStack, ZIndex};
@@ -176,7 +176,7 @@ mod tests {
     /// failing randomly in the future because of some unrelated `bevy_ecs` change.
     #[test]
     fn test_ui_stack_system() {
-        let mut world = World::default();
+        let mut world = SubWorld::default();
         world.init_resource::<UiStack>();
 
         let mut queue = CommandQueue::default();
@@ -260,7 +260,7 @@ mod tests {
 
     #[test]
     fn test_with_equal_global_zindex_zindex_decides_order() {
-        let mut world = World::default();
+        let mut world = SubWorld::default();
         world.init_resource::<UiStack>();
 
         let mut queue = CommandQueue::default();

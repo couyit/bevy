@@ -503,7 +503,7 @@ where
 }
 
 impl<M: Material> FromWorld for MaterialPipeline<M> {
-    fn from_world(world: &mut World) -> Self {
+    fn from_world(world: &mut SubWorld) -> Self {
         let asset_server = world.resource::<AssetServer>();
         let render_device = world.resource::<RenderDevice>();
 

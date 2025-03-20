@@ -50,7 +50,7 @@ pub const METERING_SHADER_HANDLE: Handle<Shader> =
 pub const HISTOGRAM_BIN_COUNT: u64 = 64;
 
 impl FromWorld for AutoExposurePipeline {
-    fn from_world(world: &mut World) -> Self {
+    fn from_world(world: &mut SubWorld) -> Self {
         let render_device = world.resource::<RenderDevice>();
 
         Self {

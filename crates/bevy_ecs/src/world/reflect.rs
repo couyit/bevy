@@ -9,7 +9,7 @@ use bevy_reflect::{Reflect, ReflectFromPtr};
 
 use crate::{prelude::*, world::ComponentId};
 
-impl World {
+impl SubWorld {
     /// Retrieves a reference to the given `entity`'s [`Component`] of the given `type_id` using
     /// reflection.
     ///
@@ -251,7 +251,7 @@ mod tests {
 
     use bevy_reflect::Reflect;
 
-    use crate::prelude::{AppTypeRegistry, Component, DetectChanges, World};
+    use crate::prelude::{AppTypeRegistry, Component, DetectChanges, SubWorld};
 
     #[derive(Component, Reflect)]
     struct RFoo(i32);
@@ -261,7 +261,7 @@ mod tests {
 
     #[test]
     fn get_component_as_reflect() {
-        let mut world = World::new();
+        let mut world = SubWorld::new();
         world.init_resource::<AppTypeRegistry>();
 
         let app_type_registry = world.get_resource_mut::<AppTypeRegistry>().unwrap();
@@ -293,7 +293,7 @@ mod tests {
 
     #[test]
     fn get_component_as_mut_reflect() {
-        let mut world = World::new();
+        let mut world = SubWorld::new();
         world.init_resource::<AppTypeRegistry>();
 
         let app_type_registry = world.get_resource_mut::<AppTypeRegistry>().unwrap();

@@ -4,7 +4,7 @@ use core::marker::PhantomData;
 use crate::{
     archetype::ArchetypeComponentId,
     component::{ComponentId, Tick},
-    prelude::World,
+    prelude::SubWorld,
     query::Access,
     schedule::InternedSystemSet,
     system::{input::SystemInput, SystemIn},
@@ -186,7 +186,7 @@ where
         )
     }
 
-    fn run(&mut self, input: SystemIn<'_, Self>, world: &mut World) -> Self::Out {
+    fn run(&mut self, input: SystemIn<'_, Self>, world: &mut SubWorld) -> Self::Out {
         let world = world.as_unsafe_world_cell();
         Func::combine(
             input,
@@ -200,7 +200,7 @@ where
     }
 
     #[inline]
-    fn apply_deferred(&mut self, world: &mut World) {
+    fn apply_deferred(&mut self, world: &mut SubWorld) {
         self.a.apply_deferred(world);
         self.b.apply_deferred(world);
     }
@@ -217,7 +217,7 @@ where
         unsafe { self.a.validate_param_unsafe(world) }
     }
 
-    fn initialize(&mut self, world: &mut World) {
+    fn initialize(&mut self, world: &mut SubWorld) {
         self.a.initialize(world);
         self.b.initialize(world);
         self.component_access.extend(self.a.component_access());
@@ -416,12 +416,12 @@ where
         self.b.run_unsafe(value, world)
     }
 
-    fn run(&mut self, input: SystemIn<'_, Self>, world: &mut World) -> Self::Out {
+    fn run(&mut self, input: SystemIn<'_, Self>, world: &mut SubWorld) -> Self::Out {
         let value = self.a.run(input, world);
         self.b.run(value, world)
     }
 
-    fn apply_deferred(&mut self, world: &mut World) {
+    fn apply_deferred(&mut self, world: &mut SubWorld) {
         self.a.apply_deferred(world);
         self.b.apply_deferred(world);
     }
@@ -436,11 +436,11 @@ where
         unsafe { self.a.validate_param_unsafe(world) }
     }
 
-    fn validate_param(&mut self, world: &World) -> bool {
+    fn validate_param(&mut self, world: &SubWorld) -> bool {
         self.a.validate_param(world) && self.b.validate_param(world)
     }
 
-    fn initialize(&mut self, world: &mut World) {
+    fn initialize(&mut self, world: &mut SubWorld) {
         self.a.initialize(world);
         self.b.initialize(world);
         self.component_access.extend(self.a.component_access());

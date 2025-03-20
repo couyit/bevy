@@ -582,7 +582,7 @@ where
     pub fn render<'w>(
         &self,
         render_pass: &mut TrackedRenderPass<'w>,
-        world: &'w World,
+        world: &'w SubWorld,
         view: Entity,
     ) -> Result<(), DrawError> {
         {
@@ -604,7 +604,7 @@ where
     fn render_batchable_meshes<'w>(
         &self,
         render_pass: &mut TrackedRenderPass<'w>,
-        world: &'w World,
+        world: &'w SubWorld,
         view: Entity,
     ) -> Result<(), DrawError> {
         let draw_functions = world.resource::<DrawFunctions<BPI>>();
@@ -723,7 +723,7 @@ where
     fn render_unbatchable_meshes<'w>(
         &self,
         render_pass: &mut TrackedRenderPass<'w>,
-        world: &'w World,
+        world: &'w SubWorld,
         view: Entity,
     ) -> Result<(), DrawError> {
         let draw_functions = world.resource::<DrawFunctions<BPI>>();
@@ -789,7 +789,7 @@ where
     fn render_non_meshes<'w>(
         &self,
         render_pass: &mut TrackedRenderPass<'w>,
-        world: &'w World,
+        world: &'w SubWorld,
         view: Entity,
     ) -> Result<(), DrawError> {
         let draw_functions = world.resource::<DrawFunctions<BPI>>();
@@ -1383,7 +1383,7 @@ where
     pub fn render<'w>(
         &self,
         render_pass: &mut TrackedRenderPass<'w>,
-        world: &'w World,
+        world: &'w SubWorld,
         view: Entity,
     ) -> Result<(), DrawError> {
         self.render_range(render_pass, world, view, ..)
@@ -1393,7 +1393,7 @@ where
     pub fn render_range<'w>(
         &self,
         render_pass: &mut TrackedRenderPass<'w>,
-        world: &'w World,
+        world: &'w SubWorld,
         view: Entity,
         range: impl SliceIndex<[I], Output = [I]>,
     ) -> Result<(), DrawError> {

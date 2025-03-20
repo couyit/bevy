@@ -17,7 +17,7 @@ use crate::{
     component::{Component, ComponentId, ComponentInfo},
     entity::Entity,
     query::DebugCheckedUnwrap,
-    world::World,
+    world::SubWorld,
 };
 
 /// Provides read access to the source component (the component being cloned) in a [`ComponentCloneFn`].
@@ -413,7 +413,7 @@ impl<'a> BundleScratch<'a> {
     /// All [`ComponentId`] values in this instance must come from `world`.
     pub(crate) unsafe fn write(
         self,
-        world: &mut World,
+        world: &mut SubWorld,
         entity: Entity,
         relationship_hook_insert_mode: RelationshipHookMode,
     ) {
@@ -432,7 +432,7 @@ impl<'a> BundleScratch<'a> {
 
 impl EntityCloner {
     /// Returns a new [`EntityClonerBuilder`] using the given `world`.
-    pub fn build(world: &mut World) -> EntityClonerBuilder {
+    pub fn build(world: &mut SubWorld) -> EntityClonerBuilder {
         EntityClonerBuilder {
             world,
             attach_required_components: true,
@@ -450,7 +450,7 @@ impl EntityCloner {
     /// Clones and inserts components from the `source` entity into the entity mapped by `mapper` from `source` using the stored configuration.
     fn clone_entity_internal(
         &mut self,
-        world: &mut World,
+        world: &mut SubWorld,
         source: Entity,
         mapper: &mut dyn EntityMapper,
         relationship_hook_insert_mode: RelationshipHookMode,
@@ -555,7 +555,7 @@ impl EntityCloner {
     /// by [`RelationshipTarget`](crate::relationship::RelationshipTarget) components with
     /// [`RelationshipTarget::LINKED_SPAWN`](crate::relationship::RelationshipTarget::LINKED_SPAWN)
     #[track_caller]
-    pub fn clone_entity(&mut self, world: &mut World, source: Entity, target: Entity) {
+    pub fn clone_entity(&mut self, world: &mut SubWorld, source: Entity, target: Entity) {
         let mut map = EntityHashMap::<Entity>::new();
         map.set_mapped(source, target);
         self.clone_entity_mapped(world, source, &mut map);
@@ -566,7 +566,7 @@ impl EntityCloner {
     /// by [`RelationshipTarget`](crate::relationship::RelationshipTarget) components with
     /// [`RelationshipTarget::LINKED_SPAWN`](crate::relationship::RelationshipTarget::LINKED_SPAWN)
     #[track_caller]
-    pub fn spawn_clone(&mut self, world: &mut World, source: Entity) -> Entity {
+    pub fn spawn_clone(&mut self, world: &mut SubWorld, source: Entity) -> Entity {
         let target = world.spawn_empty().id();
         self.clone_entity(world, source, target);
         target
@@ -576,7 +576,7 @@ impl EntityCloner {
     #[track_caller]
     pub fn clone_entity_mapped(
         &mut self,
-        world: &mut World,
+        world: &mut SubWorld,
         source: Entity,
         mapper: &mut dyn EntityMapper,
     ) -> Entity {
@@ -611,7 +611,7 @@ impl EntityCloner {
 /// A builder for configuring [`EntityCloner`]. See [`EntityCloner`] for more information.
 #[derive(Debug)]
 pub struct EntityClonerBuilder<'w> {
-    world: &'w mut World,
+    world: &'w mut SubWorld,
     entity_cloner: EntityCloner,
     attach_required_components: bool,
 }
@@ -846,7 +846,7 @@ mod tests {
         prelude::{ChildOf, Children, Resource},
         reflect::{AppTypeRegistry, ReflectComponent, ReflectFromWorld},
         system::Commands,
-        world::{FromWorld, World},
+        world::{FromWorld, SubWorld},
     };
     use alloc::vec::Vec;
     use bevy_ptr::OwningPtr;
@@ -874,7 +874,7 @@ mod tests {
                 field: usize,
             }
 
-            let mut world = World::default();
+            let mut world = SubWorld::default();
             world.init_resource::<AppTypeRegistry>();
             let registry = world.get_resource::<AppTypeRegistry>().unwrap();
             registry.write().register::<A>();
@@ -936,7 +936,7 @@ mod tests {
                 ignored: NotClone,
             }
 
-            let mut world = World::default();
+            let mut world = SubWorld::default();
             world.init_resource::<AppTypeRegistry>();
             let registry = world.get_resource::<AppTypeRegistry>().unwrap();
             registry.write().register::<(A, B, C, D)>();
@@ -1000,7 +1000,7 @@ mod tests {
                 assert!(source.read_reflect(&registry.read()).is_none());
             }
 
-            let mut world = World::default();
+            let mut world = SubWorld::default();
             world.init_resource::<AppTypeRegistry>();
             let registry = world.get_resource::<AppTypeRegistry>().unwrap();
             {
@@ -1034,7 +1034,7 @@ mod tests {
                 }
             }
 
-            let mut world = World::default();
+            let mut world = SubWorld::default();
             world.init_resource::<AppTypeRegistry>();
             let registry = world.get_resource::<AppTypeRegistry>().unwrap();
             registry.write().register::<A>();
@@ -1063,7 +1063,7 @@ mod tests {
             #[reflect(from_reflect = false)]
             struct B(#[reflect(ignore)] PhantomData<()>);
 
-            let mut world = World::default();
+            let mut world = SubWorld::default();
 
             // No AppTypeRegistry
             let e = world.spawn((A, B(Default::default()))).id();
@@ -1095,7 +1095,7 @@ mod tests {
             field: usize,
         }
 
-        let mut world = World::default();
+        let mut world = SubWorld::default();
 
         let component = A { field: 5 };
 
@@ -1117,7 +1117,7 @@ mod tests {
         #[derive(Component, Clone)]
         struct B;
 
-        let mut world = World::default();
+        let mut world = SubWorld::default();
 
         let component = A { field: 5 };
 
@@ -1146,7 +1146,7 @@ mod tests {
         #[derive(Component, Clone)]
         struct C;
 
-        let mut world = World::default();
+        let mut world = SubWorld::default();
 
         let component = A { field: 5 };
 
@@ -1175,7 +1175,7 @@ mod tests {
         #[derive(Component, Clone)]
         struct C;
 
-        let mut world = World::default();
+        let mut world = SubWorld::default();
 
         let component = A { field: 5 };
 
@@ -1208,7 +1208,7 @@ mod tests {
         #[derive(Component, Clone)]
         struct C;
 
-        let mut world = World::default();
+        let mut world = SubWorld::default();
 
         let component = A { field: 5 };
 
@@ -1239,7 +1239,7 @@ mod tests {
         #[derive(Component, Clone, PartialEq, Debug)]
         struct C(u32);
 
-        let mut world = World::default();
+        let mut world = SubWorld::default();
 
         let e = world.spawn(A).id();
         let e_clone = world.spawn_empty().id();
@@ -1267,7 +1267,7 @@ mod tests {
         #[derive(Component, Clone, PartialEq, Debug)]
         struct C(u32);
 
-        let mut world = World::default();
+        let mut world = SubWorld::default();
 
         let e = world.spawn((A, C(0))).id();
         let e_clone = world.spawn_empty().id();
@@ -1298,7 +1298,7 @@ mod tests {
             }
         }
 
-        let mut world = World::default();
+        let mut world = SubWorld::default();
 
         let layout = Layout::array::<u8>(COMPONENT_SIZE).unwrap();
         // SAFETY:
@@ -1343,7 +1343,7 @@ mod tests {
 
     #[test]
     fn recursive_clone() {
-        let mut world = World::new();
+        let mut world = SubWorld::new();
         let root = world.spawn_empty().id();
         let child1 = world.spawn(ChildOf { parent: root }).id();
         let grandchild = world.spawn(ChildOf { parent: child1 }).id();
@@ -1389,12 +1389,12 @@ mod tests {
         struct FromWorldCalled(bool);
 
         impl FromWorld for SomeRef {
-            fn from_world(world: &mut World) -> Self {
+            fn from_world(world: &mut SubWorld) -> Self {
                 world.insert_resource(FromWorldCalled(true));
                 SomeRef(Entity::PLACEHOLDER, Default::default())
             }
         }
-        let mut world = World::new();
+        let mut world = SubWorld::new();
         let registry = AppTypeRegistry::default();
         registry.write().register::<SomeRef>();
         world.insert_resource(registry);

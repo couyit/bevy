@@ -12,7 +12,7 @@ use crate::{
     query::Access,
     schedule::InternedSystemSet,
     system::{input::SystemInput, SystemIn},
-    world::{unsafe_world_cell::UnsafeWorldCell, DeferredWorld, World},
+    world::{unsafe_world_cell::UnsafeWorldCell, DeferredWorld, SubWorld},
 };
 
 use alloc::{borrow::Cow, boxed::Box, vec::Vec};
@@ -82,7 +82,7 @@ pub trait System: Send + Sync + 'static {
     /// Unlike [`System::run_unsafe`], this will apply deferred parameters *immediately*.
     ///
     /// [`run_readonly`]: ReadOnlySystem::run_readonly
-    fn run(&mut self, input: SystemIn<'_, Self>, world: &mut World) -> Self::Out {
+    fn run(&mut self, input: SystemIn<'_, Self>, world: &mut SubWorld) -> Self::Out {
         let ret = self.run_without_applying_deferred(input, world);
         self.apply_deferred(world);
         ret
@@ -94,7 +94,7 @@ pub trait System: Send + Sync + 'static {
     fn run_without_applying_deferred(
         &mut self,
         input: SystemIn<'_, Self>,
-        world: &mut World,
+        world: &mut SubWorld,
     ) -> Self::Out {
         let world_cell = world.as_unsafe_world_cell();
         self.update_archetype_component_access(world_cell);
@@ -107,7 +107,7 @@ pub trait System: Send + Sync + 'static {
     /// Applies any [`Deferred`](crate::system::Deferred) system parameters (or other system buffers) of this system to the world.
     ///
     /// This is where [`Commands`](crate::system::Commands) get applied.
-    fn apply_deferred(&mut self, world: &mut World);
+    fn apply_deferred(&mut self, world: &mut SubWorld);
 
     /// Enqueues any [`Deferred`](crate::system::Deferred) system parameters (or other system buffers)
     /// of this system into the world's command buffer.
@@ -136,7 +136,7 @@ pub trait System: Send + Sync + 'static {
 
     /// Safe version of [`System::validate_param_unsafe`].
     /// that runs on exclusive, single-threaded `world` pointer.
-    fn validate_param(&mut self, world: &World) -> bool {
+    fn validate_param(&mut self, world: &SubWorld) -> bool {
         let world_cell = world.as_unsafe_world_cell_readonly();
         self.update_archetype_component_access(world_cell);
         // SAFETY:
@@ -146,7 +146,7 @@ pub trait System: Send + Sync + 'static {
     }
 
     /// Initialize the system.
-    fn initialize(&mut self, _world: &mut World);
+    fn initialize(&mut self, _world: &mut SubWorld);
 
     /// Update the system's archetype component [`Access`].
     ///
@@ -198,7 +198,7 @@ pub unsafe trait ReadOnlySystem: System {
     ///
     /// Unlike [`System::run`], this can be called with a shared reference to the world,
     /// since this system is known not to modify the world.
-    fn run_readonly(&mut self, input: SystemIn<'_, Self>, world: &World) -> Self::Out {
+    fn run_readonly(&mut self, input: SystemIn<'_, Self>, world: &SubWorld) -> Self::Out {
         let world = world.as_unsafe_world_cell_readonly();
         self.update_archetype_component_access(world);
         // SAFETY:
@@ -351,7 +351,7 @@ pub trait RunSystemOnce: Sized {
         In: SystemInput;
 }
 
-impl RunSystemOnce for &mut World {
+impl RunSystemOnce for &mut SubWorld {
     fn run_system_once_with<T, In, Out, Marker>(
         self,
         system: T,
@@ -405,7 +405,7 @@ mod tests {
             n + 1
         }
 
-        let mut world = World::default();
+        let mut world = SubWorld::default();
         let n = world.run_system_once_with(system, 1).unwrap();
         assert_eq!(n, 2);
         assert_eq!(world.resource::<T>().0, 1);
@@ -420,7 +420,7 @@ mod tests {
 
     #[test]
     fn run_two_systems() {
-        let mut world = World::new();
+        let mut world = SubWorld::new();
         world.init_resource::<Counter>();
         assert_eq!(*world.resource::<Counter>(), Counter(0));
         world.run_system_once(count_up).unwrap();
@@ -435,7 +435,7 @@ mod tests {
 
     #[test]
     fn command_processing() {
-        let mut world = World::new();
+        let mut world = SubWorld::new();
         assert_eq!(world.entities.len(), 0);
         world.run_system_once(spawn_entity).unwrap();
         assert_eq!(world.entities.len(), 1);
@@ -447,7 +447,7 @@ mod tests {
             ns.0 -= 1;
         }
 
-        let mut world = World::new();
+        let mut world = SubWorld::new();
         world.insert_non_send_resource(Counter(10));
         assert_eq!(*world.non_send_resource::<Counter>(), Counter(10));
         world.run_system_once(non_send_count_down).unwrap();
@@ -460,7 +460,7 @@ mod tests {
         impl Resource for T {}
         fn system(_: Res<T>) {}
 
-        let mut world = World::default();
+        let mut world = SubWorld::default();
         // This fails because `T` has not been added to the world yet.
         let result = world.run_system_once(system.warn_param_missing());
 

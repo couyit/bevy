@@ -73,7 +73,7 @@ impl ViewNode for CopyDeferredLightingIdNode {
         (_view_target, view_prepass_textures, deferred_lighting_id_depth_texture): QueryItem<
             Self::ViewQuery,
         >,
-        world: &World,
+        world: &SubWorld,
     ) -> Result<(), NodeRunError> {
         let copy_deferred_lighting_id_pipeline = world.resource::<CopyDeferredLightingIdPipeline>();
 
@@ -126,7 +126,7 @@ struct CopyDeferredLightingIdPipeline {
 }
 
 impl FromWorld for CopyDeferredLightingIdPipeline {
-    fn from_world(world: &mut World) -> Self {
+    fn from_world(world: &mut SubWorld) -> Self {
         let render_device = world.resource::<RenderDevice>();
 
         let layout = render_device.create_bind_group_layout(

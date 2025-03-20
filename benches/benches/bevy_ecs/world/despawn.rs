@@ -13,7 +13,7 @@ pub fn world_despawn(criterion: &mut Criterion) {
     group.measurement_time(core::time::Duration::from_secs(4));
 
     for entity_count in (0..5).map(|i| 10_u32.pow(i)) {
-        let mut world = World::default();
+        let mut world = SubWorld::default();
         for _ in 0..entity_count {
             world.spawn((A(Mat4::default()), B(Vec4::default())));
         }

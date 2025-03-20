@@ -10,7 +10,7 @@ use bevy_ecs::{
     reflect::ReflectComponent,
     resource::Resource,
     system::{Commands, Query, Res},
-    world::{FromWorld, World},
+    world::{FromWorld, SubWorld},
 };
 use bevy_math::{uvec4, AspectRatio, UVec2, UVec3, UVec4, Vec3Swizzles as _, Vec4};
 use bevy_platform_support::collections::HashSet;
@@ -429,7 +429,7 @@ impl GlobalVisibleClusterableObjects {
 }
 
 impl FromWorld for GlobalClusterableObjectMeta {
-    fn from_world(world: &mut World) -> Self {
+    fn from_world(world: &mut SubWorld) -> Self {
         Self::new(
             world
                 .resource::<RenderDevice>()

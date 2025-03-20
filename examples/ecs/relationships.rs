@@ -36,7 +36,7 @@ struct TargetedBy(Vec<Entity>);
 fn main() {
     // Operating on a raw `World` and running systems one at a time
     // is great for writing tests and teaching abstract concepts!
-    let mut world = World::new();
+    let mut world = SubWorld::new();
 
     // We're going to spawn a few entities and relate them to each other in a complex way.
     // To start, Bob will target Alice, Charlie will target Bob,

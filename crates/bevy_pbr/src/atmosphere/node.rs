@@ -1,4 +1,4 @@
-use bevy_ecs::{query::QueryItem, system::lifetimeless::Read, world::World};
+use bevy_ecs::{query::QueryItem, system::lifetimeless::Read, world::SubWorld};
 use bevy_math::{UVec2, Vec3Swizzles};
 use bevy_render::{
     extract_component::DynamicUniformIndex,
@@ -51,7 +51,7 @@ impl ViewNode for AtmosphereLutsNode {
             view_uniforms_offset,
             lights_uniforms_offset,
         ): QueryItem<Self::ViewQuery>,
-        world: &World,
+        world: &SubWorld,
     ) -> Result<(), NodeRunError> {
         let pipelines = world.resource::<AtmosphereLutPipelines>();
         let pipeline_cache = world.resource::<PipelineCache>();
@@ -182,7 +182,7 @@ impl ViewNode for RenderSkyNode {
             lights_uniforms_offset,
             render_sky_pipeline_id,
         ): QueryItem<'w, Self::ViewQuery>,
-        world: &'w World,
+        world: &'w SubWorld,
     ) -> Result<(), NodeRunError> {
         let pipeline_cache = world.resource::<PipelineCache>();
         let Some(render_sky_pipeline) =

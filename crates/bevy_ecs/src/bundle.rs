@@ -16,7 +16,7 @@ use crate::{
     },
     entity::{Entities, Entity, EntityLocation},
     observer::Observers,
-    prelude::World,
+    prelude::SubWorld,
     query::DebugCheckedUnwrap,
     relationship::RelationshipHookMode,
     storage::{SparseSetIndex, SparseSets, Storages, Table, TableRow},
@@ -995,7 +995,7 @@ pub(crate) enum ArchetypeMoveType {
 impl<'w> BundleInserter<'w> {
     #[inline]
     pub(crate) fn new<T: Bundle>(
-        world: &'w mut World,
+        world: &'w mut SubWorld,
         archetype_id: ArchetypeId,
         change_tick: Tick,
     ) -> Self {
@@ -1015,7 +1015,7 @@ impl<'w> BundleInserter<'w> {
     /// - Caller must ensure that `bundle_id` exists in `world.bundles`.
     #[inline]
     pub(crate) unsafe fn new_with_id(
-        world: &'w mut World,
+        world: &'w mut SubWorld,
         archetype_id: ArchetypeId,
         bundle_id: BundleId,
         change_tick: Tick,
@@ -1372,7 +1372,7 @@ pub(crate) struct BundleSpawner<'w> {
 
 impl<'w> BundleSpawner<'w> {
     #[inline]
-    pub fn new<T: Bundle>(world: &'w mut World, change_tick: Tick) -> Self {
+    pub fn new<T: Bundle>(world: &'w mut SubWorld, change_tick: Tick) -> Self {
         // SAFETY: These come from the same world. `world.components_registrator` can't be used since we borrow other fields too.
         let mut registrator =
             unsafe { ComponentsRegistrator::new(&mut world.components, &mut world.component_ids) };
@@ -1389,7 +1389,7 @@ impl<'w> BundleSpawner<'w> {
     /// Caller must ensure that `bundle_id` exists in `world.bundles`
     #[inline]
     pub(crate) unsafe fn new_with_id(
-        world: &'w mut World,
+        world: &'w mut SubWorld,
         bundle_id: BundleId,
         change_tick: Tick,
     ) -> Self {
@@ -1813,7 +1813,7 @@ mod tests {
 
     #[test]
     fn component_hook_order_spawn_despawn() {
-        let mut world = World::new();
+        let mut world = SubWorld::new();
         world.init_resource::<R>();
         world
             .register_component_hooks::<A>()
@@ -1829,7 +1829,7 @@ mod tests {
 
     #[test]
     fn component_hook_order_spawn_despawn_with_macro_hooks() {
-        let mut world = World::new();
+        let mut world = SubWorld::new();
         world.init_resource::<R>();
 
         let entity = world.spawn(AMacroHooks).id();
@@ -1840,7 +1840,7 @@ mod tests {
 
     #[test]
     fn component_hook_order_insert_remove() {
-        let mut world = World::new();
+        let mut world = SubWorld::new();
         world.init_resource::<R>();
         world
             .register_component_hooks::<A>()
@@ -1858,7 +1858,7 @@ mod tests {
 
     #[test]
     fn component_hook_order_replace() {
-        let mut world = World::new();
+        let mut world = SubWorld::new();
         world
             .register_component_hooks::<A>()
             .on_replace(|mut world, _| world.resource_mut::<R>().assert_order(0))
@@ -1879,7 +1879,7 @@ mod tests {
 
     #[test]
     fn component_hook_order_recursive() {
-        let mut world = World::new();
+        let mut world = SubWorld::new();
         world.init_resource::<R>();
         world
             .register_component_hooks::<A>()
@@ -1911,7 +1911,7 @@ mod tests {
 
     #[test]
     fn component_hook_order_recursive_multiple() {
-        let mut world = World::new();
+        let mut world = SubWorld::new();
         world.init_resource::<R>();
         world
             .register_component_hooks::<A>()
@@ -1945,7 +1945,7 @@ mod tests {
 
     #[test]
     fn insert_if_new() {
-        let mut world = World::new();
+        let mut world = SubWorld::new();
         let id = world.spawn(V("one")).id();
         let mut entity = world.entity_mut(id);
         entity.insert_if_new(V("two"));

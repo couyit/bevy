@@ -571,7 +571,7 @@ mod test {
     #[test]
     fn correct_parent_removed() {
         ComputeTaskPool::get_or_init(TaskPool::default);
-        let mut world = World::default();
+        let mut world = SubWorld::default();
         let offset_global_transform =
             |offset| GlobalTransform::from(Transform::from_xyz(offset, offset, offset));
         let offset_transform = |offset| Transform::from_xyz(offset, offset, offset);
@@ -632,7 +632,7 @@ mod test {
     #[test]
     fn did_propagate() {
         ComputeTaskPool::get_or_init(TaskPool::default);
-        let mut world = World::default();
+        let mut world = SubWorld::default();
 
         let mut schedule = Schedule::default();
         schedule.add_systems(
@@ -669,7 +669,7 @@ mod test {
 
     #[test]
     fn did_propagate_command_buffer() {
-        let mut world = World::default();
+        let mut world = SubWorld::default();
 
         let mut schedule = Schedule::default();
         schedule.add_systems(
@@ -708,7 +708,7 @@ mod test {
     #[test]
     fn correct_children() {
         ComputeTaskPool::get_or_init(TaskPool::default);
-        let mut world = World::default();
+        let mut world = SubWorld::default();
 
         let mut schedule = Schedule::default();
         schedule.add_systems(
@@ -842,7 +842,7 @@ mod test {
         ComputeTaskPool::get_or_init(TaskPool::default);
         // We cannot directly edit ChildOf and Children, so we use a temp world to break the
         // hierarchy's invariants.
-        let mut temp = World::new();
+        let mut temp = SubWorld::new();
         let mut app = App::new();
 
         app.add_systems(
@@ -855,7 +855,7 @@ mod test {
                 .chain(),
         );
 
-        fn setup_world(world: &mut World) -> (Entity, Entity) {
+        fn setup_world(world: &mut SubWorld) -> (Entity, Entity) {
             let mut grandchild = Entity::from_raw(0);
             let child = world
                 .spawn(Transform::IDENTITY)
@@ -908,7 +908,7 @@ mod test {
     #[test]
     fn global_transform_should_not_be_overwritten_after_reparenting() {
         let translation = Vec3::ONE;
-        let mut world = World::new();
+        let mut world = SubWorld::new();
 
         // Create transform propagation schedule
         let mut schedule = Schedule::default();

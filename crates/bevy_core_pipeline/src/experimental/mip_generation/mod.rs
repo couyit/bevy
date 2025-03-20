@@ -18,7 +18,7 @@ use bevy_ecs::{
     resource::Resource,
     schedule::IntoScheduleConfigs as _,
     system::{lifetimeless::Read, Commands, Local, Query, Res, ResMut},
-    world::{FromWorld, World},
+    world::{FromWorld, SubWorld},
 };
 use bevy_math::{uvec2, UVec2, Vec4Swizzles as _};
 use bevy_render::{
@@ -159,7 +159,7 @@ pub struct DownsampleDepthNode {
 }
 
 impl FromWorld for DownsampleDepthNode {
-    fn from_world(world: &mut World) -> Self {
+    fn from_world(world: &mut SubWorld) -> Self {
         Self {
             main_view_query: QueryState::new(world),
             shadow_view_query: QueryState::new(world),
@@ -168,7 +168,7 @@ impl FromWorld for DownsampleDepthNode {
 }
 
 impl Node for DownsampleDepthNode {
-    fn update(&mut self, world: &mut World) {
+    fn update(&mut self, world: &mut SubWorld) {
         self.main_view_query.update_archetypes(world);
         self.shadow_view_query.update_archetypes(world);
     }
@@ -177,7 +177,7 @@ impl Node for DownsampleDepthNode {
         &self,
         render_graph_context: &mut RenderGraphContext,
         render_context: &mut RenderContext<'w>,
-        world: &'w World,
+        world: &'w SubWorld,
     ) -> Result<(), NodeRunError> {
         let Ok((
             view_depth_pyramid,
@@ -234,7 +234,7 @@ impl Node for DownsampleDepthNode {
 fn downsample_depth<'w>(
     render_graph_context: &mut RenderGraphContext,
     render_context: &mut RenderContext<'w>,
-    world: &'w World,
+    world: &'w SubWorld,
     view_depth_pyramid: &ViewDepthPyramid,
     view_downsample_depth_bind_group: &ViewDownsampleDepthBindGroup,
     view_size: UVec2,
@@ -520,7 +520,7 @@ impl SpecializedComputePipeline for DownsampleDepthPipeline {
 pub struct DepthPyramidDummyTexture(TextureView);
 
 impl FromWorld for DepthPyramidDummyTexture {
-    fn from_world(world: &mut World) -> Self {
+    fn from_world(world: &mut SubWorld) -> Self {
         let render_device = world.resource::<RenderDevice>();
 
         DepthPyramidDummyTexture(create_depth_pyramid_dummy_texture(

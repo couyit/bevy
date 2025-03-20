@@ -6,7 +6,7 @@ use bevy_ecs::component::ComponentCloneBehavior;
 use bevy_ecs::entity::EntityCloner;
 use bevy_ecs::hierarchy::ChildOf;
 use bevy_ecs::reflect::AppTypeRegistry;
-use bevy_ecs::{component::Component, world::World};
+use bevy_ecs::{component::Component, world::SubWorld};
 use bevy_math::Mat4;
 use bevy_reflect::{GetTypeRegistration, Reflect};
 use criterion::{criterion_group, Bencher, Criterion, Throughput};
@@ -54,7 +54,7 @@ type ComplexBundle = (C1, C2, C3, C4, C5, C6, C7, C8, C9, C10);
 /// Sets the [`ComponentCloneHandler`] for all explicit and required components in a bundle `B` to
 /// use the [`Reflect`] trait instead of [`Clone`].
 fn reflection_cloner<B: Bundle + GetTypeRegistration>(
-    world: &mut World,
+    world: &mut SubWorld,
     linked_cloning: bool,
 ) -> EntityCloner {
     // Get mutable access to the type registry, creating it if it does not exist yet.
@@ -96,7 +96,7 @@ fn bench_clone<B: Bundle + Default + GetTypeRegistration>(
     b: &mut Bencher,
     clone_via_reflect: bool,
 ) {
-    let mut world = World::default();
+    let mut world = SubWorld::default();
 
     let mut cloner = if clone_via_reflect {
         reflection_cloner::<B>(&mut world, false)
@@ -130,7 +130,7 @@ fn bench_clone_hierarchy<B: Bundle + Default + GetTypeRegistration>(
     children: usize,
     clone_via_reflect: bool,
 ) {
-    let mut world = World::default();
+    let mut world = SubWorld::default();
 
     let mut cloner = if clone_via_reflect {
         reflection_cloner::<B>(&mut world, true)

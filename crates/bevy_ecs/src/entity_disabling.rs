@@ -70,7 +70,7 @@
 use crate::{
     component::{ComponentId, Components, StorageType},
     query::FilteredAccess,
-    world::{FromWorld, World},
+    world::{FromWorld, SubWorld},
 };
 use bevy_ecs_macros::{Component, Resource};
 use smallvec::SmallVec;
@@ -139,7 +139,7 @@ pub struct DefaultQueryFilters {
 }
 
 impl FromWorld for DefaultQueryFilters {
-    fn from_world(world: &mut World) -> Self {
+    fn from_world(world: &mut SubWorld) -> Self {
         let mut filters = DefaultQueryFilters::empty();
         let disabled_component_id = world.register_component::<Disabled>();
         filters.register_disabling_component(disabled_component_id);
@@ -205,7 +205,7 @@ mod tests {
 
     use super::*;
     use crate::{
-        prelude::World,
+        prelude::SubWorld,
         query::{Has, With},
     };
     use alloc::{vec, vec::Vec};
@@ -275,7 +275,7 @@ mod tests {
 
     #[test]
     fn multiple_disabling_components() {
-        let mut world = World::new();
+        let mut world = SubWorld::new();
         world.register_disabling_component::<CustomDisabled>();
 
         world.spawn_empty();

@@ -16,7 +16,7 @@ use crate::{
     world::{error::EntityMutableFetchError, EntityFetcher, WorldEntityFetch},
 };
 
-use super::{unsafe_world_cell::UnsafeWorldCell, Mut, World, ON_INSERT, ON_REPLACE};
+use super::{unsafe_world_cell::UnsafeWorldCell, Mut, SubWorld, ON_INSERT, ON_REPLACE};
 
 /// A [`World`] reference that disallows structural ECS changes.
 /// This includes initializing resources, registering components or spawning entities.
@@ -28,7 +28,7 @@ pub struct DeferredWorld<'w> {
 }
 
 impl<'w> Deref for DeferredWorld<'w> {
-    type Target = World;
+    type Target = SubWorld;
 
     fn deref(&self) -> &Self::Target {
         // SAFETY: Structural changes cannot be made through &World
@@ -48,8 +48,8 @@ impl<'w> UnsafeWorldCell<'w> {
     }
 }
 
-impl<'w> From<&'w mut World> for DeferredWorld<'w> {
-    fn from(world: &'w mut World) -> DeferredWorld<'w> {
+impl<'w> From<&'w mut SubWorld> for DeferredWorld<'w> {
+    fn from(world: &'w mut SubWorld) -> DeferredWorld<'w> {
         DeferredWorld {
             world: world.as_unsafe_world_cell(),
         }

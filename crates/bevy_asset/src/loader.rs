@@ -12,7 +12,7 @@ use alloc::{
     vec::Vec,
 };
 use atomicow::CowArc;
-use bevy_ecs::world::World;
+use bevy_ecs::world::SubWorld;
 use bevy_platform_support::collections::{HashMap, HashSet};
 use bevy_tasks::{BoxedFuture, ConditionalSendFuture};
 use core::any::{Any, TypeId};
@@ -243,14 +243,14 @@ impl ErasedLoadedAsset {
 
 /// A type erased container for an [`Asset`] value that is capable of inserting the [`Asset`] into a [`World`]'s [`Assets`] collection.
 pub trait AssetContainer: Downcast + Any + Send + Sync + 'static {
-    fn insert(self: Box<Self>, id: UntypedAssetId, world: &mut World);
+    fn insert(self: Box<Self>, id: UntypedAssetId, world: &mut SubWorld);
     fn asset_type_name(&self) -> &'static str;
 }
 
 impl_downcast!(AssetContainer);
 
 impl<A: Asset> AssetContainer for A {
-    fn insert(self: Box<Self>, id: UntypedAssetId, world: &mut World) {
+    fn insert(self: Box<Self>, id: UntypedAssetId, world: &mut SubWorld) {
         world.resource_mut::<Assets<A>>().insert(id.typed(), *self);
     }
 

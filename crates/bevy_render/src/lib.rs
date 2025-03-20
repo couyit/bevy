@@ -255,10 +255,10 @@ pub struct ExtractSchedule;
 /// during command application of that schedule.
 /// See [`Extract`] for more details.
 #[derive(Resource, Default)]
-pub struct MainWorld(World);
+pub struct MainWorld(SubWorld);
 
 impl Deref for MainWorld {
-    type Target = World;
+    type Target = SubWorld;
 
     fn deref(&self) -> &Self::Target {
         &self.0
@@ -483,11 +483,11 @@ impl Plugin for RenderPlugin {
 /// A "scratch" world used to avoid allocating new worlds every frame when
 /// swapping out the [`MainWorld`] for [`ExtractSchedule`].
 #[derive(Resource, Default)]
-struct ScratchMainWorld(World);
+struct ScratchMainWorld(SubWorld);
 
 /// Executes the [`ExtractSchedule`] step of the renderer.
 /// This updates the render world with the extracted ECS data of the current frame.
-fn extract(main_world: &mut World, render_world: &mut World) {
+fn extract(main_world: &mut SubWorld, render_world: &mut SubWorld) {
     // temporarily add the app world to the render world as a resource
     let scratch_world = main_world.remove_resource::<ScratchMainWorld>().unwrap();
     let inserted_world = core::mem::replace(main_world, scratch_world.0);
@@ -556,7 +556,7 @@ unsafe fn initialize_render_app(app: &mut App) {
 /// Applies the commands from the extract schedule. This happens during
 /// the render schedule rather than during extraction to allow the commands to run in parallel with the
 /// main app when pipelined rendering is enabled.
-fn apply_extract_commands(render_world: &mut World) {
+fn apply_extract_commands(render_world: &mut SubWorld) {
     render_world.resource_scope(|render_world, mut schedules: Mut<Schedules>| {
         schedules
             .get_mut(ExtractSchedule)

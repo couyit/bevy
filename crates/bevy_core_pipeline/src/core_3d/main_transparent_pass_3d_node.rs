@@ -30,7 +30,7 @@ impl ViewNode for MainTransparentPass3dNode {
         graph: &mut RenderGraphContext,
         render_context: &mut RenderContext,
         (camera, view, target, depth): QueryItem<Self::ViewQuery>,
-        world: &World,
+        world: &SubWorld,
     ) -> Result<(), NodeRunError> {
         let view_entity = graph.view_entity();
 

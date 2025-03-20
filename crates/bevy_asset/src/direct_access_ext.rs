@@ -1,7 +1,7 @@
 //! Add methods on `World` to simplify loading assets when all
 //! you have is a `World`.
 
-use bevy_ecs::world::World;
+use bevy_ecs::world::SubWorld;
 
 use crate::{meta::Settings, Asset, AssetPath, AssetServer, Assets, Handle};
 
@@ -20,7 +20,7 @@ pub trait DirectAssetAccessExt {
         settings: impl Fn(&mut S) + Send + Sync + 'static,
     ) -> Handle<A>;
 }
-impl DirectAssetAccessExt for World {
+impl DirectAssetAccessExt for SubWorld {
     /// Insert an asset similarly to [`Assets::add`].
     ///
     /// # Panics

@@ -29,7 +29,7 @@ impl ViewNode for MainTransparentPass2dNode {
         graph: &mut RenderGraphContext,
         render_context: &mut RenderContext<'w>,
         (camera, view, target, depth): bevy_ecs::query::QueryItem<'w, Self::ViewQuery>,
-        world: &'w World,
+        world: &'w SubWorld,
     ) -> Result<(), NodeRunError> {
         let Some(transparent_phases) =
             world.get_resource::<ViewSortedRenderPhases<Transparent2d>>()

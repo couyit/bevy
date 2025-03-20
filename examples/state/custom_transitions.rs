@@ -92,7 +92,7 @@ mod custom_transitions {
 
     /// Schedule runner which checks conditions and if they're right
     /// runs out custom schedule.
-    fn run_reenter<S: States>(transition: In<Option<StateTransitionEvent<S>>>, world: &mut World) {
+    fn run_reenter<S: States>(transition: In<Option<StateTransitionEvent<S>>>, world: &mut SubWorld) {
         // We return early if no transition event happened.
         let Some(transition) = transition.0 else {
             return;
@@ -127,7 +127,7 @@ mod custom_transitions {
     #[derive(ScheduleLabel, Clone, Debug, PartialEq, Eq, Hash)]
     pub struct OnReexit<S: States>(pub S);
 
-    fn run_reexit<S: States>(transition: In<Option<StateTransitionEvent<S>>>, world: &mut World) {
+    fn run_reexit<S: States>(transition: In<Option<StateTransitionEvent<S>>>, world: &mut SubWorld) {
         let Some(transition) = transition.0 else {
             return;
         };

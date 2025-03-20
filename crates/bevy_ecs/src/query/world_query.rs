@@ -3,7 +3,7 @@ use crate::{
     component::{ComponentId, Components, Tick},
     query::FilteredAccess,
     storage::Table,
-    world::{unsafe_world_cell::UnsafeWorldCell, World},
+    world::{unsafe_world_cell::UnsafeWorldCell, SubWorld},
 };
 use variadics_please::all_tuples;
 
@@ -115,7 +115,7 @@ pub unsafe trait WorldQuery {
     fn update_component_access(state: &Self::State, access: &mut FilteredAccess<ComponentId>);
 
     /// Creates and initializes a [`State`](WorldQuery::State) for this [`WorldQuery`] type.
-    fn init_state(world: &mut World) -> Self::State;
+    fn init_state(world: &mut SubWorld) -> Self::State;
 
     /// Attempts to initialize a [`State`](WorldQuery::State) for this [`WorldQuery`] type using read-only
     /// access to [`Components`].

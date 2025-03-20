@@ -9,7 +9,7 @@ use crate::{
     query::Access,
     schedule::{Fallible, Infallible},
     system::{input::SystemIn, System},
-    world::{unsafe_world_cell::UnsafeWorldCell, DeferredWorld, World},
+    world::{unsafe_world_cell::UnsafeWorldCell, DeferredWorld, SubWorld},
 };
 
 use super::IntoSystem;
@@ -139,13 +139,13 @@ where
     }
 
     #[inline]
-    fn run(&mut self, input: SystemIn<'_, Self>, world: &mut World) -> Self::Out {
+    fn run(&mut self, input: SystemIn<'_, Self>, world: &mut SubWorld) -> Self::Out {
         self.observer.run(input, world);
         Ok(())
     }
 
     #[inline]
-    fn apply_deferred(&mut self, world: &mut World) {
+    fn apply_deferred(&mut self, world: &mut SubWorld) {
         self.observer.apply_deferred(world);
     }
 
@@ -160,7 +160,7 @@ where
     }
 
     #[inline]
-    fn initialize(&mut self, world: &mut World) {
+    fn initialize(&mut self, world: &mut SubWorld) {
         self.observer.initialize(world);
     }
 
@@ -195,7 +195,7 @@ mod tests {
         event::Event,
         observer::Trigger,
         system::{In, IntoSystem},
-        world::World,
+        world::SubWorld,
     };
 
     #[derive(Event)]
@@ -206,7 +206,7 @@ mod tests {
         fn a(_: Trigger<TriggerEvent>) {}
         fn b() {}
 
-        let mut world = World::new();
+        let mut world = SubWorld::new();
         world.add_observer(a.pipe(b));
     }
 
@@ -217,7 +217,7 @@ mod tests {
         }
         fn b(_: In<u32>) {}
 
-        let mut world = World::new();
+        let mut world = SubWorld::new();
         world.add_observer(a.pipe(b));
     }
 }

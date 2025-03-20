@@ -5,7 +5,7 @@ use crate::{
     entity::{ComponentCloneCtx, Entity, EntityClonerBuilder, SourceComponent},
     observer::ObserverState,
     system::Commands,
-    world::World,
+    world::SubWorld,
 };
 use alloc::vec::Vec;
 
@@ -72,7 +72,7 @@ fn component_clone_observed_by(
     let target = ctx.target();
     let source = ctx.source();
 
-    commands.queue(move |world: &mut World| {
+    commands.queue(move |world: &mut SubWorld| {
         let observed_by = world
             .get::<ObservedBy>(source)
             .map(|observed_by| observed_by.0.clone())
@@ -115,7 +115,7 @@ fn component_clone_observed_by(
 mod tests {
     use crate::{
         entity::EntityCloner, event::Event, observer::Trigger, resource::Resource, system::ResMut,
-        world::World,
+        world::SubWorld,
     };
 
     #[derive(Resource, Default)]
@@ -126,7 +126,7 @@ mod tests {
 
     #[test]
     fn clone_entity_with_observer() {
-        let mut world = World::default();
+        let mut world = SubWorld::default();
         world.init_resource::<Num>();
 
         let e = world

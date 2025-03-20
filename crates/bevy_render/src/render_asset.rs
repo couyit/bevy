@@ -218,7 +218,7 @@ struct CachedExtractRenderAssetSystemState<A: RenderAsset> {
 }
 
 impl<A: RenderAsset> FromWorld for CachedExtractRenderAssetSystemState<A> {
-    fn from_world(world: &mut bevy_ecs::world::World) -> Self {
+    fn from_world(world: &mut bevy_ecs::world::SubWorld) -> Self {
         Self {
             state: SystemState::new(world),
         }

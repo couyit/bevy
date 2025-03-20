@@ -16,7 +16,7 @@ struct Rotation(Vec3);
 struct Velocity<const X: usize>(Vec3);
 
 pub struct Benchmark<'w>(
-    World,
+    SubWorld,
     QueryState<(
         &'w Velocity<0>,
         &'w mut Position<0>,
@@ -33,7 +33,7 @@ pub struct Benchmark<'w>(
 
 impl<'w> Benchmark<'w> {
     pub fn new() -> Self {
-        let mut world = World::new();
+        let mut world = SubWorld::new();
 
         world.spawn_batch(core::iter::repeat_n(
             (

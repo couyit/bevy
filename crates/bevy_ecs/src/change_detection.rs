@@ -1481,7 +1481,7 @@ mod tests {
         },
         component::{Component, ComponentTicks, Tick},
         system::{IntoSystem, Single, System},
-        world::World,
+        world::SubWorld,
     };
 
     use super::{DetectChanges, DetectChangesMut, MutUntyped};
@@ -1518,7 +1518,7 @@ mod tests {
             query.unwrap().is_changed()
         }
 
-        let mut world = World::new();
+        let mut world = SubWorld::new();
 
         // component added: 1, changed: 1
         world.spawn(C);
@@ -1545,7 +1545,7 @@ mod tests {
 
     #[test]
     fn change_tick_wraparound() {
-        let mut world = World::new();
+        let mut world = SubWorld::new();
         world.last_change_tick = Tick::new(u32::MAX);
         *world.change_tick.get_mut() = 0;
 
@@ -1562,7 +1562,7 @@ mod tests {
 
     #[test]
     fn change_tick_scan() {
-        let mut world = World::new();
+        let mut world = SubWorld::new();
 
         // component added: 1, changed: 1
         world.spawn(C);
@@ -1709,7 +1709,7 @@ mod tests {
 
     #[test]
     fn set_if_neq() {
-        let mut world = World::new();
+        let mut world = SubWorld::new();
 
         world.insert_resource(R2(0));
         // Resources are Changed when first added
@@ -1735,7 +1735,7 @@ mod tests {
 
     #[test]
     fn as_deref_mut() {
-        let mut world = World::new();
+        let mut world = SubWorld::new();
 
         world.insert_resource(R2(0));
         // Resources are Changed when first added

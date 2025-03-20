@@ -1,4 +1,4 @@
-use bevy_ecs::{component::Component, schedule::Schedule, system::Query, world::World};
+use bevy_ecs::{component::Component, schedule::Schedule, system::Query, world::SubWorld};
 use criterion::Criterion;
 
 #[derive(Component)]
@@ -15,7 +15,7 @@ struct E(f32);
 const ENTITY_BUNCH: usize = 5000;
 
 pub fn empty_systems(criterion: &mut Criterion) {
-    let mut world = World::new();
+    let mut world = SubWorld::new();
     let mut group = criterion.benchmark_group("empty_systems");
     group.warm_up_time(core::time::Duration::from_millis(500));
     group.measurement_time(core::time::Duration::from_secs(3));
@@ -63,7 +63,7 @@ pub fn busy_systems(criterion: &mut Criterion) {
             core::mem::swap(&mut c.0, &mut e.0);
         });
     }
-    let mut world = World::new();
+    let mut world = SubWorld::new();
     let mut group = criterion.benchmark_group("busy_systems");
     group.warm_up_time(core::time::Duration::from_millis(500));
     group.measurement_time(core::time::Duration::from_secs(3));
@@ -115,7 +115,7 @@ pub fn contrived(criterion: &mut Criterion) {
             core::mem::swap(&mut c_0.0, &mut c_1.0);
         });
     }
-    let mut world = World::new();
+    let mut world = SubWorld::new();
     let mut group = criterion.benchmark_group("contrived");
     group.warm_up_time(core::time::Duration::from_millis(500));
     group.measurement_time(core::time::Duration::from_secs(3));

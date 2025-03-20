@@ -4,7 +4,7 @@ use bevy_ecs::{
     event::{Event, EventReader, EventWriter},
     schedule::{IntoScheduleConfigs, Schedule, ScheduleLabel, Schedules, SystemSet},
     system::{Commands, In, ResMut},
-    world::World,
+    world::SubWorld,
 };
 
 use super::{resources::State, states::States};
@@ -180,7 +180,7 @@ pub(crate) fn internal_apply_state_transition<S: States>(
 ///
 /// Runs automatically when using `App` to insert states, but needs to
 /// be added manually in other situations.
-pub fn setup_state_transitions_in_world(world: &mut World) {
+pub fn setup_state_transitions_in_world(world: &mut SubWorld) {
     let mut schedules = world.get_resource_or_init::<Schedules>();
     if schedules.contains(StateTransition) {
         return;
@@ -207,7 +207,7 @@ pub fn last_transition<S: States>(
 
 pub(crate) fn run_enter<S: States>(
     transition: In<Option<StateTransitionEvent<S>>>,
-    world: &mut World,
+    world: &mut SubWorld,
 ) {
     let Some(transition) = transition.0 else {
         return;
@@ -224,7 +224,7 @@ pub(crate) fn run_enter<S: States>(
 
 pub(crate) fn run_exit<S: States>(
     transition: In<Option<StateTransitionEvent<S>>>,
-    world: &mut World,
+    world: &mut SubWorld,
 ) {
     let Some(transition) = transition.0 else {
         return;
@@ -241,7 +241,7 @@ pub(crate) fn run_exit<S: States>(
 
 pub(crate) fn run_transition<S: States>(
     transition: In<Option<StateTransitionEvent<S>>>,
-    world: &mut World,
+    world: &mut SubWorld,
 ) {
     let Some(transition) = transition.0 else {
         return;

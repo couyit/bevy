@@ -1,4 +1,4 @@
-use bevy_ecs::{prelude::Entity, world::World};
+use bevy_ecs::{prelude::Entity, world::SubWorld};
 use bevy_platform_support::collections::HashMap;
 #[cfg(feature = "trace")]
 use tracing::info_span;
@@ -70,7 +70,7 @@ impl RenderGraphRunner {
         queue: &wgpu::Queue,
         #[cfg(not(all(target_arch = "wasm32", target_feature = "atomics")))]
         adapter: &wgpu::Adapter,
-        world: &World,
+        world: &SubWorld,
         finalizer: impl FnOnce(&mut wgpu::CommandEncoder),
     ) -> Result<Option<DiagnosticsRecorder>, RenderGraphRunnerError> {
         if let Some(recorder) = &mut diagnostics_recorder {
@@ -112,7 +112,7 @@ impl RenderGraphRunner {
         graph: &RenderGraph,
         sub_graph: Option<InternedRenderSubGraph>,
         render_context: &mut RenderContext<'w>,
-        world: &'w World,
+        world: &'w SubWorld,
         inputs: &[SlotValue],
         view_entity: Option<Entity>,
     ) -> Result<(), RenderGraphRunnerError> {

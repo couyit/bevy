@@ -3,7 +3,7 @@ use core::{any::type_name, fmt};
 use crate::{
     entity::Entity,
     system::{entity_command::EntityCommandError, Command, EntityCommand},
-    world::{error::EntityMutableFetchError, World},
+    world::{error::EntityMutableFetchError, SubWorld},
 };
 
 use super::{default_error_handler, BevyError, ErrorContext};
@@ -30,7 +30,7 @@ where
     E: Into<BevyError>,
 {
     fn handle_error_with(self, error_handler: fn(BevyError, ErrorContext)) -> impl Command {
-        move |world: &mut World| match self.apply(world) {
+        move |world: &mut SubWorld| match self.apply(world) {
             Ok(_) => {}
             Err(err) => (error_handler)(
                 err.into(),
@@ -81,7 +81,7 @@ where
         entity: Entity,
     ) -> impl Command<Result<(), EntityMutableFetchError>>
            + HandleError<Result<(), EntityMutableFetchError>> {
-        move |world: &mut World| -> Result<(), EntityMutableFetchError> {
+        move |world: &mut SubWorld| -> Result<(), EntityMutableFetchError> {
             let entity = world.get_entity_mut(entity)?;
             self.apply(entity);
             Ok(())
@@ -99,7 +99,7 @@ where
         entity: Entity,
     ) -> impl Command<Result<T, EntityCommandError<Err>>> + HandleError<Result<T, EntityCommandError<Err>>>
     {
-        move |world: &mut World| {
+        move |world: &mut SubWorld| {
             let entity = world.get_entity_mut(entity)?;
             self.apply(entity)
                 .map_err(EntityCommandError::CommandFailed)

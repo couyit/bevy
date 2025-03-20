@@ -173,7 +173,7 @@ impl ViewNode for DeferredOpaquePass3dPbrLightingNode {
             deferred_lighting_id_depth_texture,
             deferred_lighting_pipeline,
         ): QueryItem<Self::ViewQuery>,
-        world: &World,
+        world: &SubWorld,
     ) -> Result<(), NodeRunError> {
         let pipeline_cache = world.resource::<PipelineCache>();
         let deferred_lighting_layout = world.resource::<DeferredLightingLayout>();
@@ -400,7 +400,7 @@ impl SpecializedRenderPipeline for DeferredLightingLayout {
 }
 
 impl FromWorld for DeferredLightingLayout {
-    fn from_world(world: &mut World) -> Self {
+    fn from_world(world: &mut SubWorld) -> Self {
         let render_device = world.resource::<RenderDevice>();
         let layout = render_device.create_bind_group_layout(
             "deferred_lighting_layout",

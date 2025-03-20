@@ -463,7 +463,7 @@ impl<I: Iterator<Item: TrustedEntityBorrow> + Debug> Debug for UniqueEntityIter<
 mod tests {
     use alloc::{vec, vec::Vec};
 
-    use crate::prelude::{Schedule, World};
+    use crate::prelude::{Schedule, SubWorld};
 
     use crate::component::Component;
     use crate::entity::Entity;
@@ -482,7 +482,7 @@ mod tests {
     )]
     #[test]
     fn preserving_uniqueness() {
-        let mut world = World::new();
+        let mut world = SubWorld::new();
 
         let mut query = QueryState::<&mut Thing>::new(&mut world);
 
@@ -512,7 +512,7 @@ mod tests {
 
     #[test]
     fn nesting_queries() {
-        let mut world = World::new();
+        let mut world = SubWorld::new();
 
         world.spawn_batch(vec![Thing; 1000]);
 

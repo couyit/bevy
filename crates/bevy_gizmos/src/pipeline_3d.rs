@@ -17,7 +17,7 @@ use bevy_ecs::{
     resource::Resource,
     schedule::IntoScheduleConfigs,
     system::{Query, Res, ResMut},
-    world::{FromWorld, World},
+    world::{FromWorld, SubWorld},
 };
 use bevy_image::BevyDefault as _;
 use bevy_pbr::{MeshPipeline, MeshPipelineKey, SetMeshViewBindGroup};
@@ -78,7 +78,7 @@ struct LineGizmoPipeline {
 }
 
 impl FromWorld for LineGizmoPipeline {
-    fn from_world(render_world: &mut World) -> Self {
+    fn from_world(render_world: &mut SubWorld) -> Self {
         LineGizmoPipeline {
             mesh_pipeline: render_world.resource::<MeshPipeline>().clone(),
             uniform_layout: render_world
@@ -174,7 +174,7 @@ struct LineJointGizmoPipeline {
 }
 
 impl FromWorld for LineJointGizmoPipeline {
-    fn from_world(render_world: &mut World) -> Self {
+    fn from_world(render_world: &mut SubWorld) -> Self {
         LineJointGizmoPipeline {
             mesh_pipeline: render_world.resource::<MeshPipeline>().clone(),
             uniform_layout: render_world

@@ -97,7 +97,7 @@ pub mod prelude {
         },
         world::{
             EntityMut, EntityRef, EntityWorldMut, FilteredResources, FilteredResourcesMut,
-            FromWorld, OnAdd, OnInsert, OnRemove, OnReplace, World,
+            FromWorld, OnAdd, OnInsert, OnRemove, OnReplace, SubWorld,
         },
     };
 
@@ -138,7 +138,7 @@ mod tests {
         prelude::Or,
         query::{Added, Changed, FilteredAccess, QueryFilter, With, Without},
         resource::Resource,
-        world::{EntityMut, EntityRef, Mut, World},
+        world::{EntityMut, EntityRef, Mut, SubWorld},
     };
     use alloc::{
         string::{String, ToString},
@@ -199,7 +199,7 @@ mod tests {
 
     #[test]
     fn random_access() {
-        let mut world = World::new();
+        let mut world = SubWorld::new();
 
         let e = world.spawn((TableStored("abc"), SparseStored(123))).id();
         let f = world
@@ -221,7 +221,7 @@ mod tests {
 
     #[test]
     fn bundle_derive() {
-        let mut world = World::new();
+        let mut world = SubWorld::new();
 
         #[derive(Bundle, PartialEq, Debug)]
         struct FooBundle {
@@ -361,7 +361,7 @@ mod tests {
 
     #[test]
     fn despawn_table_storage() {
-        let mut world = World::new();
+        let mut world = SubWorld::new();
         let e = world.spawn((TableStored("abc"), A(123))).id();
         let f = world.spawn((TableStored("def"), A(456))).id();
         assert_eq!(world.entities.len(), 2);
@@ -375,7 +375,7 @@ mod tests {
 
     #[test]
     fn despawn_mixed_storage() {
-        let mut world = World::new();
+        let mut world = SubWorld::new();
 
         let e = world.spawn((TableStored("abc"), SparseStored(123))).id();
         let f = world.spawn((TableStored("def"), SparseStored(456))).id();
@@ -390,7 +390,7 @@ mod tests {
 
     #[test]
     fn query_all() {
-        let mut world = World::new();
+        let mut world = SubWorld::new();
         let e = world.spawn((TableStored("abc"), A(123))).id();
         let f = world.spawn((TableStored("def"), A(456))).id();
 
@@ -410,7 +410,7 @@ mod tests {
 
     #[test]
     fn query_all_for_each() {
-        let mut world = World::new();
+        let mut world = SubWorld::new();
         let e = world.spawn((TableStored("abc"), A(123))).id();
         let f = world.spawn((TableStored("def"), A(456))).id();
 
@@ -430,7 +430,7 @@ mod tests {
 
     #[test]
     fn query_single_component() {
-        let mut world = World::new();
+        let mut world = SubWorld::new();
         let e = world.spawn((TableStored("abc"), A(123))).id();
         let f = world.spawn((TableStored("def"), A(456), B(1))).id();
         let ents = world
@@ -444,7 +444,7 @@ mod tests {
 
     #[test]
     fn stateful_query_handles_new_archetype() {
-        let mut world = World::new();
+        let mut world = SubWorld::new();
         let e = world.spawn((TableStored("abc"), A(123))).id();
         let mut query = world.query::<(Entity, &A)>();
 
@@ -458,7 +458,7 @@ mod tests {
 
     #[test]
     fn query_single_component_for_each() {
-        let mut world = World::new();
+        let mut world = SubWorld::new();
         let e = world.spawn((TableStored("abc"), A(123))).id();
         let f = world.spawn((TableStored("def"), A(456), B(1))).id();
         let mut results = <HashSet<_>>::default();
@@ -475,7 +475,7 @@ mod tests {
     #[test]
     fn par_for_each_dense() {
         ComputeTaskPool::get_or_init(TaskPool::default);
-        let mut world = World::new();
+        let mut world = SubWorld::new();
         let e1 = world.spawn(A(1)).id();
         let e2 = world.spawn(A(2)).id();
         let e3 = world.spawn(A(3)).id();
@@ -498,7 +498,7 @@ mod tests {
     #[test]
     fn par_for_each_sparse() {
         ComputeTaskPool::get_or_init(TaskPool::default);
-        let mut world = World::new();
+        let mut world = SubWorld::new();
         let e1 = world.spawn(SparseStored(1)).id();
         let e2 = world.spawn(SparseStored(2)).id();
         let e3 = world.spawn(SparseStored(3)).id();
@@ -518,7 +518,7 @@ mod tests {
 
     #[test]
     fn query_missing_component() {
-        let mut world = World::new();
+        let mut world = SubWorld::new();
         world.spawn((TableStored("abc"), A(123)));
         world.spawn((TableStored("def"), A(456)));
         assert!(world.query::<(&B, &A)>().iter(&world).next().is_none());
@@ -526,7 +526,7 @@ mod tests {
 
     #[test]
     fn query_sparse_component() {
-        let mut world = World::new();
+        let mut world = SubWorld::new();
         world.spawn((TableStored("abc"), A(123)));
         let f = world.spawn((TableStored("def"), A(456), B(1))).id();
         let ents = world
@@ -539,7 +539,7 @@ mod tests {
 
     #[test]
     fn query_filter_with() {
-        let mut world = World::new();
+        let mut world = SubWorld::new();
         world.spawn((A(123), B(1)));
         world.spawn(A(456));
         let result = world
@@ -552,7 +552,7 @@ mod tests {
 
     #[test]
     fn query_filter_with_for_each() {
-        let mut world = World::new();
+        let mut world = SubWorld::new();
         world.spawn((A(123), B(1)));
         world.spawn(A(456));
 
@@ -566,7 +566,7 @@ mod tests {
 
     #[test]
     fn query_filter_with_sparse() {
-        let mut world = World::new();
+        let mut world = SubWorld::new();
 
         world.spawn((A(123), SparseStored(321)));
         world.spawn(A(456));
@@ -580,7 +580,7 @@ mod tests {
 
     #[test]
     fn query_filter_with_sparse_for_each() {
-        let mut world = World::new();
+        let mut world = SubWorld::new();
 
         world.spawn((A(123), SparseStored(321)));
         world.spawn(A(456));
@@ -594,7 +594,7 @@ mod tests {
 
     #[test]
     fn query_filter_without() {
-        let mut world = World::new();
+        let mut world = SubWorld::new();
         world.spawn((A(123), B(321)));
         world.spawn(A(456));
         let result = world
@@ -607,7 +607,7 @@ mod tests {
 
     #[test]
     fn query_optional_component_table() {
-        let mut world = World::new();
+        let mut world = SubWorld::new();
         let e = world.spawn((TableStored("abc"), A(123))).id();
         let f = world.spawn((TableStored("def"), A(456), B(1))).id();
         // this should be skipped
@@ -623,7 +623,7 @@ mod tests {
 
     #[test]
     fn query_optional_component_sparse() {
-        let mut world = World::new();
+        let mut world = SubWorld::new();
 
         let e = world.spawn((TableStored("abc"), A(123))).id();
         let f = world
@@ -646,7 +646,7 @@ mod tests {
 
     #[test]
     fn query_optional_component_sparse_no_match() {
-        let mut world = World::new();
+        let mut world = SubWorld::new();
 
         let e = world.spawn((TableStored("abc"), A(123))).id();
         let f = world.spawn((TableStored("def"), A(456))).id();
@@ -662,7 +662,7 @@ mod tests {
 
     #[test]
     fn add_remove_components() {
-        let mut world = World::new();
+        let mut world = SubWorld::new();
         let e1 = world.spawn((A(1), B(3), TableStored("abc"))).id();
         let e2 = world.spawn((A(2), B(4), TableStored("xyz"))).id();
 
@@ -719,7 +719,7 @@ mod tests {
 
     #[test]
     fn table_add_remove_many() {
-        let mut world = World::default();
+        let mut world = SubWorld::default();
         #[cfg(miri)]
         let (mut entities, to) = {
             let to = 10;
@@ -746,7 +746,7 @@ mod tests {
 
     #[test]
     fn sparse_set_add_remove_many() {
-        let mut world = World::default();
+        let mut world = SubWorld::default();
 
         let mut entities = Vec::with_capacity(1000);
         for _ in 0..4 {
@@ -767,14 +767,14 @@ mod tests {
 
     #[test]
     fn remove_missing() {
-        let mut world = World::new();
+        let mut world = SubWorld::new();
         let e = world.spawn((TableStored("abc"), A(123))).id();
         assert!(world.entity_mut(e).take::<B>().is_none());
     }
 
     #[test]
     fn spawn_batch() {
-        let mut world = World::new();
+        let mut world = SubWorld::new();
         world.spawn_batch((0..100).map(|x| (A(x), TableStored("abc"))));
         let values = world
             .query::<&A>()
@@ -787,7 +787,7 @@ mod tests {
 
     #[test]
     fn query_get() {
-        let mut world = World::new();
+        let mut world = SubWorld::new();
         let a = world.spawn((TableStored("abc"), A(123))).id();
         let b = world.spawn((TableStored("def"), A(456))).id();
         let c = world.spawn((TableStored("ghi"), A(789), B(1))).id();
@@ -806,7 +806,7 @@ mod tests {
     #[test]
     fn query_get_works_across_sparse_removal() {
         // Regression test for: https://github.com/bevyengine/bevy/issues/6623
-        let mut world = World::new();
+        let mut world = SubWorld::new();
         let a = world.spawn((TableStored("abc"), SparseStored(123))).id();
         let b = world.spawn((TableStored("def"), SparseStored(456))).id();
         let c = world
@@ -828,7 +828,7 @@ mod tests {
 
     #[test]
     fn remove_tracking() {
-        let mut world = World::new();
+        let mut world = SubWorld::new();
 
         let a = world.spawn((SparseStored(0), A(123))).id();
         let b = world.spawn((SparseStored(1), A(123))).id();
@@ -899,7 +899,7 @@ mod tests {
 
     #[test]
     fn added_tracking() {
-        let mut world = World::new();
+        let mut world = SubWorld::new();
         let a = world.spawn(A(123)).id();
 
         assert_eq!(world.query::<&A>().iter(&world).count(), 1);
@@ -949,10 +949,10 @@ mod tests {
 
     #[test]
     fn added_queries() {
-        let mut world = World::default();
+        let mut world = SubWorld::default();
         let e1 = world.spawn(A(0)).id();
 
-        fn get_added<Com: Component>(world: &mut World) -> Vec<Entity> {
+        fn get_added<Com: Component>(world: &mut SubWorld) -> Vec<Entity> {
             world
                 .query_filtered::<Entity, Added<Com>>()
                 .iter(world)
@@ -979,7 +979,7 @@ mod tests {
 
     #[test]
     fn changed_trackers() {
-        let mut world = World::default();
+        let mut world = SubWorld::default();
         let e1 = world.spawn((A(0), B(0))).id();
         let e2 = world.spawn((A(0), B(0))).id();
         let e3 = world.spawn((A(0), B(0))).id();
@@ -993,7 +993,7 @@ mod tests {
             }
         }
 
-        fn get_filtered<F: QueryFilter>(world: &mut World) -> HashSet<Entity> {
+        fn get_filtered<F: QueryFilter>(world: &mut SubWorld) -> HashSet<Entity> {
             world
                 .query_filtered::<Entity, F>()
                 .iter(world)
@@ -1084,7 +1084,7 @@ mod tests {
 
     #[test]
     fn changed_trackers_sparse() {
-        let mut world = World::default();
+        let mut world = SubWorld::default();
         let e1 = world.spawn(SparseStored(0)).id();
         let e2 = world.spawn(SparseStored(0)).id();
         let e3 = world.spawn(SparseStored(0)).id();
@@ -1102,7 +1102,7 @@ mod tests {
             }
         }
 
-        fn get_filtered<F: QueryFilter>(world: &mut World) -> HashSet<Entity> {
+        fn get_filtered<F: QueryFilter>(world: &mut SubWorld) -> HashSet<Entity> {
             world
                 .query_filtered::<Entity, F>()
                 .iter(world)
@@ -1180,7 +1180,7 @@ mod tests {
 
     #[test]
     fn empty_spawn() {
-        let mut world = World::default();
+        let mut world = SubWorld::default();
         let e = world.spawn_empty().id();
         let mut e_mut = world.entity_mut(e);
         e_mut.insert(A(0));
@@ -1189,7 +1189,7 @@ mod tests {
 
     #[test]
     fn reserve_and_spawn() {
-        let mut world = World::default();
+        let mut world = SubWorld::default();
         let e = world.entities().reserve_entity();
         world.flush_entities();
         let mut e_mut = world.entity_mut(e);
@@ -1199,10 +1199,10 @@ mod tests {
 
     #[test]
     fn changed_query() {
-        let mut world = World::default();
+        let mut world = SubWorld::default();
         let e1 = world.spawn((A(0), B(0))).id();
 
-        fn get_changed(world: &mut World) -> Vec<Entity> {
+        fn get_changed(world: &mut SubWorld) -> Vec<Entity> {
             world
                 .query_filtered::<Entity, Changed<A>>()
                 .iter(world)
@@ -1225,7 +1225,7 @@ mod tests {
         #[derive(Resource, PartialEq, Debug)]
         struct BigNum(u64);
 
-        let mut world = World::default();
+        let mut world = SubWorld::default();
         assert!(world.get_resource::<Num>().is_none());
         assert!(!world.contains_resource::<Num>());
         assert!(!world.is_resource_added::<Num>());
@@ -1310,7 +1310,7 @@ mod tests {
 
     #[test]
     fn remove() {
-        let mut world = World::default();
+        let mut world = SubWorld::default();
         let e1 = world.spawn((A(1), B(1), TableStored("a"))).id();
 
         let mut e = world.entity_mut(e1);
@@ -1348,7 +1348,7 @@ mod tests {
 
     #[test]
     fn take() {
-        let mut world = World::default();
+        let mut world = SubWorld::default();
         world.spawn((A(1), B(1), TableStored("1")));
         let e2 = world.spawn((A(2), B(2), TableStored("2"))).id();
         world.spawn((A(3), B(3), TableStored("3")));
@@ -1401,7 +1401,7 @@ mod tests {
 
     #[test]
     fn non_send_resource() {
-        let mut world = World::default();
+        let mut world = SubWorld::default();
         world.insert_non_send_resource(123i32);
         world.insert_non_send_resource(456i64);
         assert_eq!(*world.non_send_resource::<i32>(), 123);
@@ -1410,7 +1410,7 @@ mod tests {
 
     #[test]
     fn non_send_resource_points_to_distinct_data() {
-        let mut world = World::default();
+        let mut world = SubWorld::default();
         world.insert_resource(A(123));
         world.insert_non_send_resource(A(456));
         assert_eq!(*world.resource::<A>(), A(123));
@@ -1420,7 +1420,7 @@ mod tests {
     #[test]
     #[should_panic]
     fn non_send_resource_panic() {
-        let mut world = World::default();
+        let mut world = SubWorld::default();
         world.insert_non_send_resource(0i32);
         std::thread::spawn(move || {
             let _ = world.non_send_resource_mut::<i32>();
@@ -1431,7 +1431,7 @@ mod tests {
 
     #[test]
     fn exact_size_query() {
-        let mut world = World::default();
+        let mut world = SubWorld::default();
         world.spawn((A(0), B(0)));
         world.spawn((A(0), B(0)));
         world.spawn((A(0), B(0), C));
@@ -1444,70 +1444,70 @@ mod tests {
     #[test]
     #[should_panic]
     fn duplicate_components_panic() {
-        let mut world = World::new();
+        let mut world = SubWorld::new();
         world.spawn((A(1), A(2)));
     }
 
     #[test]
     #[should_panic]
     fn ref_and_mut_query_panic() {
-        let mut world = World::new();
+        let mut world = SubWorld::new();
         world.query::<(&A, &mut A)>();
     }
 
     #[test]
     #[should_panic]
     fn entity_ref_and_mut_query_panic() {
-        let mut world = World::new();
+        let mut world = SubWorld::new();
         world.query::<(EntityRef, &mut A)>();
     }
 
     #[test]
     #[should_panic]
     fn mut_and_ref_query_panic() {
-        let mut world = World::new();
+        let mut world = SubWorld::new();
         world.query::<(&mut A, &A)>();
     }
 
     #[test]
     #[should_panic]
     fn mut_and_entity_ref_query_panic() {
-        let mut world = World::new();
+        let mut world = SubWorld::new();
         world.query::<(&mut A, EntityRef)>();
     }
 
     #[test]
     #[should_panic]
     fn entity_ref_and_entity_mut_query_panic() {
-        let mut world = World::new();
+        let mut world = SubWorld::new();
         world.query::<(EntityRef, EntityMut)>();
     }
 
     #[test]
     #[should_panic]
     fn entity_mut_and_entity_mut_query_panic() {
-        let mut world = World::new();
+        let mut world = SubWorld::new();
         world.query::<(EntityMut, EntityMut)>();
     }
 
     #[test]
     fn entity_ref_and_entity_ref_query_no_panic() {
-        let mut world = World::new();
+        let mut world = SubWorld::new();
         world.query::<(EntityRef, EntityRef)>();
     }
 
     #[test]
     #[should_panic]
     fn mut_and_mut_query_panic() {
-        let mut world = World::new();
+        let mut world = SubWorld::new();
         world.query::<(&mut A, &mut A)>();
     }
 
     #[test]
     #[should_panic]
     fn multiple_worlds_same_query_iter() {
-        let mut world_a = World::new();
-        let world_b = World::new();
+        let mut world_a = SubWorld::new();
+        let world_b = SubWorld::new();
         let mut query = world_a.query::<&A>();
         query.iter(&world_a);
         query.iter(&world_b);
@@ -1515,13 +1515,13 @@ mod tests {
 
     #[test]
     fn query_filters_dont_collide_with_fetches() {
-        let mut world = World::new();
+        let mut world = SubWorld::new();
         world.query_filtered::<&mut A, Changed<A>>();
     }
 
     #[test]
     fn filtered_query_access() {
-        let mut world = World::new();
+        let mut world = SubWorld::new();
         // We remove entity disabling so it doesn't affect our query filters
         world.remove_resource::<DefaultQueryFilters>();
         let query = world.query_filtered::<&mut A, Changed<B>>();
@@ -1540,8 +1540,8 @@ mod tests {
     #[test]
     #[should_panic]
     fn multiple_worlds_same_query_get() {
-        let mut world_a = World::new();
-        let world_b = World::new();
+        let mut world_a = SubWorld::new();
+        let world_b = SubWorld::new();
         let mut query = world_a.query::<&A>();
         let _ = query.get(&world_a, Entity::from_raw(0));
         let _ = query.get(&world_b, Entity::from_raw(0));
@@ -1550,8 +1550,8 @@ mod tests {
     #[test]
     #[should_panic]
     fn multiple_worlds_same_query_for_each() {
-        let mut world_a = World::new();
-        let world_b = World::new();
+        let mut world_a = SubWorld::new();
+        let world_b = SubWorld::new();
         let mut query = world_a.query::<&A>();
         query.iter(&world_a).for_each(|_| {});
         query.iter(&world_b).for_each(|_| {});
@@ -1559,10 +1559,10 @@ mod tests {
 
     #[test]
     fn resource_scope() {
-        let mut world = World::default();
+        let mut world = SubWorld::default();
         assert!(world.try_resource_scope::<A, _>(|_, _| {}).is_none());
         world.insert_resource(A(0));
-        world.resource_scope(|world: &mut World, mut value: Mut<A>| {
+        world.resource_scope(|world: &mut SubWorld, mut value: Mut<A>| {
             value.0 += 1;
             assert!(!world.contains_resource::<A>());
         });
@@ -1574,7 +1574,7 @@ mod tests {
         expected = "Attempted to access or drop non-send resource bevy_ecs::tests::NonSendA from thread"
     )]
     fn non_send_resource_drop_from_different_thread() {
-        let mut world = World::default();
+        let mut world = SubWorld::default();
         world.insert_non_send_resource(NonSendA::default());
 
         let thread = std::thread::spawn(move || {
@@ -1590,7 +1590,7 @@ mod tests {
 
     #[test]
     fn non_send_resource_drop_from_same_thread() {
-        let mut world = World::default();
+        let mut world = SubWorld::default();
         world.insert_non_send_resource(NonSendA::default());
         drop(world);
     }
@@ -1599,7 +1599,7 @@ mod tests {
     fn insert_overwrite_drop() {
         let (dropck1, dropped1) = DropCk::new_pair();
         let (dropck2, dropped2) = DropCk::new_pair();
-        let mut world = World::default();
+        let mut world = SubWorld::default();
         world.spawn(dropck1).insert(dropck2);
         assert_eq!(dropped1.load(Ordering::Relaxed), 1);
         assert_eq!(dropped2.load(Ordering::Relaxed), 0);
@@ -1612,7 +1612,7 @@ mod tests {
     fn insert_overwrite_drop_sparse() {
         let (dropck1, dropped1) = DropCk::new_pair();
         let (dropck2, dropped2) = DropCk::new_pair();
-        let mut world = World::default();
+        let mut world = SubWorld::default();
 
         world
             .spawn(DropCkSparse(dropck1))
@@ -1626,7 +1626,7 @@ mod tests {
 
     #[test]
     fn clear_entities() {
-        let mut world = World::default();
+        let mut world = SubWorld::default();
 
         world.insert_resource(A(0));
         world.spawn(A(1));
@@ -1665,7 +1665,7 @@ mod tests {
 
     #[test]
     fn test_is_archetypal_size_hints() {
-        let mut world = World::default();
+        let mut world = SubWorld::default();
         macro_rules! query_min_size {
             ($query:ty, $filter:ty) => {
                 world
@@ -1699,7 +1699,7 @@ mod tests {
 
     #[test]
     fn insert_or_spawn_batch() {
-        let mut world = World::default();
+        let mut world = SubWorld::default();
         let e0 = world.spawn(A(0)).id();
         let e1 = Entity::from_raw(1);
 
@@ -1740,7 +1740,7 @@ mod tests {
 
     #[test]
     fn insert_or_spawn_batch_invalid() {
-        let mut world = World::default();
+        let mut world = SubWorld::default();
         let e0 = world.spawn(A(0)).id();
         let e1 = Entity::from_raw(1);
         let e2 = world.spawn_empty().id();
@@ -1790,7 +1790,7 @@ mod tests {
 
     #[test]
     fn insert_batch() {
-        let mut world = World::default();
+        let mut world = SubWorld::default();
         let e0 = world.spawn(A(0)).id();
         let e1 = world.spawn(B(0)).id();
 
@@ -1822,7 +1822,7 @@ mod tests {
 
     #[test]
     fn insert_batch_same_archetype() {
-        let mut world = World::default();
+        let mut world = SubWorld::default();
         let e0 = world.spawn((A(0), B(0))).id();
         let e1 = world.spawn((A(0), B(0))).id();
         let e2 = world.spawn(B(0)).id();
@@ -1842,7 +1842,7 @@ mod tests {
 
     #[test]
     fn insert_batch_if_new() {
-        let mut world = World::default();
+        let mut world = SubWorld::default();
         let e0 = world.spawn(A(0)).id();
         let e1 = world.spawn(B(0)).id();
 
@@ -1874,7 +1874,7 @@ mod tests {
 
     #[test]
     fn try_insert_batch() {
-        let mut world = World::default();
+        let mut world = SubWorld::default();
         let e0 = world.spawn(A(0)).id();
         let e1 = Entity::from_raw(1);
 
@@ -1898,7 +1898,7 @@ mod tests {
 
     #[test]
     fn try_insert_batch_if_new() {
-        let mut world = World::default();
+        let mut world = SubWorld::default();
         let e0 = world.spawn(A(0)).id();
         let e1 = Entity::from_raw(1);
 
@@ -1947,7 +1947,7 @@ mod tests {
             Z(7)
         }
 
-        let mut world = World::new();
+        let mut world = SubWorld::new();
         let id = world.spawn(X).id();
         assert_eq!(
             "hello",
@@ -2003,7 +2003,7 @@ mod tests {
             value: T,
         }
 
-        let mut world = World::new();
+        let mut world = SubWorld::new();
         let id = world.spawn(X).id();
         assert_eq!(
             0,
@@ -2027,7 +2027,7 @@ mod tests {
         #[derive(Resource)]
         struct I(usize);
 
-        let mut world = World::new();
+        let mut world = SubWorld::new();
         world.insert_resource(A(0));
         world.insert_resource(I(0));
         world
@@ -2057,7 +2057,7 @@ mod tests {
         #[derive(Resource)]
         struct I(usize);
 
-        let mut world = World::new();
+        let mut world = SubWorld::new();
         world.insert_resource(A(0));
         world.insert_resource(I(0));
         world
@@ -2081,7 +2081,7 @@ mod tests {
         #[derive(Component, Default)]
         struct Y;
 
-        let mut world = World::new();
+        let mut world = SubWorld::new();
         let e = world.spawn(X).id();
         let _ = world.entity_mut(e).take::<X>().unwrap();
         assert!(world.entity_mut(e).contains::<Y>());
@@ -2099,7 +2099,7 @@ mod tests {
         #[derive(Component, Default)]
         struct Z;
 
-        let mut world = World::new();
+        let mut world = SubWorld::new();
         let e = world.spawn((X, Z)).id();
         world.entity_mut(e).retain::<X>();
         assert!(world.entity_mut(e).contains::<X>());
@@ -2116,7 +2116,7 @@ mod tests {
         #[derive(Component, Default)]
         struct Y(usize);
 
-        let mut world = World::new();
+        let mut world = SubWorld::new();
         let id = world.spawn((X, Y(10))).id();
         world.entity_mut(id).insert(X);
 
@@ -2136,7 +2136,7 @@ mod tests {
         #[derive(Component, Default)]
         struct Y;
 
-        let mut world = World::new();
+        let mut world = SubWorld::new();
         let x_id = world.register_component::<X>();
 
         let mut e = world.spawn_empty();
@@ -2163,7 +2163,7 @@ mod tests {
         #[derive(Component)]
         struct V;
 
-        let mut world = World::new();
+        let mut world = SubWorld::new();
         world.register_required_components::<X, Y>();
         world.register_required_components::<Y, Z>();
 
@@ -2210,7 +2210,7 @@ mod tests {
         #[derive(Component)]
         struct V;
 
-        let mut world = World::new();
+        let mut world = SubWorld::new();
 
         let e = world.spawn((X, V)).id();
         assert!(world.entity(e).contains::<X>());
@@ -2264,7 +2264,7 @@ mod tests {
             z: Z,
         }
 
-        let mut world = World::new();
+        let mut world = SubWorld::new();
         let e = world.spawn((TestBundle::default(), V)).id();
 
         assert!(world.entity(e).contains::<X>());
@@ -2304,7 +2304,7 @@ mod tests {
             }
         }
 
-        let mut world = World::new();
+        let mut world = SubWorld::new();
 
         world.register_required_components::<X, Y>();
         world.register_required_components_with::<Y, Z>(|| Z(7));
@@ -2365,7 +2365,7 @@ mod tests {
         #[derive(Component)]
         struct Z(u32);
 
-        let mut world = World::new();
+        let mut world = SubWorld::new();
 
         // - X requires Y with default constructor
         // - Y requires Z with custom constructor
@@ -2396,7 +2396,7 @@ mod tests {
         #[derive(Component)]
         struct Z(u32);
 
-        let mut world = World::new();
+        let mut world = SubWorld::new();
 
         // - X requires Y with default constructor
         // - X requires Z with custom constructor (more specific than X -> Y -> Z)
@@ -2427,7 +2427,7 @@ mod tests {
         #[derive(Component, Default)]
         struct C;
 
-        let mut world = World::new();
+        let mut world = SubWorld::new();
 
         // `B` requires `C` with a runtime registration.
         // `A` should also require `C` because it requires `B`.
@@ -2452,7 +2452,7 @@ mod tests {
         #[derive(Component, Default)]
         struct D;
 
-        let mut world = World::new();
+        let mut world = SubWorld::new();
 
         world.register_required_components::<A, B>();
         world.register_required_components::<B, C>();
@@ -2476,7 +2476,7 @@ mod tests {
         #[derive(Component, Default)]
         struct D;
 
-        let mut world = World::new();
+        let mut world = SubWorld::new();
 
         world.register_required_components::<A, B>();
         world.register_required_components::<B, C>();
@@ -2510,7 +2510,7 @@ mod tests {
         #[derive(Component, Default)]
         struct F;
 
-        let mut world = World::new();
+        let mut world = SubWorld::new();
 
         world.register_required_components::<A, B>();
         world.register_required_components::<B, C>();
@@ -2534,7 +2534,7 @@ mod tests {
         #[derive(Component, Default)]
         struct Y;
 
-        let mut world = World::new();
+        let mut world = SubWorld::new();
 
         // Registering required components after the archetype has already been created should panic.
         // This may change in the future.
@@ -2554,7 +2554,7 @@ mod tests {
         #[derive(Component, Default)]
         struct Y;
 
-        let mut world = World::new();
+        let mut world = SubWorld::new();
 
         // This should fail: Tried to register Y as a requirement for X, but the requirement already exists.
         assert!(matches!(
@@ -2600,7 +2600,7 @@ mod tests {
         #[derive(Component, Default)]
         struct Z;
 
-        let mut world = World::new();
+        let mut world = SubWorld::new();
 
         let a = world.register_component::<A>();
         let b = world.register_component::<B>();
@@ -2663,7 +2663,7 @@ mod tests {
         #[require(MyRequired(|| MyRequired(true)))]
         struct MyComponent;
 
-        let mut world = World::new();
+        let mut world = SubWorld::new();
         let order_a = world
             .spawn((ConflictingRequire, MyComponent))
             .get::<MyRequired>()
@@ -2692,7 +2692,7 @@ mod tests {
         #[require(B)]
         struct C;
 
-        World::new().register_component::<A>();
+        SubWorld::new().register_component::<A>();
     }
 
     #[test]
@@ -2702,7 +2702,7 @@ mod tests {
         #[require(A)]
         struct A;
 
-        World::new().register_component::<A>();
+        SubWorld::new().register_component::<A>();
     }
 
     #[test]
@@ -2727,7 +2727,7 @@ mod tests {
             c: Vec<Entity>,
         }
 
-        let mut world = World::new();
+        let mut world = SubWorld::new();
         let e1 = world.spawn_empty().id();
         let e2 = world.spawn_empty().id();
         let e3 = world.spawn_empty().id();
@@ -2773,7 +2773,7 @@ mod tests {
             },
         }
 
-        let mut world = World::new();
+        let mut world = SubWorld::new();
         let e1 = world.spawn_empty().id();
         let e2 = world.spawn_empty().id();
         let e3 = world.spawn_empty().id();

@@ -5,7 +5,7 @@ use bevy_ecs::{
     query::{QueryEntityError, QueryState, ROQueryItem, ReadOnlyQueryData},
     resource::Resource,
     system::{ReadOnlySystemParam, SystemParam, SystemParamItem, SystemState},
-    world::World,
+    world::SubWorld,
 };
 use bevy_utils::TypeIdMap;
 use core::{any::TypeId, fmt::Debug, hash::Hash};
@@ -27,12 +27,12 @@ pub trait Draw<P: PhaseItem>: Send + Sync + 'static {
         unused_variables,
         reason = "The parameters here are intentionally unused by the default implementation; however, putting underscores here will result in the underscores being copied by rust-analyzer's tab completion."
     )]
-    fn prepare(&mut self, world: &'_ World) {}
+    fn prepare(&mut self, world: &'_ SubWorld) {}
 
     /// Draws a [`PhaseItem`] by issuing zero or more `draw` calls via the [`TrackedRenderPass`].
     fn draw<'w>(
         &mut self,
-        world: &'w World,
+        world: &'w SubWorld,
         pass: &mut TrackedRenderPass<'w>,
         view: Entity,
         item: &P,
@@ -64,7 +64,7 @@ pub struct DrawFunctionsInternal<P: PhaseItem> {
 
 impl<P: PhaseItem> DrawFunctionsInternal<P> {
     /// Prepares all draw function. This is called once and only once before the phase begins.
-    pub fn prepare(&mut self, world: &World) {
+    pub fn prepare(&mut self, world: &SubWorld) {
         for function in &mut self.draw_functions {
             function.prepare(world);
         }
@@ -299,7 +299,7 @@ pub struct RenderCommandState<P: PhaseItem + 'static, C: RenderCommand<P>> {
 
 impl<P: PhaseItem, C: RenderCommand<P>> RenderCommandState<P, C> {
     /// Creates a new [`RenderCommandState`] for the [`RenderCommand`].
-    pub fn new(world: &mut World) -> Self {
+    pub fn new(world: &mut SubWorld) -> Self {
         Self {
             state: SystemState::new(world),
             view: world.query(),
@@ -314,7 +314,7 @@ where
 {
     /// Prepares the render command to be used. This is called once and only once before the phase
     /// begins. There may be zero or more [`draw`](RenderCommandState::draw) calls following a call to this function.
-    fn prepare(&mut self, world: &'_ World) {
+    fn prepare(&mut self, world: &'_ SubWorld) {
         self.state.update_archetypes(world);
         self.view.update_archetypes(world);
         self.entity.update_archetypes(world);
@@ -323,7 +323,7 @@ where
     /// Fetches the ECS parameters for the wrapped [`RenderCommand`] and then renders it.
     fn draw<'w>(
         &mut self,
-        world: &'w World,
+        world: &'w SubWorld,
         pass: &mut TrackedRenderPass<'w>,
         view: Entity,
         item: &P,

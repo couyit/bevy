@@ -313,7 +313,7 @@ fn rotate_camera(
 
 // Loads the cubemaps from the assets directory.
 impl FromWorld for Cubemaps {
-    fn from_world(world: &mut World) -> Self {
+    fn from_world(world: &mut SubWorld) -> Self {
         // Just use the specular map for the skybox since it's not too blurry.
         // In reality you wouldn't do this--you'd use a real skybox texture--but
         // reusing the textures like this saves space in the Bevy repository.

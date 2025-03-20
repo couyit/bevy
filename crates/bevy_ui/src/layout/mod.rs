@@ -372,8 +372,8 @@ mod tests {
     const WINDOW_WIDTH: f32 = 1000.;
     const WINDOW_HEIGHT: f32 = 100.;
 
-    fn setup_ui_test_world() -> (World, Schedule) {
-        let mut world = World::new();
+    fn setup_ui_test_world() -> (SubWorld, Schedule) {
+        let mut world = SubWorld::new();
         world.init_resource::<UiScale>();
         world.init_resource::<UiSurface>();
         world.init_resource::<Events<WindowScaleFactorChanged>>();
@@ -774,7 +774,7 @@ mod tests {
         }
 
         fn do_move_and_test(
-            world: &mut World,
+            world: &mut SubWorld,
             ui_schedule: &mut Schedule,
             new_pos: Vec2,
             expected_camera_entity: &Entity,
@@ -797,7 +797,7 @@ mod tests {
             assert_eq!(Vec2::new(layout.location.x, layout.location.y), new_pos);
         }
 
-        fn get_taffy_node_count(world: &World) -> usize {
+        fn get_taffy_node_count(world: &SubWorld) -> usize {
             world.resource::<UiSurface>().taffy.total_node_count()
         }
 
@@ -973,7 +973,7 @@ mod tests {
 
     #[test]
     fn no_camera_ui() {
-        let mut world = World::new();
+        let mut world = SubWorld::new();
         world.init_resource::<UiScale>();
         world.init_resource::<UiSurface>();
         world.init_resource::<Events<WindowScaleFactorChanged>>();

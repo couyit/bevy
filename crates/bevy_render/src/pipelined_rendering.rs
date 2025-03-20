@@ -4,7 +4,7 @@ use bevy_app::{App, AppExit, AppLabel, Plugin, SubApp};
 use bevy_ecs::{
     resource::Resource,
     schedule::MainThreadExecutor,
-    world::{Mut, World},
+    world::{Mut, SubWorld},
 };
 use bevy_tasks::ComputeTaskPool;
 
@@ -180,7 +180,7 @@ impl Plugin for PipelinedRenderingPlugin {
 
 // This function waits for the rendering world to be received,
 // runs extract, and then sends the rendering world back to the render thread.
-fn renderer_extract(app_world: &mut World, _world: &mut World) {
+fn renderer_extract(app_world: &mut SubWorld, _world: &mut SubWorld) {
     app_world.resource_scope(|world, main_thread_executor: Mut<MainThreadExecutor>| {
         world.resource_scope(|world, mut render_channels: Mut<RenderAppChannels>| {
             // we use a scope here to run any main thread tasks that the render world still needs to run

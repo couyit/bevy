@@ -12,7 +12,7 @@ use bevy_ecs::{
     component::Tick,
     resource::Resource,
     system::{Deferred, ReadOnlySystemParam, Res, SystemBuffer, SystemMeta, SystemParam},
-    world::{unsafe_world_cell::UnsafeWorldCell, World},
+    world::{unsafe_world_cell::UnsafeWorldCell, SubWorld},
 };
 use bevy_math::{Isometry2d, Isometry3d, Vec2, Vec3};
 use bevy_reflect::{std_traits::ReflectDefault, Reflect};
@@ -196,7 +196,7 @@ where
     type State = GizmosFetchState<Config, Clear>;
     type Item<'w, 's> = Gizmos<'w, 's, Config, Clear>;
 
-    fn init_state(world: &mut World, system_meta: &mut SystemMeta) -> Self::State {
+    fn init_state(world: &mut SubWorld, system_meta: &mut SystemMeta) -> Self::State {
         GizmosFetchState {
             state: GizmosState::<Config, Clear>::init_state(world, system_meta),
         }
@@ -213,7 +213,7 @@ where
         };
     }
 
-    fn apply(state: &mut Self::State, system_meta: &SystemMeta, world: &mut World) {
+    fn apply(state: &mut Self::State, system_meta: &SystemMeta, world: &mut SubWorld) {
         GizmosState::<Config, Clear>::apply(&mut state.state, system_meta, world);
     }
 
@@ -323,7 +323,7 @@ where
     Config: GizmoConfigGroup,
     Clear: 'static + Send + Sync,
 {
-    fn apply(&mut self, _system_meta: &SystemMeta, world: &mut World) {
+    fn apply(&mut self, _system_meta: &SystemMeta, world: &mut SubWorld) {
         let mut storage = world.resource_mut::<GizmoStorage<Config, Clear>>();
         storage.list_positions.append(&mut self.list_positions);
         storage.list_colors.append(&mut self.list_colors);

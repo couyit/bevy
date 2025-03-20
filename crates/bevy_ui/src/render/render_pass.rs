@@ -25,7 +25,7 @@ pub struct UiPassNode {
 }
 
 impl UiPassNode {
-    pub fn new(world: &mut World) -> Self {
+    pub fn new(world: &mut SubWorld) -> Self {
         Self {
             ui_view_query: world.query_filtered(),
             ui_view_target_query: world.query(),
@@ -35,7 +35,7 @@ impl UiPassNode {
 }
 
 impl Node for UiPassNode {
-    fn update(&mut self, world: &mut World) {
+    fn update(&mut self, world: &mut SubWorld) {
         self.ui_view_query.update_archetypes(world);
         self.ui_view_target_query.update_archetypes(world);
         self.ui_camera_view_query.update_archetypes(world);
@@ -45,7 +45,7 @@ impl Node for UiPassNode {
         &self,
         graph: &mut RenderGraphContext,
         render_context: &mut RenderContext,
-        world: &World,
+        world: &SubWorld,
     ) -> Result<(), NodeRunError> {
         // Extract the UI view.
         let input_view_entity = graph.view_entity();

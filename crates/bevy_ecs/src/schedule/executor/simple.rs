@@ -12,7 +12,7 @@ use crate::{
     schedule::{
         executor::is_apply_deferred, BoxedCondition, ExecutorKind, SystemExecutor, SystemSchedule,
     },
-    world::World,
+    world::SubWorld,
 };
 
 use super::__rust_begin_short_backtrace;
@@ -42,7 +42,7 @@ impl SystemExecutor for SimpleExecutor {
     fn run(
         &mut self,
         schedule: &mut SystemSchedule,
-        world: &mut World,
+        world: &mut SubWorld,
         _skip_systems: Option<&FixedBitSet>,
         error_handler: fn(BevyError, ErrorContext),
     ) {
@@ -152,7 +152,7 @@ impl SimpleExecutor {
     }
 }
 
-fn evaluate_and_fold_conditions(conditions: &mut [BoxedCondition], world: &mut World) -> bool {
+fn evaluate_and_fold_conditions(conditions: &mut [BoxedCondition], world: &mut SubWorld) -> bool {
     #[expect(
         clippy::unnecessary_fold,
         reason = "Short-circuiting here would prevent conditions from mutating their own state as needed."
@@ -177,6 +177,6 @@ fn skip_automatic_sync_points() {
     let mut sched = Schedule::default();
     sched.set_executor_kind(ExecutorKind::Simple);
     sched.add_systems((|_: Commands| (), || ()).chain());
-    let mut world = World::new();
+    let mut world = SubWorld::new();
     sched.run(&mut world);
 }

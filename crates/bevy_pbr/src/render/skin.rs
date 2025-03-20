@@ -116,7 +116,7 @@ pub struct SkinUniforms {
 }
 
 impl FromWorld for SkinUniforms {
-    fn from_world(world: &mut World) -> Self {
+    fn from_world(world: &mut SubWorld) -> Self {
         let device = world.resource::<RenderDevice>();
         let buffer_usages = (if skins_use_uniform_buffers(device) {
             BufferUsages::UNIFORM

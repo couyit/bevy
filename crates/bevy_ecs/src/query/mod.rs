@@ -115,7 +115,7 @@ mod tests {
         schedule::{IntoScheduleConfigs, Schedule},
         storage::{Table, TableRow},
         system::{assert_is_system, IntoSystem, Query, System, SystemState},
-        world::{unsafe_world_cell::UnsafeWorldCell, World},
+        world::{unsafe_world_cell::UnsafeWorldCell, SubWorld},
     };
     use alloc::{vec, vec::Vec};
     use bevy_ecs_macros::QueryFilter;
@@ -137,7 +137,7 @@ mod tests {
 
     #[test]
     fn query() {
-        let mut world = World::new();
+        let mut world = SubWorld::new();
         world.spawn((A(1), B(1)));
         world.spawn(A(2));
         let values = world.query::<&A>().iter(&world).collect::<HashSet<&A>>();
@@ -161,7 +161,7 @@ mod tests {
             let ns = (n - k + 1..=n).rev();
             ks.zip(ns).fold(1, |acc, (k, n)| acc * n / k)
         }
-        fn assert_combination<D, F, const K: usize>(world: &mut World, expected_size: usize)
+        fn assert_combination<D, F, const K: usize>(world: &mut SubWorld, expected_size: usize)
         where
             D: ReadOnlyQueryData,
             F: ArchetypeFilter,
@@ -175,7 +175,7 @@ mod tests {
             let iter = query.iter_combinations::<K>(world);
             assert_all_sizes_iterator_equal(iter, expected_size, 5, query_type);
         }
-        fn assert_all_sizes_equal<D, F>(world: &mut World, expected_size: usize)
+        fn assert_all_sizes_equal<D, F>(world: &mut SubWorld, expected_size: usize)
         where
             D: ReadOnlyQueryData,
             F: ArchetypeFilter,
@@ -233,7 +233,7 @@ mod tests {
             assert_eq!(count, expected_size);
         }
 
-        let mut world = World::new();
+        let mut world = SubWorld::new();
         world.spawn((A(1), B(1)));
         world.spawn(A(2));
         world.spawn(A(3));
@@ -241,7 +241,7 @@ mod tests {
         assert_all_sizes_equal::<&A, With<B>>(&mut world, 1);
         assert_all_sizes_equal::<&A, Without<B>>(&mut world, 2);
 
-        let mut world = World::new();
+        let mut world = SubWorld::new();
         world.spawn((A(1), B(1), C(1)));
         world.spawn((A(2), B(2)));
         world.spawn((A(3), B(3)));
@@ -303,7 +303,7 @@ mod tests {
 
     #[test]
     fn query_iter_combinations() {
-        let mut world = World::new();
+        let mut world = SubWorld::new();
 
         world.spawn((A(1), B(1)));
         world.spawn(A(2));
@@ -348,7 +348,7 @@ mod tests {
     fn query_filtered_iter_combinations() {
         use bevy_ecs::query::{Added, Or, With, Without};
 
-        let mut world = World::new();
+        let mut world = SubWorld::new();
 
         world.spawn((A(1), B(1)));
         world.spawn(A(2));
@@ -391,7 +391,7 @@ mod tests {
         check_combinations(values, HashSet::from([[&A(12), &A(103), &A(1004)]]));
 
         // Check if Added<T>, Changed<T> works
-        let mut world = World::new();
+        let mut world = SubWorld::new();
 
         world.spawn((A(1), B(1)));
         world.spawn((A(2), B(2)));
@@ -421,7 +421,7 @@ mod tests {
 
     #[test]
     fn query_iter_combinations_sparse() {
-        let mut world = World::new();
+        let mut world = SubWorld::new();
 
         world.spawn_batch((1..=4).map(Sparse));
 
@@ -440,7 +440,7 @@ mod tests {
 
     #[test]
     fn get_many_only_mut_checks_duplicates() {
-        let mut world = World::new();
+        let mut world = SubWorld::new();
         let id = world.spawn(A(10)).id();
         let mut query_state = world.query::<&mut A>();
         let mut query = query_state.query_mut(&mut world);
@@ -452,7 +452,7 @@ mod tests {
 
     #[test]
     fn multi_storage_query() {
-        let mut world = World::new();
+        let mut world = SubWorld::new();
 
         world.spawn((Sparse(1), B(2)));
         world.spawn(Sparse(2));
@@ -474,7 +474,7 @@ mod tests {
 
     #[test]
     fn any_query() {
-        let mut world = World::new();
+        let mut world = SubWorld::new();
 
         world.spawn((A(1), B(2)));
         world.spawn(A(2));
@@ -491,7 +491,7 @@ mod tests {
 
     #[test]
     fn has_query() {
-        let mut world = World::new();
+        let mut world = SubWorld::new();
 
         world.spawn((A(1), B(1)));
         world.spawn(A(2));
@@ -516,13 +516,13 @@ mod tests {
             b: &'static mut A,
         }
 
-        let mut world = World::new();
+        let mut world = SubWorld::new();
         world.query::<SelfConflicting>();
     }
 
     #[test]
     fn derived_worldqueries() {
-        let mut world = World::new();
+        let mut world = SubWorld::new();
 
         world.spawn((A(10), B(18), C(3), Sparse(4)));
 
@@ -706,7 +706,7 @@ mod tests {
 
     #[test]
     fn many_entities() {
-        let mut world = World::new();
+        let mut world = SubWorld::new();
         world.spawn((A(0), B(0)));
         world.spawn((A(0), B(0)));
         world.spawn(A(0));
@@ -750,7 +750,7 @@ mod tests {
         #[derive(Component)]
         struct Foo;
 
-        let mut world = World::new();
+        let mut world = SubWorld::new();
         let e = world.spawn(Foo).id();
 
         // state
@@ -784,7 +784,7 @@ mod tests {
     // regression test for https://github.com/bevyengine/bevy/pull/8029
     #[test]
     fn par_iter_mut_change_detection() {
-        let mut world = World::new();
+        let mut world = SubWorld::new();
         world.spawn((A(1), B(1)));
 
         fn propagate_system(mut query: Query<(&A, &mut B), Changed<A>>) {
@@ -863,7 +863,7 @@ mod tests {
             access.add_resource_read(component_id);
         }
 
-        fn init_state(world: &mut World) -> Self::State {
+        fn init_state(world: &mut SubWorld) -> Self::State {
             world.components_registrator().register_resource::<R>()
         }
 
@@ -907,7 +907,7 @@ mod tests {
 
     #[test]
     fn read_res_sets_archetype_component_access() {
-        let mut world = World::new();
+        let mut world = SubWorld::new();
 
         fn read_query(_q: Query<ReadsRData, With<A>>) {}
         let mut read_query = IntoSystem::into_system(read_query);

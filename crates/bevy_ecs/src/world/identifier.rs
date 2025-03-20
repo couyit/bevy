@@ -2,7 +2,7 @@ use crate::{
     component::Tick,
     storage::SparseSetIndex,
     system::{ExclusiveSystemParam, ReadOnlySystemParam, SystemMeta, SystemParam},
-    world::{FromWorld, World},
+    world::{FromWorld, SubWorld},
 };
 use bevy_platform_support::sync::atomic::{AtomicUsize, Ordering};
 
@@ -53,7 +53,7 @@ unsafe impl SystemParam for WorldId {
 
     type Item<'world, 'state> = WorldId;
 
-    fn init_state(_: &mut World, _: &mut SystemMeta) -> Self::State {}
+    fn init_state(_: &mut SubWorld, _: &mut SystemMeta) -> Self::State {}
 
     #[inline]
     unsafe fn get_param<'world, 'state>(
@@ -70,7 +70,7 @@ impl ExclusiveSystemParam for WorldId {
     type State = WorldId;
     type Item<'s> = WorldId;
 
-    fn init(world: &mut World, _system_meta: &mut SystemMeta) -> Self::State {
+    fn init(world: &mut SubWorld, _system_meta: &mut SystemMeta) -> Self::State {
         world.id()
     }
 
@@ -124,11 +124,11 @@ mod tests {
 
     #[test]
     fn world_id_exclusive_system_param() {
-        fn test_system(_world: &mut World, world_id: WorldId) -> WorldId {
+        fn test_system(_world: &mut SubWorld, world_id: SubWorldId) -> SubWorldId {
             world_id
         }
 
-        let mut world = World::default();
+        let mut world = SubWorld::default();
         let system_id = world.register_system(test_system);
         let world_id = world.run_system(system_id).unwrap();
         assert_eq!(world.id(), world_id);

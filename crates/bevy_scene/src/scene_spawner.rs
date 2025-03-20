@@ -6,7 +6,7 @@ use bevy_ecs::{
     hierarchy::ChildOf,
     reflect::AppTypeRegistry,
     resource::Resource,
-    world::{Mut, World},
+    world::{Mut, SubWorld},
 };
 use bevy_platform_support::collections::{HashMap, HashSet};
 use bevy_reflect::Reflect;
@@ -195,7 +195,7 @@ impl SceneSpawner {
     /// Immediately despawns all instances of a dynamic scene.
     pub fn despawn_sync(
         &mut self,
-        world: &mut World,
+        world: &mut SubWorld,
         id: impl Into<AssetId<DynamicScene>>,
     ) -> Result<(), SceneSpawnError> {
         if let Some(instance_ids) = self.spawned_dynamic_scenes.remove(&id.into()) {
@@ -207,7 +207,7 @@ impl SceneSpawner {
     }
 
     /// Immediately despawns a scene instance, removing all its entities from the world.
-    pub fn despawn_instance_sync(&mut self, world: &mut World, instance_id: &InstanceId) {
+    pub fn despawn_instance_sync(&mut self, world: &mut SubWorld, instance_id: &InstanceId) {
         if let Some(instance) = self.spawned_instances.remove(instance_id) {
             for &entity in instance.entity_map.values() {
                 if let Ok(entity_mut) = world.get_entity_mut(entity) {
@@ -220,7 +220,7 @@ impl SceneSpawner {
     /// Immediately spawns a new instance of the provided dynamic scene.
     pub fn spawn_dynamic_sync(
         &mut self,
-        world: &mut World,
+        world: &mut SubWorld,
         id: impl Into<AssetId<DynamicScene>>,
     ) -> Result<InstanceId, SceneSpawnError> {
         let mut entity_map = EntityHashMap::default();
@@ -235,7 +235,7 @@ impl SceneSpawner {
     }
 
     fn spawn_dynamic_internal(
-        world: &mut World,
+        world: &mut SubWorld,
         id: AssetId<DynamicScene>,
         entity_map: &mut EntityHashMap<Entity>,
     ) -> Result<(), SceneSpawnError> {
@@ -251,7 +251,7 @@ impl SceneSpawner {
     /// Immediately spawns a new instance of the provided scene.
     pub fn spawn_sync(
         &mut self,
-        world: &mut World,
+        world: &mut SubWorld,
         id: impl Into<AssetId<Scene>>,
     ) -> Result<InstanceId, SceneSpawnError> {
         let mut entity_map = EntityHashMap::default();
@@ -264,7 +264,7 @@ impl SceneSpawner {
     }
 
     fn spawn_sync_internal(
-        world: &mut World,
+        world: &mut SubWorld,
         id: AssetId<Scene>,
         entity_map: &mut EntityHashMap<Entity>,
     ) -> Result<(), SceneSpawnError> {
@@ -286,7 +286,7 @@ impl SceneSpawner {
     /// Useful for updating already spawned scene instances after their corresponding scene has been modified.
     pub fn update_spawned_scenes(
         &mut self,
-        world: &mut World,
+        world: &mut SubWorld,
         scene_ids: &[AssetId<DynamicScene>],
     ) -> Result<(), SceneSpawnError> {
         for id in scene_ids {
@@ -302,7 +302,7 @@ impl SceneSpawner {
     }
 
     /// Immediately despawns all scenes scheduled for despawn by despawning their instances.
-    pub fn despawn_queued_scenes(&mut self, world: &mut World) -> Result<(), SceneSpawnError> {
+    pub fn despawn_queued_scenes(&mut self, world: &mut SubWorld) -> Result<(), SceneSpawnError> {
         let scenes_to_despawn = core::mem::take(&mut self.scenes_to_despawn);
 
         for scene_handle in scenes_to_despawn {
@@ -312,7 +312,7 @@ impl SceneSpawner {
     }
 
     /// Immediately despawns all scene instances scheduled for despawn.
-    pub fn despawn_queued_instances(&mut self, world: &mut World) {
+    pub fn despawn_queued_instances(&mut self, world: &mut SubWorld) {
         let instances_to_despawn = core::mem::take(&mut self.instances_to_despawn);
 
         for instance_id in instances_to_despawn {
@@ -321,7 +321,7 @@ impl SceneSpawner {
     }
 
     /// Immediately spawns all scenes scheduled for spawn.
-    pub fn spawn_queued_scenes(&mut self, world: &mut World) -> Result<(), SceneSpawnError> {
+    pub fn spawn_queued_scenes(&mut self, world: &mut SubWorld) -> Result<(), SceneSpawnError> {
         let scenes_to_spawn = core::mem::take(&mut self.dynamic_scenes_to_spawn);
 
         for (handle, instance_id, parent) in scenes_to_spawn {
@@ -380,7 +380,7 @@ impl SceneSpawner {
         Ok(())
     }
 
-    pub(crate) fn set_scene_instance_parent_sync(&mut self, world: &mut World) {
+    pub(crate) fn set_scene_instance_parent_sync(&mut self, world: &mut SubWorld) {
         let scenes_with_parent = core::mem::take(&mut self.scenes_with_parent);
 
         for (instance_id, parent) in scenes_with_parent {
@@ -434,7 +434,7 @@ impl SceneSpawner {
 }
 
 /// System that handles scheduled scene instance spawning and despawning through a [`SceneSpawner`].
-pub fn scene_spawner_system(world: &mut World) {
+pub fn scene_spawner_system(world: &mut SubWorld) {
     world.resource_scope(|world, mut scene_spawner: Mut<SceneSpawner>| {
         // remove any loading instances where parent is deleted
         let mut dead_instances = <HashSet<_>>::default();
@@ -543,7 +543,7 @@ mod tests {
     use bevy_asset::Assets;
     use bevy_ecs::{
         entity::Entity,
-        prelude::{AppTypeRegistry, World},
+        prelude::{AppTypeRegistry, SubWorld},
     };
 
     #[derive(Component, Reflect, Default)]
@@ -563,7 +563,7 @@ mod tests {
             .register_type::<ComponentA>();
         app.update();
 
-        let mut scene_world = World::new();
+        let mut scene_world = SubWorld::new();
 
         // create a new DynamicScene manually
         let type_registry = app.world().resource::<AppTypeRegistry>().clone();
@@ -617,7 +617,7 @@ mod tests {
 
     #[test]
     fn clone_dynamic_entities() {
-        let mut world = World::default();
+        let mut world = SubWorld::default();
 
         // setup
         let atr = AppTypeRegistry::default();
@@ -687,7 +687,7 @@ mod tests {
     fn build_scene(app: &mut App) -> Handle<Scene> {
         app.world_mut()
             .run_system_once(
-                |world: &World,
+                |world: &SubWorld,
                  type_registry: Res<'_, AppTypeRegistry>,
                  asset_server: Res<'_, AssetServer>| {
                     asset_server.add(
@@ -701,7 +701,7 @@ mod tests {
 
     fn build_dynamic_scene(app: &mut App) -> Handle<DynamicScene> {
         app.world_mut()
-            .run_system_once(|world: &World, asset_server: Res<'_, AssetServer>| {
+            .run_system_once(|world: &SubWorld, asset_server: Res<'_, AssetServer>| {
                 asset_server.add(DynamicScene::from_world(world))
             })
             .expect("Failed to run dynamic scene builder system.")
@@ -842,7 +842,7 @@ mod tests {
         let count = 10;
 
         // Checks the number of scene instances stored in `SceneSpawner`.
-        let check = |world: &mut World, expected_count: usize| {
+        let check = |world: &mut SubWorld, expected_count: usize| {
             let scene_spawner = world.resource::<SceneSpawner>();
             assert_eq!(
                 scene_spawner.spawned_dynamic_scenes[&scene.id()].len(),
@@ -886,7 +886,7 @@ mod tests {
             .register_type::<ComponentF>();
         app.update();
 
-        let mut scene_world = World::new();
+        let mut scene_world = SubWorld::new();
         let root = scene_world.spawn_empty().id();
         let temporary_root = scene_world.spawn_empty().id();
         // Spawn entities with different parent first before parenting them to the actual root, allowing us

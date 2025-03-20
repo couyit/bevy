@@ -7,7 +7,7 @@ use crate::{
     query::{Access, FilteredAccess, QueryCombinationIter, QueryIter, QueryParIter, WorldQuery},
     storage::{SparseSetIndex, TableId},
     system::Query,
-    world::{unsafe_world_cell::UnsafeWorldCell, World, WorldId},
+    world::{unsafe_world_cell::UnsafeWorldCell, SubWorld, SubWorldId},
 };
 
 #[cfg(all(not(target_arch = "wasm32"), feature = "multi_threaded"))]
@@ -64,7 +64,7 @@ pub(super) union StorageId {
 // Do not add any new fields that use the `D` or `F` generic parameters as this may
 // make `QueryState::as_transmuted_state` unsound if not done with care.
 pub struct QueryState<D: QueryData, F: QueryFilter = ()> {
-    world_id: WorldId,
+    world_id: SubWorldId,
     pub(crate) archetype_generation: ArchetypeGeneration,
     /// Metadata about the [`Table`](crate::storage::Table)s matched by this query.
     pub(crate) matched_tables: FixedBitSet,
@@ -101,7 +101,7 @@ impl<D: QueryData, F: QueryFilter> fmt::Debug for QueryState<D, F> {
 }
 
 impl<D: QueryData, F: QueryFilter> FromWorld for QueryState<D, F> {
-    fn from_world(world: &mut World) -> Self {
+    fn from_world(world: &mut SubWorld) -> Self {
         world.query_filtered()
     }
 }
@@ -159,7 +159,7 @@ impl<D: QueryData, F: QueryFilter> QueryState<D, F> {
     }
 
     /// Creates a new [`QueryState`] from a given [`World`] and inherits the result of `world.id()`.
-    pub fn new(world: &mut World) -> Self {
+    pub fn new(world: &mut SubWorld) -> Self {
         let mut state = Self::new_uninitialized(world);
         state.update_archetypes(world);
         state
@@ -169,7 +169,7 @@ impl<D: QueryData, F: QueryFilter> QueryState<D, F> {
     ///
     /// This function may fail if, for example,
     /// the components that make up this query have not been registered into the world.
-    pub fn try_new(world: &World) -> Option<Self> {
+    pub fn try_new(world: &SubWorld) -> Option<Self> {
         let mut state = Self::try_new_uninitialized(world)?;
         state.update_archetypes(world);
         Some(state)
@@ -177,7 +177,7 @@ impl<D: QueryData, F: QueryFilter> QueryState<D, F> {
 
     /// Identical to `new`, but it populates the provided `access` with the matched results.
     pub(crate) fn new_with_access(
-        world: &mut World,
+        world: &mut SubWorld,
         access: &mut Access<ArchetypeComponentId>,
     ) -> Self {
         let mut state = Self::new_uninitialized(world);
@@ -213,7 +213,7 @@ impl<D: QueryData, F: QueryFilter> QueryState<D, F> {
     ///
     /// `new_archetype` and its variants must be called on all of the World's archetypes before the
     /// state can return valid query results.
-    fn new_uninitialized(world: &mut World) -> Self {
+    fn new_uninitialized(world: &mut SubWorld) -> Self {
         let fetch_state = D::init_state(world);
         let filter_state = F::init_state(world);
         Self::from_states_uninitialized(world, fetch_state, filter_state)
@@ -223,7 +223,7 @@ impl<D: QueryData, F: QueryFilter> QueryState<D, F> {
     ///
     /// `new_archetype` and its variants must be called on all of the World's archetypes before the
     /// state can return valid query results.
-    fn try_new_uninitialized(world: &World) -> Option<Self> {
+    fn try_new_uninitialized(world: &SubWorld) -> Option<Self> {
         let fetch_state = D::get_state(world.components())?;
         let filter_state = F::get_state(world.components())?;
         Some(Self::from_states_uninitialized(
@@ -238,7 +238,7 @@ impl<D: QueryData, F: QueryFilter> QueryState<D, F> {
     /// `new_archetype` and its variants must be called on all of the World's archetypes before the
     /// state can return valid query results.
     fn from_states_uninitialized(
-        world: &World,
+        world: &SubWorld,
         fetch_state: <D as WorldQuery>::State,
         filter_state: <F as WorldQuery>::State,
     ) -> Self {
@@ -323,7 +323,7 @@ impl<D: QueryData, F: QueryFilter> QueryState<D, F> {
     /// Creates a [`Query`] from the given [`QueryState`] and [`World`].
     ///
     /// This will create read-only queries, see [`Self::query_mut`] for mutable queries.
-    pub fn query<'w, 's>(&'s mut self, world: &'w World) -> Query<'w, 's, D::ReadOnly, F> {
+    pub fn query<'w, 's>(&'s mut self, world: &'w SubWorld) -> Query<'w, 's, D::ReadOnly, F> {
         self.update_archetypes(world);
         self.query_manual(world)
     }
@@ -339,7 +339,7 @@ impl<D: QueryData, F: QueryFilter> QueryState<D, F> {
     /// access to `self`.
     ///
     /// This will create read-only queries, see [`Self::query_mut`] for mutable queries.
-    pub fn query_manual<'w, 's>(&'s self, world: &'w World) -> Query<'w, 's, D::ReadOnly, F> {
+    pub fn query_manual<'w, 's>(&'s self, world: &'w SubWorld) -> Query<'w, 's, D::ReadOnly, F> {
         self.validate_world(world.id());
         // SAFETY:
         // - We have read access to the entire world, and we call `as_readonly()` so the query only performs read access.
@@ -351,7 +351,7 @@ impl<D: QueryData, F: QueryFilter> QueryState<D, F> {
     }
 
     /// Creates a [`Query`] from the given [`QueryState`] and [`World`].
-    pub fn query_mut<'w, 's>(&'s mut self, world: &'w mut World) -> Query<'w, 's, D, F> {
+    pub fn query_mut<'w, 's>(&'s mut self, world: &'w mut SubWorld) -> Query<'w, 's, D, F> {
         let last_run = world.last_change_tick();
         let this_run = world.change_tick();
         // SAFETY: We have exclusive access to the entire world.
@@ -462,7 +462,7 @@ impl<D: QueryData, F: QueryFilter> QueryState<D, F> {
     /// [`Added`]: crate::query::Added
     /// [`Changed`]: crate::query::Changed
     #[inline]
-    pub fn is_empty(&self, world: &World, last_run: Tick, this_run: Tick) -> bool {
+    pub fn is_empty(&self, world: &SubWorld, last_run: Tick, this_run: Tick) -> bool {
         self.validate_world(world.id());
         // SAFETY:
         // - We have read access to the entire world, and `is_empty()` only performs read access.
@@ -481,7 +481,7 @@ impl<D: QueryData, F: QueryFilter> QueryState<D, F> {
     ///
     /// This is always guaranteed to run in `O(1)` time.
     #[inline]
-    pub fn contains(&self, entity: Entity, world: &World, last_run: Tick, this_run: Tick) -> bool {
+    pub fn contains(&self, entity: Entity, world: &SubWorld, last_run: Tick, this_run: Tick) -> bool {
         self.validate_world(world.id());
         // SAFETY:
         // - We have read access to the entire world, and `is_empty()` only performs read access.
@@ -509,7 +509,7 @@ impl<D: QueryData, F: QueryFilter> QueryState<D, F> {
     ///
     /// If `world` does not match the one used to call `QueryState::new` for this instance.
     #[inline]
-    pub fn update_archetypes(&mut self, world: &World) {
+    pub fn update_archetypes(&mut self, world: &SubWorld) {
         self.update_archetypes_unsafe_world_cell(world.as_unsafe_world_cell_readonly());
     }
 
@@ -589,11 +589,11 @@ impl<D: QueryData, F: QueryFilter> QueryState<D, F> {
     /// way of ensuring that it matches.
     #[inline]
     #[track_caller]
-    pub fn validate_world(&self, world_id: WorldId) {
+    pub fn validate_world(&self, world_id: SubWorldId) {
         #[inline(never)]
         #[track_caller]
         #[cold]
-        fn panic_mismatched(this: WorldId, other: WorldId) -> ! {
+        fn panic_mismatched(this: SubWorldId, other: SubWorldId) -> ! {
             panic!("Encountered a mismatched World. This QueryState was created from {this:?}, but a method was called using {other:?}.");
         }
 
@@ -950,7 +950,7 @@ impl<D: QueryData, F: QueryFilter> QueryState<D, F> {
     #[inline]
     pub fn get<'w>(
         &mut self,
-        world: &'w World,
+        world: &'w SubWorld,
         entity: Entity,
     ) -> Result<ROQueryItem<'w, D>, QueryEntityError> {
         self.query(world).get_inner(entity)
@@ -991,7 +991,7 @@ impl<D: QueryData, F: QueryFilter> QueryState<D, F> {
     #[inline]
     pub fn get_many<'w, const N: usize>(
         &mut self,
-        world: &'w World,
+        world: &'w SubWorld,
         entities: [Entity; N],
     ) -> Result<[ROQueryItem<'w, D>; N], QueryEntityError> {
         self.query(world).get_many_inner(entities)
@@ -1029,7 +1029,7 @@ impl<D: QueryData, F: QueryFilter> QueryState<D, F> {
     #[inline]
     pub fn get_many_unique<'w, const N: usize>(
         &mut self,
-        world: &'w World,
+        world: &'w SubWorld,
         entities: UniqueEntityArray<N>,
     ) -> Result<[ROQueryItem<'w, D>; N], QueryEntityError> {
         self.query(world).get_many_unique_inner(entities)
@@ -1041,7 +1041,7 @@ impl<D: QueryData, F: QueryFilter> QueryState<D, F> {
     #[inline]
     pub fn get_mut<'w>(
         &mut self,
-        world: &'w mut World,
+        world: &'w mut SubWorld,
         entity: Entity,
     ) -> Result<D::Item<'w>, QueryEntityError> {
         self.query_mut(world).get_inner(entity)
@@ -1088,7 +1088,7 @@ impl<D: QueryData, F: QueryFilter> QueryState<D, F> {
     #[inline]
     pub fn get_many_mut<'w, const N: usize>(
         &mut self,
-        world: &'w mut World,
+        world: &'w mut SubWorld,
         entities: [Entity; N],
     ) -> Result<[D::Item<'w>; N], QueryEntityError> {
         self.query_mut(world).get_many_mut_inner(entities)
@@ -1133,7 +1133,7 @@ impl<D: QueryData, F: QueryFilter> QueryState<D, F> {
     #[inline]
     pub fn get_many_unique_mut<'w, const N: usize>(
         &mut self,
-        world: &'w mut World,
+        world: &'w mut SubWorld,
         entities: UniqueEntityArray<N>,
     ) -> Result<[D::Item<'w>; N], QueryEntityError> {
         self.query_mut(world).get_many_unique_inner(entities)
@@ -1155,7 +1155,7 @@ impl<D: QueryData, F: QueryFilter> QueryState<D, F> {
     #[inline]
     pub fn get_manual<'w>(
         &self,
-        world: &'w World,
+        world: &'w SubWorld,
         entity: Entity,
     ) -> Result<ROQueryItem<'w, D>, QueryEntityError> {
         self.query_manual(world).get_inner(entity)
@@ -1182,7 +1182,7 @@ impl<D: QueryData, F: QueryFilter> QueryState<D, F> {
     ///
     /// This can only be called for read-only queries, see [`Self::iter_mut`] for write-queries.
     #[inline]
-    pub fn iter<'w, 's>(&'s mut self, world: &'w World) -> QueryIter<'w, 's, D::ReadOnly, F> {
+    pub fn iter<'w, 's>(&'s mut self, world: &'w SubWorld) -> QueryIter<'w, 's, D::ReadOnly, F> {
         self.query(world).into_iter()
     }
 
@@ -1191,7 +1191,7 @@ impl<D: QueryData, F: QueryFilter> QueryState<D, F> {
     /// This iterator is always guaranteed to return results from each matching entity once and only once.
     /// Iteration order is not guaranteed.
     #[inline]
-    pub fn iter_mut<'w, 's>(&'s mut self, world: &'w mut World) -> QueryIter<'w, 's, D, F> {
+    pub fn iter_mut<'w, 's>(&'s mut self, world: &'w mut SubWorld) -> QueryIter<'w, 's, D, F> {
         self.query_mut(world).into_iter()
     }
 
@@ -1203,7 +1203,7 @@ impl<D: QueryData, F: QueryFilter> QueryState<D, F> {
     ///
     /// This can only be called for read-only queries.
     #[inline]
-    pub fn iter_manual<'w, 's>(&'s self, world: &'w World) -> QueryIter<'w, 's, D::ReadOnly, F> {
+    pub fn iter_manual<'w, 's>(&'s self, world: &'w SubWorld) -> QueryIter<'w, 's, D::ReadOnly, F> {
         self.query_manual(world).into_iter()
     }
 
@@ -1234,7 +1234,7 @@ impl<D: QueryData, F: QueryFilter> QueryState<D, F> {
     #[inline]
     pub fn iter_combinations<'w, 's, const K: usize>(
         &'s mut self,
-        world: &'w World,
+        world: &'w SubWorld,
     ) -> QueryCombinationIter<'w, 's, D::ReadOnly, F, K> {
         self.query(world).iter_combinations_inner()
     }
@@ -1259,7 +1259,7 @@ impl<D: QueryData, F: QueryFilter> QueryState<D, F> {
     #[inline]
     pub fn iter_combinations_mut<'w, 's, const K: usize>(
         &'s mut self,
-        world: &'w mut World,
+        world: &'w mut SubWorld,
     ) -> QueryCombinationIter<'w, 's, D, F, K> {
         self.query_mut(world).iter_combinations_inner()
     }
@@ -1275,7 +1275,7 @@ impl<D: QueryData, F: QueryFilter> QueryState<D, F> {
     #[inline]
     pub fn iter_many<'w, 's, EntityList: IntoIterator<Item: EntityBorrow>>(
         &'s mut self,
-        world: &'w World,
+        world: &'w SubWorld,
         entities: EntityList,
     ) -> QueryManyIter<'w, 's, D::ReadOnly, F, EntityList::IntoIter> {
         self.query(world).iter_many_inner(entities)
@@ -1298,7 +1298,7 @@ impl<D: QueryData, F: QueryFilter> QueryState<D, F> {
     #[inline]
     pub fn iter_many_manual<'w, 's, EntityList: IntoIterator<Item: EntityBorrow>>(
         &'s self,
-        world: &'w World,
+        world: &'w SubWorld,
         entities: EntityList,
     ) -> QueryManyIter<'w, 's, D::ReadOnly, F, EntityList::IntoIter> {
         self.query_manual(world).iter_many_inner(entities)
@@ -1311,7 +1311,7 @@ impl<D: QueryData, F: QueryFilter> QueryState<D, F> {
     #[inline]
     pub fn iter_many_mut<'w, 's, EntityList: IntoIterator<Item: EntityBorrow>>(
         &'s mut self,
-        world: &'w mut World,
+        world: &'w mut SubWorld,
         entities: EntityList,
     ) -> QueryManyIter<'w, 's, D, F, EntityList::IntoIter> {
         self.query_mut(world).iter_many_inner(entities)
@@ -1328,7 +1328,7 @@ impl<D: QueryData, F: QueryFilter> QueryState<D, F> {
     #[inline]
     pub fn iter_many_unique<'w, 's, EntityList: EntitySet>(
         &'s mut self,
-        world: &'w World,
+        world: &'w SubWorld,
         entities: EntityList,
     ) -> QueryManyUniqueIter<'w, 's, D::ReadOnly, F, EntityList::IntoIter> {
         self.query(world).iter_many_unique_inner(entities)
@@ -1352,7 +1352,7 @@ impl<D: QueryData, F: QueryFilter> QueryState<D, F> {
     #[inline]
     pub fn iter_many_unique_manual<'w, 's, EntityList: EntitySet>(
         &'s self,
-        world: &'w World,
+        world: &'w SubWorld,
         entities: EntityList,
     ) -> QueryManyUniqueIter<'w, 's, D::ReadOnly, F, EntityList::IntoIter> {
         self.query_manual(world).iter_many_unique_inner(entities)
@@ -1365,7 +1365,7 @@ impl<D: QueryData, F: QueryFilter> QueryState<D, F> {
     #[inline]
     pub fn iter_many_unique_mut<'w, 's, EntityList: EntitySet>(
         &'s mut self,
-        world: &'w mut World,
+        world: &'w mut SubWorld,
         entities: EntityList,
     ) -> QueryManyUniqueIter<'w, 's, D, F, EntityList::IntoIter> {
         self.query_mut(world).iter_many_unique_inner(entities)
@@ -1417,7 +1417,7 @@ impl<D: QueryData, F: QueryFilter> QueryState<D, F> {
     #[inline]
     pub fn par_iter<'w, 's>(
         &'s mut self,
-        world: &'w World,
+        world: &'w SubWorld,
     ) -> QueryParIter<'w, 's, D::ReadOnly, F> {
         self.query(world).par_iter_inner()
     }
@@ -1467,7 +1467,7 @@ impl<D: QueryData, F: QueryFilter> QueryState<D, F> {
     /// [`par_iter`]: Self::par_iter
     /// [`ComputeTaskPool`]: bevy_tasks::ComputeTaskPool
     #[inline]
-    pub fn par_iter_mut<'w, 's>(&'s mut self, world: &'w mut World) -> QueryParIter<'w, 's, D, F> {
+    pub fn par_iter_mut<'w, 's>(&'s mut self, world: &'w mut SubWorld) -> QueryParIter<'w, 's, D, F> {
         self.query_mut(world).par_iter_inner()
     }
 
@@ -1787,7 +1787,7 @@ impl<D: QueryData, F: QueryFilter> QueryState<D, F> {
     ///
     /// Simply unwrapping the [`Result`] also works, but should generally be reserved for tests.
     #[inline]
-    pub fn single<'w>(&mut self, world: &'w World) -> Result<ROQueryItem<'w, D>, QuerySingleError> {
+    pub fn single<'w>(&mut self, world: &'w SubWorld) -> Result<ROQueryItem<'w, D>, QuerySingleError> {
         self.query(world).single_inner()
     }
 
@@ -1796,7 +1796,7 @@ impl<D: QueryData, F: QueryFilter> QueryState<D, F> {
     #[inline]
     pub fn get_single<'w>(
         &mut self,
-        world: &'w World,
+        world: &'w SubWorld,
     ) -> Result<ROQueryItem<'w, D>, QuerySingleError> {
         self.single(world)
     }
@@ -1813,7 +1813,7 @@ impl<D: QueryData, F: QueryFilter> QueryState<D, F> {
     #[inline]
     pub fn single_mut<'w>(
         &mut self,
-        world: &'w mut World,
+        world: &'w mut SubWorld,
     ) -> Result<D::Item<'w>, QuerySingleError> {
         self.query_mut(world).single_inner()
     }
@@ -1822,7 +1822,7 @@ impl<D: QueryData, F: QueryFilter> QueryState<D, F> {
     #[deprecated(since = "0.16.0", note = "Please use `single` instead.")]
     pub fn get_single_mut<'w>(
         &mut self,
-        world: &'w mut World,
+        world: &'w mut SubWorld,
     ) -> Result<D::Item<'w>, QuerySingleError> {
         self.single_mut(world)
     }
@@ -1890,8 +1890,8 @@ mod tests {
     #[test]
     #[should_panic]
     fn right_world_get() {
-        let mut world_1 = World::new();
-        let world_2 = World::new();
+        let mut world_1 = SubWorld::new();
+        let world_2 = SubWorld::new();
 
         let mut query_state = world_1.query::<Entity>();
         let _panics = query_state.get(&world_2, Entity::from_raw(0));
@@ -1900,8 +1900,8 @@ mod tests {
     #[test]
     #[should_panic]
     fn right_world_get_many() {
-        let mut world_1 = World::new();
-        let world_2 = World::new();
+        let mut world_1 = SubWorld::new();
+        let world_2 = SubWorld::new();
 
         let mut query_state = world_1.query::<Entity>();
         let _panics = query_state.get_many(&world_2, []);
@@ -1910,8 +1910,8 @@ mod tests {
     #[test]
     #[should_panic]
     fn right_world_get_many_mut() {
-        let mut world_1 = World::new();
-        let mut world_2 = World::new();
+        let mut world_1 = SubWorld::new();
+        let mut world_2 = SubWorld::new();
 
         let mut query_state = world_1.query::<Entity>();
         let _panics = query_state.get_many_mut(&mut world_2, []);
@@ -1928,7 +1928,7 @@ mod tests {
 
     #[test]
     fn can_transmute_to_more_general() {
-        let mut world = World::new();
+        let mut world = SubWorld::new();
         world.spawn((A(1), B(0)));
 
         let query_state = world.query::<(&A, &B)>();
@@ -1941,7 +1941,7 @@ mod tests {
 
     #[test]
     fn cannot_get_data_not_in_original_query() {
-        let mut world = World::new();
+        let mut world = SubWorld::new();
         world.spawn((A(0), B(0)));
         world.spawn((A(1), B(0), C(0)));
 
@@ -1955,7 +1955,7 @@ mod tests {
 
     #[test]
     fn can_transmute_empty_tuple() {
-        let mut world = World::new();
+        let mut world = SubWorld::new();
         world.register_component::<A>();
         let entity = world.spawn(A(10)).id();
 
@@ -1966,7 +1966,7 @@ mod tests {
 
     #[test]
     fn can_transmute_immut_fetch() {
-        let mut world = World::new();
+        let mut world = SubWorld::new();
         world.spawn(A(10));
 
         let q = world.query::<&A>();
@@ -1979,7 +1979,7 @@ mod tests {
 
     #[test]
     fn can_transmute_mut_fetch() {
-        let mut world = World::new();
+        let mut world = SubWorld::new();
         world.spawn(A(0));
 
         let q = world.query::<&mut A>();
@@ -1989,7 +1989,7 @@ mod tests {
 
     #[test]
     fn can_transmute_entity_mut() {
-        let mut world = World::new();
+        let mut world = SubWorld::new();
         world.spawn(A(0));
 
         let q: QueryState<EntityMut<'_>> = world.query::<EntityMut>();
@@ -1998,7 +1998,7 @@ mod tests {
 
     #[test]
     fn can_generalize_with_option() {
-        let mut world = World::new();
+        let mut world = SubWorld::new();
         world.spawn((A(0), B(0)));
 
         let query_state = world.query::<(Option<&A>, &B)>();
@@ -2011,7 +2011,7 @@ mod tests {
         expected = "Transmuted state for ((&bevy_ecs::query::state::tests::A, &bevy_ecs::query::state::tests::B), ()) attempts to access terms that are not allowed by original state (&bevy_ecs::query::state::tests::A, ())."
     )]
     fn cannot_transmute_to_include_data_not_in_original_query() {
-        let mut world = World::new();
+        let mut world = SubWorld::new();
         world.register_component::<A>();
         world.register_component::<B>();
         world.spawn(A(0));
@@ -2025,7 +2025,7 @@ mod tests {
         expected = "Transmuted state for (&mut bevy_ecs::query::state::tests::A, ()) attempts to access terms that are not allowed by original state (&bevy_ecs::query::state::tests::A, ())."
     )]
     fn cannot_transmute_immut_to_mut() {
-        let mut world = World::new();
+        let mut world = SubWorld::new();
         world.spawn(A(0));
 
         let query_state = world.query::<&A>();
@@ -2037,7 +2037,7 @@ mod tests {
         expected = "Transmuted state for (&bevy_ecs::query::state::tests::A, ()) attempts to access terms that are not allowed by original state (core::option::Option<&bevy_ecs::query::state::tests::A>, ())."
     )]
     fn cannot_transmute_option_to_immut() {
-        let mut world = World::new();
+        let mut world = SubWorld::new();
         world.spawn(C(0));
 
         let query_state = world.query::<Option<&A>>();
@@ -2051,7 +2051,7 @@ mod tests {
         expected = "Transmuted state for (&bevy_ecs::query::state::tests::A, ()) attempts to access terms that are not allowed by original state (bevy_ecs::world::entity_ref::EntityRef, ())."
     )]
     fn cannot_transmute_entity_ref() {
-        let mut world = World::new();
+        let mut world = SubWorld::new();
         world.register_component::<A>();
 
         let q = world.query::<EntityRef>();
@@ -2060,7 +2060,7 @@ mod tests {
 
     #[test]
     fn can_transmute_filtered_entity() {
-        let mut world = World::new();
+        let mut world = SubWorld::new();
         let entity = world.spawn((A(0), B(1))).id();
         let query =
             QueryState::<(Entity, &A, &B)>::new(&mut world).transmute::<FilteredEntityRef>(&world);
@@ -2076,7 +2076,7 @@ mod tests {
 
     #[test]
     fn can_transmute_added() {
-        let mut world = World::new();
+        let mut world = SubWorld::new();
         let entity_a = world.spawn(A(0)).id();
 
         let mut query = QueryState::<(Entity, &A, Has<B>)>::new(&mut world)
@@ -2096,7 +2096,7 @@ mod tests {
 
     #[test]
     fn can_transmute_changed() {
-        let mut world = World::new();
+        let mut world = SubWorld::new();
         let entity_a = world.spawn(A(0)).id();
 
         let mut detection_query = QueryState::<(Entity, &A)>::new(&mut world)
@@ -2119,7 +2119,7 @@ mod tests {
         expected = "Transmuted state for (bevy_ecs::entity::Entity, bevy_ecs::query::filter::Changed<bevy_ecs::query::state::tests::B>) attempts to access terms that are not allowed by original state (&bevy_ecs::query::state::tests::A, ())."
     )]
     fn cannot_transmute_changed_without_access() {
-        let mut world = World::new();
+        let mut world = SubWorld::new();
         world.register_component::<A>();
         world.register_component::<B>();
         let query = QueryState::<&A>::new(&mut world);
@@ -2131,7 +2131,7 @@ mod tests {
         expected = "Transmuted state for (&mut bevy_ecs::query::state::tests::A, ()) attempts to access terms that are not allowed by original state (&bevy_ecs::query::state::tests::A, ())."
     )]
     fn cannot_transmute_mutable_after_readonly() {
-        let mut world = World::new();
+        let mut world = SubWorld::new();
         // Calling this method would mean we had aliasing queries.
         fn bad(_: Query<&mut A>, _: Query<&A>) {}
         world
@@ -2147,10 +2147,10 @@ mod tests {
     #[test]
     #[should_panic]
     fn transmute_with_different_world() {
-        let mut world = World::new();
+        let mut world = SubWorld::new();
         world.spawn((A(1), B(2)));
 
-        let mut world2 = World::new();
+        let mut world2 = SubWorld::new();
         world2.register_component::<B>();
 
         world.query::<(&A, &B)>().transmute::<&B>(&world2);
@@ -2166,7 +2166,7 @@ mod tests {
         #[component(storage = "SparseSet")]
         struct Sparse;
 
-        let mut world = World::new();
+        let mut world = SubWorld::new();
 
         world.spawn(Dense);
         world.spawn((Dense, Sparse));
@@ -2187,7 +2187,7 @@ mod tests {
         #[component(storage = "SparseSet")]
         struct Sparse;
 
-        let mut world = World::new();
+        let mut world = SubWorld::new();
 
         world.spawn(Dense);
         world.spawn((Dense, Sparse));
@@ -2205,7 +2205,7 @@ mod tests {
 
     #[test]
     fn join() {
-        let mut world = World::new();
+        let mut world = SubWorld::new();
         world.spawn(A(0));
         world.spawn(B(1));
         let entity_ab = world.spawn((A(2), B(3))).id();
@@ -2220,7 +2220,7 @@ mod tests {
 
     #[test]
     fn join_with_get() {
-        let mut world = World::new();
+        let mut world = SubWorld::new();
         world.spawn(A(0));
         world.spawn(B(1));
         let entity_ab = world.spawn((A(2), B(3))).id();
@@ -2240,7 +2240,7 @@ mod tests {
             attempts to access terms that are not allowed by state \
             (&bevy_ecs::query::state::tests::A, ()) joined with (&bevy_ecs::query::state::tests::B, ()).")]
     fn cannot_join_wrong_fetch() {
-        let mut world = World::new();
+        let mut world = SubWorld::new();
         world.register_component::<C>();
         let query_1 = QueryState::<&A>::new(&mut world);
         let query_2 = QueryState::<&B>::new(&mut world);
@@ -2255,7 +2255,7 @@ mod tests {
             joined with (&bevy_ecs::query::state::tests::B, bevy_ecs::query::filter::Without<bevy_ecs::query::state::tests::C>)."
     )]
     fn cannot_join_wrong_filter() {
-        let mut world = World::new();
+        let mut world = SubWorld::new();
         let query_1 = QueryState::<&A, Without<C>>::new(&mut world);
         let query_2 = QueryState::<&B, Without<C>>::new(&mut world);
         let _: QueryState<Entity, Changed<C>> = query_1.join_filtered(&world, &query_2);
@@ -2266,7 +2266,7 @@ mod tests {
         expected = "Joined state for ((&mut bevy_ecs::query::state::tests::A, &mut bevy_ecs::query::state::tests::B), ()) attempts to access terms that are not allowed by state (&bevy_ecs::query::state::tests::A, ()) joined with (&mut bevy_ecs::query::state::tests::B, ())."
     )]
     fn cannot_join_mutable_after_readonly() {
-        let mut world = World::new();
+        let mut world = SubWorld::new();
         // Calling this method would mean we had aliasing queries.
         fn bad(_: Query<(&mut A, &mut B)>, _: Query<&A>) {}
         world
@@ -2280,7 +2280,7 @@ mod tests {
 
     #[test]
     fn join_to_filtered_entity_mut() {
-        let mut world = World::new();
+        let mut world = SubWorld::new();
         world.spawn((A(2), B(3)));
 
         let query_1 = QueryState::<&mut A>::new(&mut world);
@@ -2294,7 +2294,7 @@ mod tests {
 
     #[test]
     fn query_respects_default_filters() {
-        let mut world = World::new();
+        let mut world = SubWorld::new();
         world.spawn((A(0), B(0)));
         world.spawn((B(0), C(0)));
         world.spawn(C(0));
@@ -2329,7 +2329,7 @@ mod tests {
 
     #[test]
     fn query_default_filters_updates_is_dense() {
-        let mut world = World::new();
+        let mut world = SubWorld::new();
         world.spawn((Table, Sparse));
         world.spawn(Table);
         world.spawn(Sparse);

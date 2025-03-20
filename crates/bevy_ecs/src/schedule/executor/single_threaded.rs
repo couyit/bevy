@@ -10,7 +10,7 @@ use std::eprintln;
 use crate::{
     error::{BevyError, ErrorContext},
     schedule::{is_apply_deferred, BoxedCondition, ExecutorKind, SystemExecutor, SystemSchedule},
-    world::World,
+    world::SubWorld,
 };
 
 use super::__rust_begin_short_backtrace;
@@ -48,7 +48,7 @@ impl SystemExecutor for SingleThreadedExecutor {
     fn run(
         &mut self,
         schedule: &mut SystemSchedule,
-        world: &mut World,
+        world: &mut SubWorld,
         _skip_systems: Option<&FixedBitSet>,
         error_handler: fn(BevyError, ErrorContext),
     ) {
@@ -185,7 +185,7 @@ impl SingleThreadedExecutor {
         }
     }
 
-    fn apply_deferred(&mut self, schedule: &mut SystemSchedule, world: &mut World) {
+    fn apply_deferred(&mut self, schedule: &mut SystemSchedule, world: &mut SubWorld) {
         for system_index in self.unapplied_systems.ones() {
             let system = &mut schedule.systems[system_index];
             system.apply_deferred(world);
@@ -195,7 +195,7 @@ impl SingleThreadedExecutor {
     }
 }
 
-fn evaluate_and_fold_conditions(conditions: &mut [BoxedCondition], world: &mut World) -> bool {
+fn evaluate_and_fold_conditions(conditions: &mut [BoxedCondition], world: &mut SubWorld) -> bool {
     #[expect(
         clippy::unnecessary_fold,
         reason = "Short-circuiting here would prevent conditions from mutating their own state as needed."

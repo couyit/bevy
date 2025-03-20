@@ -222,7 +222,7 @@ where
 }
 
 impl<M: UiMaterial> FromWorld for UiMaterialPipeline<M> {
-    fn from_world(world: &mut World) -> Self {
+    fn from_world(world: &mut SubWorld) -> Self {
         let asset_server = world.resource::<AssetServer>();
         let render_device = world.resource::<RenderDevice>();
         let ui_layout = M::bind_group_layout(render_device);

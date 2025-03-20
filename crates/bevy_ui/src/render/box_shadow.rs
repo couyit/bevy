@@ -118,7 +118,7 @@ pub struct BoxShadowPipeline {
 }
 
 impl FromWorld for BoxShadowPipeline {
-    fn from_world(world: &mut World) -> Self {
+    fn from_world(world: &mut SubWorld) -> Self {
         let render_device = world.resource::<RenderDevice>();
 
         let view_layout = render_device.create_bind_group_layout(

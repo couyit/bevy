@@ -87,7 +87,7 @@ struct ComponentB {
 /// by accessing the current ECS resources. In this case, we acquire the `Time` resource
 /// and store the current elapsed time.
 impl FromWorld for ComponentB {
-    fn from_world(world: &mut World) -> Self {
+    fn from_world(world: &mut SubWorld) -> Self {
         let time = world.resource::<Time>();
         ComponentB {
             _time_since_startup: time.elapsed(),
@@ -157,11 +157,11 @@ fn log_system(
 /// This system creates a fresh world, duplicates the type registry so that our
 /// custom component types are recognized, spawns some sample entities and resources,
 /// and then serializes the resulting dynamic scene.
-fn save_scene_system(world: &mut World) {
+fn save_scene_system(world: &mut SubWorld) {
     // Scenes can be created from any ECS World.
     // You can either create a new one for the scene or use the current World.
     // For demonstration purposes, we'll create a new one.
-    let mut scene_world = World::new();
+    let mut scene_world = SubWorld::new();
 
     // The `TypeRegistry` resource contains information about all registered types (including components).
     // This is used to construct scenes, so we'll want to ensure that our previous type registrations

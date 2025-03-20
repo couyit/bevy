@@ -1,6 +1,6 @@
 use crate::change_detection::MaybeLocation;
 use crate::component::ComponentId;
-use crate::world::World;
+use crate::world::SubWorld;
 use crate::{component::Component, traversal::Traversal};
 #[cfg(feature = "bevy_reflect")]
 use bevy_reflect::Reflect;
@@ -70,7 +70,7 @@ pub trait Event: Send + Sync + 'static {
     ///
     /// This method should not be overridden by implementors,
     /// and should always correspond to the implementation of [`component_id`](Event::component_id).
-    fn register_component_id(world: &mut World) -> ComponentId {
+    fn register_component_id(world: &mut SubWorld) -> ComponentId {
         world.register_component::<EventWrapperComponent<Self>>()
     }
 
@@ -84,7 +84,7 @@ pub trait Event: Send + Sync + 'static {
     ///
     /// This method should not be overridden by implementors,
     /// and should always correspond to the implementation of [`register_component_id`](Event::register_component_id).
-    fn component_id(world: &World) -> Option<ComponentId> {
+    fn component_id(world: &SubWorld) -> Option<ComponentId> {
         world.component_id::<EventWrapperComponent<Self>>()
     }
 }

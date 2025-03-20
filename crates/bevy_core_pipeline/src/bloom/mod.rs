@@ -122,7 +122,7 @@ impl ViewNode for BloomNode {
             upsampling_pipeline_ids,
             downsampling_pipeline_ids,
         ): QueryItem<Self::ViewQuery>,
-        world: &World,
+        world: &SubWorld,
     ) -> Result<(), NodeRunError> {
         if bloom_settings.intensity == 0.0 {
             return Ok(());

@@ -24,7 +24,7 @@ use bevy_ecs::{
     resource::Resource,
     schedule::IntoScheduleConfigs as _,
     system::{lifetimeless::Read, Commands, Query, Res, ResMut},
-    world::{FromWorld, World},
+    world::{FromWorld, SubWorld},
 };
 use bevy_render::batching::gpu_preprocessing::{
     IndirectParametersGpuMetadata, UntypedPhaseIndirectParametersBuffers,
@@ -553,7 +553,7 @@ impl Node for ClearIndirectParametersMetadataNode {
         &self,
         _: &mut RenderGraphContext,
         render_context: &mut RenderContext<'w>,
-        world: &'w World,
+        world: &'w SubWorld,
     ) -> Result<(), NodeRunError> {
         let Some(indirect_parameters_buffers) = world.get_resource::<IndirectParametersBuffers>()
         else {
@@ -596,7 +596,7 @@ impl Node for ClearIndirectParametersMetadataNode {
 }
 
 impl FromWorld for EarlyGpuPreprocessNode {
-    fn from_world(world: &mut World) -> Self {
+    fn from_world(world: &mut SubWorld) -> Self {
         Self {
             view_query: QueryState::new(world),
             main_view_query: QueryState::new(world),
@@ -605,7 +605,7 @@ impl FromWorld for EarlyGpuPreprocessNode {
 }
 
 impl Node for EarlyGpuPreprocessNode {
-    fn update(&mut self, world: &mut World) {
+    fn update(&mut self, world: &mut SubWorld) {
         self.view_query.update_archetypes(world);
         self.main_view_query.update_archetypes(world);
     }
@@ -614,7 +614,7 @@ impl Node for EarlyGpuPreprocessNode {
         &self,
         graph: &mut RenderGraphContext,
         render_context: &mut RenderContext<'w>,
-        world: &'w World,
+        world: &'w SubWorld,
     ) -> Result<(), NodeRunError> {
         // Grab the [`BatchedInstanceBuffers`].
         let batched_instance_buffers =
@@ -810,7 +810,7 @@ impl Node for EarlyGpuPreprocessNode {
 }
 
 impl FromWorld for EarlyPrepassBuildIndirectParametersNode {
-    fn from_world(world: &mut World) -> Self {
+    fn from_world(world: &mut SubWorld) -> Self {
         Self {
             view_query: QueryState::new(world),
         }
@@ -818,7 +818,7 @@ impl FromWorld for EarlyPrepassBuildIndirectParametersNode {
 }
 
 impl FromWorld for LatePrepassBuildIndirectParametersNode {
-    fn from_world(world: &mut World) -> Self {
+    fn from_world(world: &mut SubWorld) -> Self {
         Self {
             view_query: QueryState::new(world),
         }
@@ -826,7 +826,7 @@ impl FromWorld for LatePrepassBuildIndirectParametersNode {
 }
 
 impl FromWorld for MainBuildIndirectParametersNode {
-    fn from_world(world: &mut World) -> Self {
+    fn from_world(world: &mut SubWorld) -> Self {
         Self {
             view_query: QueryState::new(world),
         }
@@ -834,7 +834,7 @@ impl FromWorld for MainBuildIndirectParametersNode {
 }
 
 impl FromWorld for LateGpuPreprocessNode {
-    fn from_world(world: &mut World) -> Self {
+    fn from_world(world: &mut SubWorld) -> Self {
         Self {
             view_query: QueryState::new(world),
         }
@@ -842,7 +842,7 @@ impl FromWorld for LateGpuPreprocessNode {
 }
 
 impl Node for LateGpuPreprocessNode {
-    fn update(&mut self, world: &mut World) {
+    fn update(&mut self, world: &mut SubWorld) {
         self.view_query.update_archetypes(world);
     }
 
@@ -850,7 +850,7 @@ impl Node for LateGpuPreprocessNode {
         &self,
         _: &mut RenderGraphContext,
         render_context: &mut RenderContext<'w>,
-        world: &'w World,
+        world: &'w SubWorld,
     ) -> Result<(), NodeRunError> {
         // Grab the [`BatchedInstanceBuffers`].
         let batched_instance_buffers =
@@ -979,7 +979,7 @@ impl Node for LateGpuPreprocessNode {
 }
 
 impl Node for EarlyPrepassBuildIndirectParametersNode {
-    fn update(&mut self, world: &mut World) {
+    fn update(&mut self, world: &mut SubWorld) {
         self.view_query.update_archetypes(world);
     }
 
@@ -987,7 +987,7 @@ impl Node for EarlyPrepassBuildIndirectParametersNode {
         &self,
         _: &mut RenderGraphContext,
         render_context: &mut RenderContext<'w>,
-        world: &'w World,
+        world: &'w SubWorld,
     ) -> Result<(), NodeRunError> {
         let preprocess_pipelines = world.resource::<PreprocessPipelines>();
 
@@ -1007,7 +1007,7 @@ impl Node for EarlyPrepassBuildIndirectParametersNode {
 }
 
 impl Node for LatePrepassBuildIndirectParametersNode {
-    fn update(&mut self, world: &mut World) {
+    fn update(&mut self, world: &mut SubWorld) {
         self.view_query.update_archetypes(world);
     }
 
@@ -1015,7 +1015,7 @@ impl Node for LatePrepassBuildIndirectParametersNode {
         &self,
         _: &mut RenderGraphContext,
         render_context: &mut RenderContext<'w>,
-        world: &'w World,
+        world: &'w SubWorld,
     ) -> Result<(), NodeRunError> {
         let preprocess_pipelines = world.resource::<PreprocessPipelines>();
 
@@ -1035,7 +1035,7 @@ impl Node for LatePrepassBuildIndirectParametersNode {
 }
 
 impl Node for MainBuildIndirectParametersNode {
-    fn update(&mut self, world: &mut World) {
+    fn update(&mut self, world: &mut SubWorld) {
         self.view_query.update_archetypes(world);
     }
 
@@ -1043,7 +1043,7 @@ impl Node for MainBuildIndirectParametersNode {
         &self,
         _: &mut RenderGraphContext,
         render_context: &mut RenderContext<'w>,
-        world: &'w World,
+        world: &'w SubWorld,
     ) -> Result<(), NodeRunError> {
         let preprocess_pipelines = world.resource::<PreprocessPipelines>();
 
@@ -1058,7 +1058,7 @@ impl Node for MainBuildIndirectParametersNode {
 
 fn run_build_indirect_parameters_node(
     render_context: &mut RenderContext,
-    world: &World,
+    world: &SubWorld,
     preprocess_phase_pipelines: &PreprocessPhasePipelines,
     label: &'static str,
 ) -> Result<(), NodeRunError> {
@@ -1301,7 +1301,7 @@ impl SpecializedComputePipeline for PreprocessPipeline {
 }
 
 impl FromWorld for PreprocessPipelines {
-    fn from_world(world: &mut World) -> Self {
+    fn from_world(world: &mut SubWorld) -> Self {
         let render_device = world.resource::<RenderDevice>();
 
         // GPU culling bind group parameters are a superset of those in the CPU

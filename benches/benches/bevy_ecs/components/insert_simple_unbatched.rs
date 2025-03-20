@@ -21,7 +21,7 @@ impl Benchmark {
     }
 
     pub fn run(&mut self) {
-        let mut world = World::new();
+        let mut world = SubWorld::new();
         for _ in 0..10_000 {
             world.spawn((
                 Transform(Mat4::from_scale(Vec3::ONE)),

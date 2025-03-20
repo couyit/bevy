@@ -2,7 +2,7 @@ use crate::{
     core_3d::Opaque3d,
     skybox::{SkyboxBindGroup, SkyboxPipelineId},
 };
-use bevy_ecs::{prelude::World, query::QueryItem};
+use bevy_ecs::{prelude::SubWorld, query::QueryItem};
 use bevy_render::{
     camera::ExtractedCamera,
     diagnostic::RecordDiagnostics,
@@ -46,7 +46,7 @@ impl ViewNode for MainOpaquePass3dNode {
             skybox_bind_group,
             view_uniform_offset,
         ): QueryItem<'w, Self::ViewQuery>,
-        world: &'w World,
+        world: &'w SubWorld,
     ) -> Result<(), NodeRunError> {
         let (Some(opaque_phases), Some(alpha_mask_phases)) = (
             world.get_resource::<ViewBinnedRenderPhases<Opaque3d>>(),

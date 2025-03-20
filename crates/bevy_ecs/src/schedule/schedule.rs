@@ -31,7 +31,7 @@ use crate::{
     resource::Resource,
     schedule::*,
     system::ScheduleSystem,
-    world::World,
+    world::SubWorld,
 };
 
 use crate::{query::AccessConflicts, storage::SparseSetIndex};
@@ -138,13 +138,13 @@ impl Schedules {
     }
 
     /// Ignore system order ambiguities caused by conflicts on [`Component`]s of type `T`.
-    pub fn allow_ambiguous_component<T: Component>(&mut self, world: &mut World) {
+    pub fn allow_ambiguous_component<T: Component>(&mut self, world: &mut SubWorld) {
         self.ignored_scheduling_ambiguities
             .insert(world.register_component::<T>());
     }
 
     /// Ignore system order ambiguities caused by conflicts on [`Resource`]s of type `T`.
-    pub fn allow_ambiguous_resource<T: Resource>(&mut self, world: &mut World) {
+    pub fn allow_ambiguous_resource<T: Resource>(&mut self, world: &mut SubWorld) {
         self.ignored_scheduling_ambiguities
             .insert(world.components_registrator().register_resource::<T>());
     }
@@ -432,7 +432,7 @@ impl Schedule {
     }
 
     /// Runs all systems in this schedule on the `world`, using its current execution strategy.
-    pub fn run(&mut self, world: &mut World) {
+    pub fn run(&mut self, world: &mut SubWorld) {
         #[cfg(feature = "trace")]
         let _span = info_span!("schedule", name = ?self.label).entered();
 
@@ -466,7 +466,7 @@ impl Schedule {
     /// and re-initializes the executor.
     ///
     /// Moves all systems and run conditions out of the [`ScheduleGraph`].
-    pub fn initialize(&mut self, world: &mut World) -> Result<(), ScheduleBuildError> {
+    pub fn initialize(&mut self, world: &mut SubWorld) -> Result<(), ScheduleBuildError> {
         if self.graph.changed {
             self.graph.initialize(world);
             let ignored_ambiguities = world
@@ -537,7 +537,7 @@ impl Schedule {
     ///
     /// This is used in rendering to extract data from the main world, storing the data in system buffers,
     /// before applying their buffers in a different world.
-    pub fn apply_deferred(&mut self, world: &mut World) {
+    pub fn apply_deferred(&mut self, world: &mut SubWorld) {
         for system in &mut self.executable.systems {
             system.apply_deferred(world);
         }
@@ -1144,7 +1144,7 @@ impl ScheduleGraph {
     }
 
     /// Initializes any newly-added systems and conditions by calling [`System::initialize`](crate::system::System)
-    pub fn initialize(&mut self, world: &mut World) {
+    pub fn initialize(&mut self, world: &mut SubWorld) {
         for (id, i) in self.uninit.drain(..) {
             match id {
                 NodeId::System(index) => {
@@ -1169,7 +1169,7 @@ impl ScheduleGraph {
     /// - checks for system access conflicts and reports ambiguities
     pub fn build_schedule(
         &mut self,
-        world: &mut World,
+        world: &mut SubWorld,
         schedule_label: InternedScheduleLabel,
         ignored_ambiguities: &BTreeSet<ComponentId>,
     ) -> Result<SystemSchedule, ScheduleBuildError> {
@@ -1499,7 +1499,7 @@ impl ScheduleGraph {
     /// Updates the `SystemSchedule` from the `ScheduleGraph`.
     fn update_schedule(
         &mut self,
-        world: &mut World,
+        world: &mut SubWorld,
         schedule: &mut SystemSchedule,
         ignored_ambiguities: &BTreeSet<ComponentId>,
         schedule_label: InternedScheduleLabel,
@@ -1889,7 +1889,7 @@ impl ScheduleGraph {
                 writeln!(message, "    conflict on: {conflicts:?}").unwrap();
             } else {
                 // one or both systems must be exclusive
-                let world = core::any::type_name::<World>();
+                let world = core::any::type_name::<SubWorld>();
                 writeln!(message, "    conflict on: {world}").unwrap();
             }
         }
@@ -2064,7 +2064,7 @@ mod tests {
             tests::ResMut, IntoScheduleConfigs, Schedule, ScheduleBuildSettings, SystemSet,
         },
         system::Commands,
-        world::World,
+        world::SubWorld,
     };
 
     use super::Schedules;
@@ -2081,7 +2081,7 @@ mod tests {
         #[derive(SystemSet, Debug, Clone, PartialEq, Eq, Hash)]
         struct Set;
 
-        let mut world = World::new();
+        let mut world = SubWorld::new();
         let mut schedule = Schedule::default();
 
         let system: fn() = || {
@@ -2096,7 +2096,7 @@ mod tests {
     #[test]
     fn inserts_a_sync_point() {
         let mut schedule = Schedule::default();
-        let mut world = World::default();
+        let mut world = SubWorld::default();
         schedule.add_systems(
             (
                 |mut commands: Commands| commands.insert_resource(Resource1),
@@ -2113,7 +2113,7 @@ mod tests {
     #[test]
     fn explicit_sync_point_used_as_auto_sync_point() {
         let mut schedule = Schedule::default();
-        let mut world = World::default();
+        let mut world = SubWorld::default();
         schedule.add_systems(
             (
                 |mut commands: Commands| commands.insert_resource(Resource1),
@@ -2131,7 +2131,7 @@ mod tests {
     #[test]
     fn conditional_explicit_sync_point_not_used_as_auto_sync_point() {
         let mut schedule = Schedule::default();
-        let mut world = World::default();
+        let mut world = SubWorld::default();
         schedule.add_systems(
             (
                 |mut commands: Commands| commands.insert_resource(Resource1),
@@ -2149,7 +2149,7 @@ mod tests {
     #[test]
     fn conditional_explicit_sync_point_not_used_as_auto_sync_point_condition_on_chain() {
         let mut schedule = Schedule::default();
-        let mut world = World::default();
+        let mut world = SubWorld::default();
         schedule.add_systems(
             (
                 |mut commands: Commands| commands.insert_resource(Resource1),
@@ -2170,7 +2170,7 @@ mod tests {
         struct Set;
 
         let mut schedule = Schedule::default();
-        let mut world = World::default();
+        let mut world = SubWorld::default();
         schedule.configure_sets(Set.run_if(|| false));
         schedule.add_systems(
             (
@@ -2195,7 +2195,7 @@ mod tests {
         struct Set2;
 
         let mut schedule = Schedule::default();
-        let mut world = World::default();
+        let mut world = SubWorld::default();
         schedule.configure_sets(Set2.run_if(|| false));
         schedule.configure_sets(Set1.in_set(Set2));
         schedule.add_systems(
@@ -2215,7 +2215,7 @@ mod tests {
     #[test]
     fn merges_sync_points_into_one() {
         let mut schedule = Schedule::default();
-        let mut world = World::default();
+        let mut world = SubWorld::default();
         // insert two parallel command systems, it should only create one sync point
         schedule.add_systems(
             (
@@ -2249,7 +2249,7 @@ mod tests {
     #[test]
     fn adds_multiple_consecutive_syncs() {
         let mut schedule = Schedule::default();
-        let mut world = World::default();
+        let mut world = SubWorld::default();
         // insert two consecutive command systems, it should create two sync points
         schedule.add_systems(
             (
@@ -2267,7 +2267,7 @@ mod tests {
     #[test]
     fn do_not_consider_ignore_deferred_before_exclusive_system() {
         let mut schedule = Schedule::default();
-        let mut world = World::default();
+        let mut world = SubWorld::default();
         // chain_ignore_deferred adds no sync points usually but an exception is made for exclusive systems
         schedule.add_systems(
             (
@@ -2275,9 +2275,9 @@ mod tests {
                 // <- no sync point is added here because the following system is not exclusive
                 |mut commands: Commands| commands.insert_resource(Resource1),
                 // <- sync point is added here because the following system is exclusive which expects to see all commands to that point
-                |world: &mut World| assert!(world.contains_resource::<Resource1>()),
+                |world: &mut SubWorld| assert!(world.contains_resource::<Resource1>()),
                 // <- no sync point is added here because the previous system has no deferred parameters
-                |_: &mut World| {},
+                |_: &mut SubWorld| {},
                 // <- no sync point is added here because the following system is not exclusive
                 |_: Commands| {},
             )
@@ -2291,7 +2291,7 @@ mod tests {
     #[test]
     fn bubble_sync_point_through_ignore_deferred_node() {
         let mut schedule = Schedule::default();
-        let mut world = World::default();
+        let mut world = SubWorld::default();
 
         let insert_resource_config = (
             // the first system has deferred commands
@@ -2328,7 +2328,7 @@ mod tests {
             auto_insert_apply_deferred: false,
             ..Default::default()
         });
-        let mut world = World::default();
+        let mut world = SubWorld::default();
         schedule.add_systems(
             (
                 |mut commands: Commands| commands.insert_resource(Resource1),
@@ -2360,7 +2360,7 @@ mod tests {
 
         fn check_no_sync_edges(add_systems: impl FnOnce(&mut Schedule)) {
             let mut schedule = Schedule::default();
-            let mut world = World::default();
+            let mut world = SubWorld::default();
             add_systems(&mut schedule);
 
             schedule.run(&mut world);
@@ -2445,7 +2445,7 @@ mod tests {
 
         fn run_schedule(expected_num_systems: usize, add_systems: impl FnOnce(&mut Schedule)) {
             let mut schedule = Schedule::default();
-            let mut world = World::default();
+            let mut world = SubWorld::default();
             add_systems(&mut schedule);
 
             schedule.run(&mut world);
@@ -2700,7 +2700,7 @@ mod tests {
         schedules.insert(schedule);
         schedules.add_systems(TestSchedule, |mut ran: ResMut<CheckSystemRan>| ran.0 += 1);
 
-        let mut world = World::new();
+        let mut world = SubWorld::new();
 
         world.insert_resource(CheckSystemRan(0));
         world.insert_resource(schedules);
@@ -2718,7 +2718,7 @@ mod tests {
 
         schedules.add_systems(TestSchedule, |mut ran: ResMut<CheckSystemRan>| ran.0 += 1);
 
-        let mut world = World::new();
+        let mut world = SubWorld::new();
 
         world.insert_resource(CheckSystemRan(0));
         world.insert_resource(schedules);
@@ -2762,7 +2762,7 @@ mod tests {
             .in_set(TestSet::Second),
         );
 
-        let mut world = World::new();
+        let mut world = SubWorld::new();
 
         world.insert_resource(CheckSystemRan(0));
         world.insert_resource(schedules);
@@ -2797,7 +2797,7 @@ mod tests {
             .in_set(TestSet::Second),
         );
 
-        let mut world = World::new();
+        let mut world = SubWorld::new();
 
         world.insert_resource(CheckSystemRan(0));
         world.insert_resource(schedules);

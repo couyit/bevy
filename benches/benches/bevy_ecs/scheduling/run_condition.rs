@@ -12,7 +12,7 @@ fn no() -> bool {
 }
 
 pub fn run_condition_yes(criterion: &mut Criterion) {
-    let mut world = World::new();
+    let mut world = SubWorld::new();
     let mut group = criterion.benchmark_group("run_condition/yes");
     group.warm_up_time(core::time::Duration::from_millis(500));
     group.measurement_time(core::time::Duration::from_secs(3));
@@ -35,7 +35,7 @@ pub fn run_condition_yes(criterion: &mut Criterion) {
 }
 
 pub fn run_condition_no(criterion: &mut Criterion) {
-    let mut world = World::new();
+    let mut world = SubWorld::new();
     let mut group = criterion.benchmark_group("run_condition/no");
     group.warm_up_time(core::time::Duration::from_millis(500));
     group.measurement_time(core::time::Duration::from_secs(3));
@@ -61,7 +61,7 @@ pub fn run_condition_no(criterion: &mut Criterion) {
 struct TestBool(pub bool);
 
 pub fn run_condition_yes_with_query(criterion: &mut Criterion) {
-    let mut world = World::new();
+    let mut world = SubWorld::new();
     world.spawn(TestBool(true));
     let mut group = criterion.benchmark_group("run_condition/yes_using_query");
     group.warm_up_time(core::time::Duration::from_millis(500));
@@ -90,7 +90,7 @@ pub fn run_condition_yes_with_query(criterion: &mut Criterion) {
 }
 
 pub fn run_condition_yes_with_resource(criterion: &mut Criterion) {
-    let mut world = World::new();
+    let mut world = SubWorld::new();
     world.insert_resource(TestBool(true));
     let mut group = criterion.benchmark_group("run_condition/yes_using_resource");
     group.warm_up_time(core::time::Duration::from_millis(500));

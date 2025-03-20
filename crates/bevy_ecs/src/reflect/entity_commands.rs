@@ -4,7 +4,7 @@ use crate::{
     reflect::{AppTypeRegistry, ReflectBundle, ReflectComponent},
     resource::Resource,
     system::EntityCommands,
-    world::{EntityWorldMut, World},
+    world::{EntityWorldMut, SubWorld},
 };
 use alloc::{borrow::Cow, boxed::Box};
 use bevy_reflect::{PartialReflect, TypeRegistry};
@@ -339,7 +339,7 @@ impl<'w> EntityWorldMut<'w> {
 
 /// Helper function to add a reflect component or bundle to a given entity
 fn insert_reflect_with_registry_ref(
-    world: &mut World,
+    world: &mut SubWorld,
     entity: Entity,
     type_registry: &TypeRegistry,
     component: Box<dyn PartialReflect>,
@@ -367,7 +367,7 @@ fn insert_reflect_with_registry_ref(
 
 /// Helper function to remove a reflect component or bundle from a given entity
 fn remove_reflect_with_registry_ref(
-    world: &mut World,
+    world: &mut SubWorld,
     entity: Entity,
     type_registry: &TypeRegistry,
     component_type_path: Cow<'static, str>,
@@ -393,7 +393,7 @@ mod tests {
         prelude::{AppTypeRegistry, ReflectComponent},
         reflect::{ReflectBundle, ReflectCommandExt},
         system::{Commands, SystemState},
-        world::World,
+        world::SubWorld,
     };
     use alloc::{borrow::ToOwned, boxed::Box};
     use bevy_ecs_macros::Resource;
@@ -427,7 +427,7 @@ mod tests {
 
     #[test]
     fn insert_reflected() {
-        let mut world = World::new();
+        let mut world = SubWorld::new();
 
         let type_registry = AppTypeRegistry::default();
         {
@@ -471,7 +471,7 @@ mod tests {
 
     #[test]
     fn insert_reflected_with_registry() {
-        let mut world = World::new();
+        let mut world = SubWorld::new();
 
         let mut type_registry = TypeRegistryResource {
             type_registry: TypeRegistry::new(),
@@ -503,7 +503,7 @@ mod tests {
 
     #[test]
     fn remove_reflected() {
-        let mut world = World::new();
+        let mut world = SubWorld::new();
 
         let type_registry = AppTypeRegistry::default();
         {
@@ -530,7 +530,7 @@ mod tests {
 
     #[test]
     fn remove_reflected_with_registry() {
-        let mut world = World::new();
+        let mut world = SubWorld::new();
 
         let mut type_registry = TypeRegistryResource {
             type_registry: TypeRegistry::new(),
@@ -561,7 +561,7 @@ mod tests {
 
     #[test]
     fn insert_reflect_bundle() {
-        let mut world = World::new();
+        let mut world = SubWorld::new();
 
         let type_registry = AppTypeRegistry::default();
         {
@@ -589,7 +589,7 @@ mod tests {
 
     #[test]
     fn insert_reflect_bundle_with_registry() {
-        let mut world = World::new();
+        let mut world = SubWorld::new();
 
         let mut type_registry = TypeRegistryResource {
             type_registry: TypeRegistry::new(),
@@ -621,7 +621,7 @@ mod tests {
 
     #[test]
     fn remove_reflected_bundle() {
-        let mut world = World::new();
+        let mut world = SubWorld::new();
 
         let type_registry = AppTypeRegistry::default();
         {
@@ -657,7 +657,7 @@ mod tests {
 
     #[test]
     fn remove_reflected_bundle_with_registry() {
-        let mut world = World::new();
+        let mut world = SubWorld::new();
 
         let mut type_registry = TypeRegistryResource {
             type_registry: TypeRegistry::new(),
