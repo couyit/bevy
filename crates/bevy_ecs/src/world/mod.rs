@@ -28,7 +28,7 @@ pub use entity_ref::{
     Entry, FilteredEntityMut, FilteredEntityRef, OccupiedEntry, TryFromFilteredError, VacantEntry,
 };
 pub use filtered_resource::*;
-pub use identifier::SubWorldId;
+use identifier::WorldId;
 pub use spawn_batch::*;
 
 #[expect(
@@ -41,10 +41,10 @@ use crate::{
         Bundle, BundleEffect, BundleInfo, BundleInserter, BundleSpawner, Bundles, InsertMode,
         NoBundleEffect,
     },
-    change_detection::{MaybeLocation, MutUntyped, TicksMut},
+    change_detection::{MaybeLocation, MutUntyped},
     component::{
         Component, ComponentDescriptor, ComponentHooks, ComponentId, ComponentIds, ComponentInfo,
-        ComponentTicks, Components, ComponentsQueuedRegistrator, ComponentsRegistrator, Mutable,
+        Components, ComponentsQueuedRegistrator, ComponentsRegistrator, Mutable,
         RequiredComponents, RequiredComponentsError, Tick,
     },
     entity::{
@@ -58,7 +58,7 @@ use crate::{
     removal_detection::RemovedComponentEvents,
     resource::Resource,
     schedule::{Schedule, ScheduleLabel, Schedules},
-    storage::{ResourceData, Storages},
+    storage::Storages,
     system::Commands,
     world::{
         command_queue::RawCommandQueue,
@@ -69,12 +69,16 @@ use crate::{
 };
 use alloc::{boxed::Box, vec::Vec};
 use bevy_platform_support::sync::atomic::{AtomicU32, Ordering};
-use bevy_ptr::{OwningPtr, Ptr, UnsafeCellDeref};
+use bevy_ptr::Ptr;
 use core::{any::TypeId, fmt};
 use log::warn;
 use unsafe_world_cell::{UnsafeEntityCell, UnsafeWorldCell};
 
+#[derive(Clone, Copy)]
+pub struct SubWorldId(usize);
+
 pub struct World {
+    id: WorldId,
     pub(crate) indices: TypeIdMap<SubWorldId>,
     pub(crate) sub_worlds: Vec<SubWorld>,
 }
@@ -82,8 +86,9 @@ pub struct World {
 impl Default for World {
     fn default() -> Self {
         let mut world = Self {
+            id: WorldId::new().unwrap(),
             indices: TypeIdMap::default(),
-            sub_worlds: Vec::with_capacity(2),
+            sub_worlds: Vec::with_capacity(1),
         };
 
         world.create_sub_world::<MainSubWorld>();
@@ -97,15 +102,35 @@ impl World {
         Self::default()
     }
 
-    pub fn create_sub_world<T>(&mut self) -> Self {
+    pub fn create_sub_world<T: SubWorldLabel>(&mut self) -> SubWorldId {
         let id = SubWorldId(self.sub_worlds.len());
 
         self.indices.insert(TypeId::of::<T>(), id);
         self.sub_worlds.push(SubWorld::new(id));
+
+        id
+    }
+
+    pub fn get_sub_world<T: SubWorldLabel>(&self) -> &SubWorld {
+        let id = self.indices.get(&TypeId::of::<T>()).unwrap();
+        &self.sub_worlds[id.0]
+    }
+
+    pub fn get_sub_world_mut<T: SubWorldLabel>(&mut self) -> &mut SubWorld {
+        let id = self.indices.get(&TypeId::of::<T>()).unwrap();
+        &mut self.sub_worlds[id.0]
+    }
+
+    pub fn get_main(&self) -> &SubWorld {
+        self.get_sub_world::<MainSubWorld>()
+    }
+
+    pub fn get_main_mut(&mut self) -> &mut SubWorld {
+        self.get_sub_world_mut::<MainSubWorld>()
     }
 }
 
-pub trait SubWorldLabel {}
+pub trait SubWorldLabel: 'static {}
 
 pub struct MainSubWorld;
 
@@ -2675,29 +2700,21 @@ impl<T: Default> FromWorld for T {
 #[cfg(test)]
 #[expect(clippy::print_stdout, reason = "Allowed in tests.")]
 mod tests {
-    use super::{FromWorld, SubWorld};
+    use super::SubWorld;
     use crate::{
-        change_detection::{DetectChangesMut, MaybeLocation},
-        component::{ComponentCloneBehavior, ComponentDescriptor, ComponentInfo, StorageType},
+        change_detection::MaybeLocation,
+        component::ComponentInfo,
         entity::hash_set::EntityHashSet,
         entity_disabling::{DefaultQueryFilters, Disabled},
-        ptr::OwningPtr,
-        resource::Resource,
-        world::{error::EntityMutableFetchError, DeferredWorld},
+        world::{error::EntityMutableFetchError, DeferredWorld, World},
     };
-    use alloc::{
-        borrow::ToOwned,
-        string::{String, ToString},
-        sync::Arc,
-        vec,
-        vec::Vec,
-    };
+    use alloc::{borrow::ToOwned, sync::Arc, vec, vec::Vec};
     use bevy_ecs_macros::Component;
     use bevy_platform_support::collections::{HashMap, HashSet};
     use core::{
         any::TypeId,
         panic,
-        sync::atomic::{AtomicBool, AtomicU32, Ordering},
+        sync::atomic::{AtomicBool, Ordering},
     };
     use std::{println, sync::Mutex};
 
@@ -2815,228 +2832,6 @@ mod tests {
         );
     }
 
-    #[derive(Resource)]
-    struct TestResource(u32);
-
-    #[derive(Resource)]
-    struct TestResource2(String);
-
-    #[derive(Resource)]
-    struct TestResource3;
-
-    #[test]
-    fn get_resource_by_id() {
-        let mut world = SubWorld::new();
-        world.insert_resource(TestResource(42));
-        let component_id = world
-            .components()
-            .get_resource_id(TypeId::of::<TestResource>())
-            .unwrap();
-
-        let resource = world.get_resource_by_id(component_id).unwrap();
-        // SAFETY: `TestResource` is the correct resource type
-        let resource = unsafe { resource.deref::<TestResource>() };
-
-        assert_eq!(resource.0, 42);
-    }
-
-    #[test]
-    fn get_resource_mut_by_id() {
-        let mut world = SubWorld::new();
-        world.insert_resource(TestResource(42));
-        let component_id = world
-            .components()
-            .get_resource_id(TypeId::of::<TestResource>())
-            .unwrap();
-
-        {
-            let mut resource = world.get_resource_mut_by_id(component_id).unwrap();
-            resource.set_changed();
-            // SAFETY: `TestResource` is the correct resource type
-            let resource = unsafe { resource.into_inner().deref_mut::<TestResource>() };
-            resource.0 = 43;
-        }
-
-        let resource = world.get_resource_by_id(component_id).unwrap();
-        // SAFETY: `TestResource` is the correct resource type
-        let resource = unsafe { resource.deref::<TestResource>() };
-
-        assert_eq!(resource.0, 43);
-    }
-
-    #[test]
-    fn iter_resources() {
-        let mut world = SubWorld::new();
-        // Remove DefaultQueryFilters so it doesn't show up in the iterator
-        world.remove_resource::<DefaultQueryFilters>();
-        world.insert_resource(TestResource(42));
-        world.insert_resource(TestResource2("Hello, world!".to_string()));
-        world.insert_resource(TestResource3);
-        world.remove_resource::<TestResource3>();
-
-        let mut iter = world.iter_resources();
-
-        let (info, ptr) = iter.next().unwrap();
-        assert_eq!(info.name(), core::any::type_name::<TestResource>());
-        // SAFETY: We know that the resource is of type `TestResource`
-        assert_eq!(unsafe { ptr.deref::<TestResource>().0 }, 42);
-
-        let (info, ptr) = iter.next().unwrap();
-        assert_eq!(info.name(), core::any::type_name::<TestResource2>());
-        assert_eq!(
-            // SAFETY: We know that the resource is of type `TestResource2`
-            unsafe { &ptr.deref::<TestResource2>().0 },
-            &"Hello, world!".to_string()
-        );
-
-        assert!(iter.next().is_none());
-    }
-
-    #[test]
-    fn iter_resources_mut() {
-        let mut world = SubWorld::new();
-        // Remove DefaultQueryFilters so it doesn't show up in the iterator
-        world.remove_resource::<DefaultQueryFilters>();
-        world.insert_resource(TestResource(42));
-        world.insert_resource(TestResource2("Hello, world!".to_string()));
-        world.insert_resource(TestResource3);
-        world.remove_resource::<TestResource3>();
-
-        let mut iter = world.iter_resources_mut();
-
-        let (info, mut mut_untyped) = iter.next().unwrap();
-        assert_eq!(info.name(), core::any::type_name::<TestResource>());
-        // SAFETY: We know that the resource is of type `TestResource`
-        unsafe {
-            mut_untyped.as_mut().deref_mut::<TestResource>().0 = 43;
-        };
-
-        let (info, mut mut_untyped) = iter.next().unwrap();
-        assert_eq!(info.name(), core::any::type_name::<TestResource2>());
-        // SAFETY: We know that the resource is of type `TestResource2`
-        unsafe {
-            mut_untyped.as_mut().deref_mut::<TestResource2>().0 = "Hello, world?".to_string();
-        };
-
-        assert!(iter.next().is_none());
-        drop(iter);
-
-        assert_eq!(world.resource::<TestResource>().0, 43);
-        assert_eq!(
-            world.resource::<TestResource2>().0,
-            "Hello, world?".to_string()
-        );
-    }
-
-    #[test]
-    fn dynamic_resource() {
-        let mut world = SubWorld::new();
-
-        let descriptor = ComponentDescriptor::new_resource::<TestResource>();
-
-        let component_id = world.register_resource_with_descriptor(descriptor);
-
-        let value = 0;
-        OwningPtr::make(value, |ptr| {
-            // SAFETY: value is valid for the layout of `TestResource`
-            unsafe {
-                world.insert_resource_by_id(component_id, ptr, MaybeLocation::caller());
-            }
-        });
-
-        // SAFETY: We know that the resource is of type `TestResource`
-        let resource = unsafe {
-            world
-                .get_resource_by_id(component_id)
-                .unwrap()
-                .deref::<TestResource>()
-        };
-        assert_eq!(resource.0, 0);
-
-        assert!(world.remove_resource_by_id(component_id).is_some());
-    }
-
-    #[test]
-    fn custom_resource_with_layout() {
-        static DROP_COUNT: AtomicU32 = AtomicU32::new(0);
-
-        let mut world = SubWorld::new();
-
-        // SAFETY: the drop function is valid for the layout and the data will be safe to access from any thread
-        let descriptor = unsafe {
-            ComponentDescriptor::new_with_layout(
-                "Custom Test Component".to_string(),
-                StorageType::Table,
-                core::alloc::Layout::new::<[u8; 8]>(),
-                Some(|ptr| {
-                    let data = ptr.read::<[u8; 8]>();
-                    assert_eq!(data, [0, 1, 2, 3, 4, 5, 6, 7]);
-                    DROP_COUNT.fetch_add(1, Ordering::SeqCst);
-                }),
-                true,
-                ComponentCloneBehavior::Default,
-            )
-        };
-
-        let component_id = world.register_resource_with_descriptor(descriptor);
-
-        let value: [u8; 8] = [0, 1, 2, 3, 4, 5, 6, 7];
-        OwningPtr::make(value, |ptr| {
-            // SAFETY: value is valid for the component layout
-            unsafe {
-                world.insert_resource_by_id(component_id, ptr, MaybeLocation::caller());
-            }
-        });
-
-        // SAFETY: [u8; 8] is the correct type for the resource
-        let data = unsafe {
-            world
-                .get_resource_by_id(component_id)
-                .unwrap()
-                .deref::<[u8; 8]>()
-        };
-        assert_eq!(*data, [0, 1, 2, 3, 4, 5, 6, 7]);
-
-        assert!(world.remove_resource_by_id(component_id).is_some());
-
-        assert_eq!(DROP_COUNT.load(Ordering::SeqCst), 1);
-    }
-
-    #[derive(Resource)]
-    struct TestFromWorld(u32);
-    impl FromWorld for TestFromWorld {
-        fn from_world(world: &mut SubWorld) -> Self {
-            let b = world.resource::<TestResource>();
-            Self(b.0)
-        }
-    }
-
-    #[test]
-    fn init_resource_does_not_overwrite() {
-        let mut world = SubWorld::new();
-        world.insert_resource(TestResource(0));
-        world.init_resource::<TestFromWorld>();
-        world.insert_resource(TestResource(1));
-        world.init_resource::<TestFromWorld>();
-
-        let resource = world.resource::<TestFromWorld>();
-
-        assert_eq!(resource.0, 0);
-    }
-
-    #[test]
-    fn init_non_send_resource_does_not_overwrite() {
-        let mut world = SubWorld::new();
-        world.insert_resource(TestResource(0));
-        world.init_non_send_resource::<TestFromWorld>();
-        world.insert_resource(TestResource(1));
-        world.init_non_send_resource::<TestFromWorld>();
-
-        let resource = world.non_send_resource::<TestFromWorld>();
-
-        assert_eq!(resource.0, 0);
-    }
-
     #[derive(Component)]
     struct Foo;
 
@@ -3048,7 +2843,7 @@ mod tests {
 
     #[test]
     fn inspect_entity_components() {
-        let mut world = SubWorld::new();
+        let mut world = World::new().get_main();
         let ent0 = world.spawn((Foo, Bar, Baz)).id();
         let ent1 = world.spawn((Foo, Bar)).id();
         let ent2 = world.spawn((Bar, Baz)).id();
@@ -3107,7 +2902,7 @@ mod tests {
 
     #[test]
     fn iterate_entities() {
-        let mut world = SubWorld::new();
+        let mut world = World::new();
         let mut entity_counters = <HashMap<_, _>>::default();
 
         let iterate_and_count_entities = |world: &SubWorld, entity_counters: &mut HashMap<_, _>| {
@@ -3182,7 +2977,7 @@ mod tests {
         #[derive(Component, PartialEq, Debug)]
         struct B(i32);
 
-        let mut world = SubWorld::new();
+        let mut world = World::new();
 
         let a1 = world.spawn(A(1)).id();
         let a2 = world.spawn(A(2)).id();
@@ -3224,7 +3019,7 @@ mod tests {
 
     #[test]
     fn spawn_empty_bundle() {
-        let mut world = SubWorld::new();
+        let mut world = World::new();
         world.spawn(());
     }
 
