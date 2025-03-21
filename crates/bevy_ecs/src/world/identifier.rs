@@ -2,11 +2,11 @@ use crate::{
     component::Tick,
     storage::SparseSetIndex,
     system::{ExclusiveSystemParam, ReadOnlySystemParam, SystemMeta, SystemParam},
-    world::{FromWorld, World},
+    world::FromWorld,
 };
 use bevy_platform_support::sync::atomic::{AtomicUsize, Ordering};
 
-use super::unsafe_world_cell::UnsafeWorldCell;
+use super::{unsafe_world_cell::UnsafeWorldCell, Worlds};
 
 #[derive(Copy, Clone, PartialEq, Eq, Debug, Hash)]
 // We use usize here because that is the largest `Atomic` we want to require
@@ -39,8 +39,8 @@ impl WorldsId {
 
 impl FromWorld for WorldsId {
     #[inline]
-    fn from_world(world: &mut World) -> Self {
-        world.id()
+    fn from_world(worlds: &mut Worlds) -> Self {
+        worlds.id()
     }
 }
 
@@ -53,7 +53,7 @@ unsafe impl SystemParam for WorldsId {
 
     type Item<'world, 'state> = WorldsId;
 
-    fn init_state(_: &mut World, _: &mut SystemMeta) -> Self::State {}
+    fn init_state(_: &mut Worlds, _: &mut SystemMeta) -> Self::State {}
 
     #[inline]
     unsafe fn get_param<'world, 'state>(
@@ -70,8 +70,8 @@ impl ExclusiveSystemParam for WorldsId {
     type State = WorldsId;
     type Item<'s> = WorldsId;
 
-    fn init(world: &mut World, _system_meta: &mut SystemMeta) -> Self::State {
-        world.id()
+    fn init(worlds: &mut Worlds, _system_meta: &mut SystemMeta) -> Self::State {
+        worlds.id()
     }
 
     fn get_param<'s>(state: &'s mut Self::State, _system_meta: &SystemMeta) -> Self::Item<'s> {
@@ -93,6 +93,8 @@ impl SparseSetIndex for WorldsId {
 
 #[cfg(test)]
 mod tests {
+    use crate::world::WorldId;
+
     use super::*;
     use alloc::vec::Vec;
 
@@ -124,7 +126,7 @@ mod tests {
 
     #[test]
     fn world_id_exclusive_system_param() {
-        fn test_system(_world: &mut World, world_id: SubWorldId) -> SubWorldId {
+        fn test_system(_world: &mut World, world_id: WorldId) -> WorldId {
             world_id
         }
 

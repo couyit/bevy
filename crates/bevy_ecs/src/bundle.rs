@@ -20,7 +20,9 @@ use crate::{
     query::DebugCheckedUnwrap,
     relationship::RelationshipHookMode,
     storage::{SparseSetIndex, SparseSets, Storages, Table, TableRow},
-    world::{unsafe_world_cell::UnsafeWorldCell, EntityWorldMut, ON_ADD, ON_INSERT, ON_REPLACE},
+    world::{
+        unsafe_world_cell::UnsafeWorldCell, EntityWorldMut, Storage, ON_ADD, ON_INSERT, ON_REPLACE,
+    },
 };
 use alloc::{boxed::Box, vec, vec::Vec};
 use bevy_platform_support::collections::{HashMap, HashSet};
@@ -473,7 +475,7 @@ impl BundleInfo {
     /// and must be in the same order as the source bundle type writes its components in.
     unsafe fn new(
         bundle_type_name: &'static str,
-        storages: &mut Storages,
+        sparse_sets: &mut SparseSets,
         components: &Components,
         mut component_ids: Vec<ComponentId>,
         id: BundleId,
@@ -511,7 +513,7 @@ impl BundleInfo {
             // SAFETY: caller has verified that all ids are valid
             let info = unsafe { components.get_info_unchecked(component_id) };
             required_components.merge(info.required_components());
-            storages.prepare_component(info);
+            sparse_sets.get_or_insert(info);
         }
         required_components.remove_explicit_components(&component_ids);
 
@@ -522,7 +524,7 @@ impl BundleInfo {
             .map(|(component_id, v)| {
                 // Safety: These ids came out of the passed `components`, so they must be valid.
                 let info = unsafe { components.get_info_unchecked(component_id) };
-                storages.prepare_component(info);
+                sparse_sets.get_or_insert(info);
                 // This adds required components to the component_ids list _after_ using that list to remove explicitly provided
                 // components. This ordering is important!
                 component_ids.push(component_id);
@@ -1582,7 +1584,7 @@ impl Bundles {
     pub(crate) fn register_info<T: Bundle>(
         &mut self,
         components: &mut ComponentsRegistrator,
-        storages: &mut Storages,
+        sparse_sets: &mut SparseSets,
     ) -> BundleId {
         let bundle_infos = &mut self.bundle_infos;
         let id = *self.bundle_ids.entry(TypeId::of::<T>()).or_insert_with(|| {
@@ -1594,7 +1596,7 @@ impl Bundles {
                 // - its info was created
                 // - appropriate storage for it has been initialized.
                 // - it was created in the same order as the components in T
-                unsafe { BundleInfo::new(core::any::type_name::<T>(), storages, components, component_ids, id) };
+                unsafe { BundleInfo::new(core::any::type_name::<T>(), sparse_sets, components, component_ids, id) };
             bundle_infos.push(bundle_info);
             id
         });
