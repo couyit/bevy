@@ -1547,7 +1547,7 @@ impl<'w> BundleSpawner<'w> {
     #[inline]
     pub(crate) fn entities(&mut self) -> &mut Entities {
         // SAFETY: No outstanding references to self.world, changes to entities cannot invalidate our internal pointers
-        unsafe { &mut self.world.world_mut().entities_mut() }
+        unsafe { self.world.world_mut().entities_mut() }
     }
 
     /// # Safety

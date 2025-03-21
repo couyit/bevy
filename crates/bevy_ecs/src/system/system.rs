@@ -12,7 +12,7 @@ use crate::{
     query::Access,
     schedule::InternedSystemSet,
     system::{input::SystemInput, SystemIn},
-    world::{unsafe_world_cell::UnsafeWorldCell, DeferredWorld, World},
+    world::{unsafe_world_cell::UnsafeWorldCell, DeferredWorld, World, Worlds},
 };
 
 use alloc::{borrow::Cow, boxed::Box, vec::Vec};
@@ -82,9 +82,9 @@ pub trait System: Send + Sync + 'static {
     /// Unlike [`System::run_unsafe`], this will apply deferred parameters *immediately*.
     ///
     /// [`run_readonly`]: ReadOnlySystem::run_readonly
-    fn run(&mut self, input: SystemIn<'_, Self>, world: &mut World) -> Self::Out {
-        let ret = self.run_without_applying_deferred(input, world);
-        self.apply_deferred(world);
+    fn run(&mut self, input: SystemIn<'_, Self>, worlds: &mut Worlds) -> Self::Out {
+        let ret = self.run_without_applying_deferred(input, worlds);
+        self.apply_deferred(worlds);
         ret
     }
 
@@ -94,7 +94,7 @@ pub trait System: Send + Sync + 'static {
     fn run_without_applying_deferred(
         &mut self,
         input: SystemIn<'_, Self>,
-        world: &mut World,
+        worlds: &mut Worlds,
     ) -> Self::Out {
         let world_cell = world.as_unsafe_world_cell();
         self.update_archetype_component_access(world_cell);
