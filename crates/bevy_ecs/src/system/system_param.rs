@@ -13,8 +13,8 @@ use crate::{
     storage::ResourceData,
     system::{Query, Single, SystemMeta},
     world::{
-        unsafe_worlds_cell::UnsafeWorldCell, DeferredWorld, FilteredResources,
-        FilteredResourcesMut, FromWorld, World, WorldLabel, Worlds,
+        unsafe_world_cell::UnsafeWorldCell, DeferredWorld, FilteredResources, FilteredResourcesMut,
+        FromWorld, World,
     },
 };
 use alloc::{borrow::ToOwned, boxed::Box, vec::Vec};
@@ -191,8 +191,6 @@ pub unsafe trait SystemParam: Sized {
     ///
     /// You could think of [`SystemParam::Item<'w, 's>`] as being an *operation* that changes the lifetimes bound to `Self`.
     type Item<'world, 'state>: SystemParam<State = Self::State>;
-
-    type World: WorldLabel;
 
     /// Registers any [`World`] access used by this [`SystemParam`]
     /// and creates a new instance of this param's [`State`](SystemParam::State).

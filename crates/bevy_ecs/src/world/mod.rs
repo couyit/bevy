@@ -33,7 +33,7 @@ pub use entity_ref::{
     Entry, FilteredEntityMut, FilteredEntityRef, OccupiedEntry, TryFromFilteredError, VacantEntry,
 };
 pub use filtered_resource::*;
-pub use identifier::WorldsId;
+use identifier::WorldsId;
 pub use spawn_batch::*;
 
 #[expect(
@@ -137,10 +137,6 @@ impl Worlds {
         self.worlds.push(World::new(id));
 
         id
-    }
-
-    pub fn id(&self) -> WorldsId {
-        self.id
     }
 
     pub fn get_world<T: WorldLabel>(&self) -> &World {
@@ -2718,15 +2714,11 @@ impl World {
     /// This function will panic if any of the provided component ids do not belong to a component known to this [`World`].
     #[inline]
     pub fn register_dynamic_bundle(&mut self, component_ids: &[ComponentId]) -> &BundleInfo {
-        let id = match self.storage {
-            Storage::Components {
-                ref mut bundles,
-                ref mut sparse_sets,
-                ..
-            } => bundles.init_dynamic_info(sparse_sets, &self.components, component_ids),
-            Storage::Resources { .. } => panic!("Storage is not for Components."),
-        };
-
+        let id = self.bundles_mut().init_dynamic_info(
+            &mut self.storage,
+            &self.components,
+            component_ids,
+        );
         // SAFETY: We just initialized the bundle so its id should definitely be valid.
         unsafe { self.bundles().get(id).debug_checked_unwrap() }
     }
