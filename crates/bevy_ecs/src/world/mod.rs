@@ -312,6 +312,60 @@ impl World {
         UnsafeWorldCell::new_readonly(self)
     }
 
+    pub fn component_storage(&self) -> (&Entities, &Archetypes, &Bundles, &SparseSets, &Tables) {
+        match self.storage {
+            Storage::Components {
+                ref entities,
+                ref archetypes,
+                ref bundles,
+                ref sparse_sets,
+                ref tables,
+            } => (entities, archetypes, bundles, sparse_sets, tables),
+            Storage::Resources { .. } => panic!("Storage is not for Components"),
+        }
+    }
+
+    pub(crate) fn component_storage_mut(
+        &mut self,
+    ) -> (
+        &mut Entities,
+        &mut Archetypes,
+        &mut Bundles,
+        &mut SparseSets,
+        &mut Tables,
+    ) {
+        match self.storage {
+            Storage::Components {
+                ref mut entities,
+                ref mut archetypes,
+                ref mut bundles,
+                ref mut sparse_sets,
+                ref mut tables,
+            } => (entities, archetypes, bundles, sparse_sets, tables),
+            Storage::Resources { .. } => panic!("Storage is not for Components"),
+        }
+    }
+
+    pub fn resource_storage(&self) -> (&Resources<true>, &Resources<false>) {
+        match self.storage {
+            Storage::Components { .. } => panic!("Storage is not for Resources"),
+            Storage::Resources {
+                ref resources,
+                ref non_send_resources,
+            } => (resources, non_send_resources),
+        }
+    }
+
+    pub(crate) fn resource_storage_mut(&mut self) -> (&Resources<true>, &Resources<false>) {
+        match self.storage {
+            Storage::Components { .. } => panic!("Storage is not for Resources"),
+            Storage::Resources {
+                ref mut resources,
+                ref mut non_send_resources,
+            } => (resources, non_send_resources),
+        }
+    }
+
     /// Retrieves this world's [`Entities`] collection.
     #[inline]
     pub fn entities(&self) -> &Entities {
@@ -327,7 +381,7 @@ impl World {
     /// Mutable reference must not be used to put the [`Entities`] data
     /// in an invalid state for this [`World`]
     #[inline]
-    fn entities_mut(&mut self) -> &mut Entities {
+    pub(crate) fn entities_mut(&mut self) -> &mut Entities {
         match self.storage {
             Storage::Components {
                 ref mut entities, ..
@@ -346,7 +400,7 @@ impl World {
     }
 
     #[inline]
-    fn archetypes_mut(&mut self) -> &mut Archetypes {
+    pub(crate) fn archetypes_mut(&mut self) -> &mut Archetypes {
         match self.storage {
             Storage::Components {
                 ref mut archetypes, ..
@@ -407,7 +461,7 @@ impl World {
     }
 
     #[inline]
-    fn sparse_sets_mut(&mut self) -> &mut SparseSets {
+    pub(crate) fn sparse_sets_mut(&mut self) -> &mut SparseSets {
         match self.storage {
             Storage::Components {
                 ref mut sparse_sets,
@@ -426,7 +480,7 @@ impl World {
     }
 
     #[inline]
-    fn tables_mut(&mut self) -> &mut Tables {
+    pub(crate) fn tables_mut(&mut self) -> &mut Tables {
         match self.storage {
             Storage::Components { ref mut tables, .. } => tables,
             Storage::Resources { .. } => panic!("Storage is not for Components"),
@@ -442,7 +496,7 @@ impl World {
     }
 
     #[inline]
-    fn resources_mut(&mut self) -> &mut Resources<true> {
+    pub(crate) fn resources_mut(&mut self) -> &mut Resources<true> {
         match self.storage {
             Storage::Components { .. } => panic!("Storage is not for Resources"),
             Storage::Resources {
@@ -463,7 +517,7 @@ impl World {
     }
 
     #[inline]
-    fn non_send_resources_mut(&mut self) -> &mut Resources<false> {
+    pub(crate) fn non_send_resources_mut(&mut self) -> &mut Resources<false> {
         match self.storage {
             Storage::Components { .. } => panic!("Storage is not for Resources"),
             Storage::Resources {
@@ -4719,7 +4773,7 @@ mod tests {
 
         let eid = world.spawn(Foo(1)).id();
 
-        let mut dworld = DeferredWorld::from(&mut world);
+        let mut dworld = DeferredWorld::from(&mut *world);
 
         let (mut fetcher, mut commands) = dworld.entities_and_commands();
         let emut = fetcher.get_mut(eid).unwrap();
