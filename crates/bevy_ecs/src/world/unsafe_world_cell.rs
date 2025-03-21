@@ -1,6 +1,6 @@
 //! Contains types that allow disjoint mutable access to a [`World`].
 
-use super::{Mut, Ref, SubWorld, SubWorldId};
+use super::{Mut, Ref, WorldId, World};
 use crate::{
     archetype::{Archetype, Archetypes},
     bundle::Bundles,
@@ -76,10 +76,10 @@ use thiserror::Error;
 /// ```
 #[derive(Copy, Clone)]
 pub struct UnsafeWorldCell<'w> {
-    ptr: *mut SubWorld,
+    ptr: *mut World,
     #[cfg(debug_assertions)]
     allows_mutable_access: bool,
-    _marker: PhantomData<(&'w SubWorld, &'w UnsafeCell<SubWorld>)>,
+    _marker: PhantomData<(&'w World, &'w UnsafeCell<World>)>,
 }
 
 // SAFETY: `&World` and `&mut World` are both `Send`
@@ -87,14 +87,14 @@ unsafe impl Send for UnsafeWorldCell<'_> {}
 // SAFETY: `&World` and `&mut World` are both `Sync`
 unsafe impl Sync for UnsafeWorldCell<'_> {}
 
-impl<'w> From<&'w mut SubWorld> for UnsafeWorldCell<'w> {
-    fn from(value: &'w mut SubWorld) -> Self {
+impl<'w> From<&'w mut World> for UnsafeWorldCell<'w> {
+    fn from(value: &'w mut World) -> Self {
         value.as_unsafe_world_cell()
     }
 }
 
-impl<'w> From<&'w SubWorld> for UnsafeWorldCell<'w> {
-    fn from(value: &'w SubWorld) -> Self {
+impl<'w> From<&'w World> for UnsafeWorldCell<'w> {
+    fn from(value: &'w World) -> Self {
         value.as_unsafe_world_cell_readonly()
     }
 }
@@ -102,7 +102,7 @@ impl<'w> From<&'w SubWorld> for UnsafeWorldCell<'w> {
 impl<'w> UnsafeWorldCell<'w> {
     /// Creates a [`UnsafeWorldCell`] that can be used to access everything immutably
     #[inline]
-    pub(crate) fn new_readonly(world: &'w SubWorld) -> Self {
+    pub(crate) fn new_readonly(world: &'w World) -> Self {
         Self {
             ptr: ptr::from_ref(world).cast_mut(),
             #[cfg(debug_assertions)]
@@ -113,7 +113,7 @@ impl<'w> UnsafeWorldCell<'w> {
 
     /// Creates [`UnsafeWorldCell`] that can be used to access everything mutably
     #[inline]
-    pub(crate) fn new_mutable(world: &'w mut SubWorld) -> Self {
+    pub(crate) fn new_mutable(world: &'w mut World) -> Self {
         Self {
             ptr: ptr::from_mut(world),
             #[cfg(debug_assertions)]
@@ -186,7 +186,7 @@ impl<'w> UnsafeWorldCell<'w> {
     /// let archetypes = world_cell.archetypes();
     /// ```
     #[inline]
-    pub unsafe fn world_mut(self) -> &'w mut SubWorld {
+    pub unsafe fn world_mut(self) -> &'w mut World {
         self.assert_allows_mutable_access();
         // SAFETY:
         // - caller ensures the created `&mut World` is the only borrow of world
@@ -201,7 +201,7 @@ impl<'w> UnsafeWorldCell<'w> {
     /// - there must be no live exclusive borrows on world data
     /// - there must be no live exclusive borrow of world
     #[inline]
-    pub unsafe fn world(self) -> &'w SubWorld {
+    pub unsafe fn world(self) -> &'w World {
         // SAFETY:
         // - caller ensures there is no `&mut World` this makes it okay to make a `&World`
         // - caller ensures there is no mutable borrows of world data, this means the caller cannot
@@ -218,7 +218,7 @@ impl<'w> UnsafeWorldCell<'w> {
     /// # Safety
     /// - must only be used to access world metadata
     #[inline]
-    pub unsafe fn world_metadata(self) -> &'w SubWorld {
+    pub unsafe fn world_metadata(self) -> &'w World {
         // SAFETY: caller ensures that returned reference is not used to violate aliasing rules
         unsafe { self.unsafe_world() }
     }
@@ -235,7 +235,7 @@ impl<'w> UnsafeWorldCell<'w> {
     /// - must not be used in a way that would conflict with any
     ///   live exclusive borrows on world data
     #[inline]
-    unsafe fn unsafe_world(self) -> &'w SubWorld {
+    unsafe fn unsafe_world(self) -> &'w World {
         // SAFETY:
         // - caller ensures that the returned `&World` is not used in a way that would conflict
         //   with any existing mutable borrows of world data
@@ -244,7 +244,7 @@ impl<'w> UnsafeWorldCell<'w> {
 
     /// Retrieves this world's unique [ID](WorldId).
     #[inline]
-    pub fn id(self) -> SubWorldId {
+    pub fn id(self) -> WorldId {
         // SAFETY:
         // - we only access world metadata
         unsafe { self.world_metadata() }.id()
@@ -1238,7 +1238,7 @@ mod tests {
     #[test]
     #[should_panic = "is forbidden"]
     fn as_unsafe_world_cell_readonly_world_mut_forbidden() {
-        let world = SubWorld::new();
+        let world = World::new();
         let world_cell = world.as_unsafe_world_cell_readonly();
         // SAFETY: this invalid usage will be caught by a runtime panic.
         let _ = unsafe { world_cell.world_mut() };
@@ -1250,7 +1250,7 @@ mod tests {
     #[test]
     #[should_panic = "is forbidden"]
     fn as_unsafe_world_cell_readonly_resource_mut_forbidden() {
-        let mut world = SubWorld::new();
+        let mut world = World::new();
         world.insert_resource(R);
         let world_cell = world.as_unsafe_world_cell_readonly();
         // SAFETY: this invalid usage will be caught by a runtime panic.
@@ -1263,7 +1263,7 @@ mod tests {
     #[test]
     #[should_panic = "is forbidden"]
     fn as_unsafe_world_cell_readonly_component_mut_forbidden() {
-        let mut world = SubWorld::new();
+        let mut world = World::new();
         let entity = world.spawn(C).id();
         let world_cell = world.as_unsafe_world_cell_readonly();
         let entity_cell = world_cell.get_entity(entity).unwrap();

@@ -322,7 +322,7 @@ impl IsFocused for IsFocusedHelper<'_, '_> {
     }
 }
 
-impl IsFocused for SubWorld {
+impl IsFocused for World {
     fn is_focused(&self, entity: Entity) -> bool {
         self.get_resource::<InputFocus>()
             .and_then(|f| f.0)

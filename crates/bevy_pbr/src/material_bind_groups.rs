@@ -9,7 +9,7 @@ use core::{iter, marker::PhantomData, mem};
 use bevy_derive::{Deref, DerefMut};
 use bevy_ecs::{
     resource::Resource,
-    world::{FromWorld, SubWorld},
+    world::{FromWorld, World},
 };
 use bevy_platform_support::collections::{HashMap, HashSet};
 use bevy_reflect::{prelude::ReflectDefault, Reflect};
@@ -833,7 +833,7 @@ impl<M> FromWorld for MaterialBindGroupAllocator<M>
 where
     M: Material,
 {
-    fn from_world(world: &mut SubWorld) -> Self {
+    fn from_world(world: &mut World) -> Self {
         let render_device = world.resource::<RenderDevice>();
         MaterialBindGroupAllocator::new(render_device)
     }
@@ -1724,7 +1724,7 @@ where
 }
 
 impl FromWorld for FallbackBindlessResources {
-    fn from_world(world: &mut SubWorld) -> Self {
+    fn from_world(world: &mut World) -> Self {
         let render_device = world.resource::<RenderDevice>();
         FallbackBindlessResources {
             filtering_sampler: render_device.create_sampler(&SamplerDescriptor {

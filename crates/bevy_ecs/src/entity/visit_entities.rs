@@ -58,7 +58,7 @@ impl VisitEntitiesMut for Entity {
 mod tests {
     use crate::{
         entity::{hash_map::EntityHashMap, MapEntities, SceneEntityMapper},
-        world::SubWorld,
+        world::World,
     };
     use alloc::{string::String, vec, vec::Vec};
     use bevy_platform_support::collections::HashSet;
@@ -94,7 +94,7 @@ mod tests {
 
     #[test]
     fn visit_entities() {
-        let mut world = SubWorld::new();
+        let mut world = World::new();
         let entities = world.entities();
         let mut foo = Foo {
             ordered: vec![entities.reserve_entity(), entities.reserve_entity()],

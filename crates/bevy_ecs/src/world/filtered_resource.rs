@@ -3,7 +3,7 @@ use crate::{
     component::{ComponentId, Tick},
     query::Access,
     resource::Resource,
-    world::{unsafe_world_cell::UnsafeWorldCell, SubWorld},
+    world::{unsafe_world_cell::UnsafeWorldCell, World},
 };
 use bevy_ptr::{Ptr, UnsafeCellDeref};
 
@@ -218,8 +218,8 @@ impl<'w, 's> From<&'w FilteredResourcesMut<'_, 's>> for FilteredResources<'w, 's
     }
 }
 
-impl<'w> From<&'w SubWorld> for FilteredResources<'w, 'static> {
-    fn from(value: &'w SubWorld) -> Self {
+impl<'w> From<&'w World> for FilteredResources<'w, 'static> {
+    fn from(value: &'w World) -> Self {
         const READ_ALL_RESOURCES: &Access<ComponentId> = {
             const ACCESS: Access<ComponentId> = {
                 let mut access = Access::new();
@@ -243,8 +243,8 @@ impl<'w> From<&'w SubWorld> for FilteredResources<'w, 'static> {
     }
 }
 
-impl<'w> From<&'w mut SubWorld> for FilteredResources<'w, 'static> {
-    fn from(value: &'w mut SubWorld) -> Self {
+impl<'w> From<&'w mut World> for FilteredResources<'w, 'static> {
+    fn from(value: &'w mut World) -> Self {
         Self::from(&*value)
     }
 }
@@ -508,8 +508,8 @@ impl<'w, 's> FilteredResourcesMut<'w, 's> {
     }
 }
 
-impl<'w> From<&'w mut SubWorld> for FilteredResourcesMut<'w, 'static> {
-    fn from(value: &'w mut SubWorld) -> Self {
+impl<'w> From<&'w mut World> for FilteredResourcesMut<'w, 'static> {
+    fn from(value: &'w mut World) -> Self {
         const WRITE_ALL_RESOURCES: &Access<ComponentId> = {
             const ACCESS: Access<ComponentId> = {
                 let mut access = Access::new();
@@ -537,13 +537,13 @@ impl<'w> From<&'w mut SubWorld> for FilteredResourcesMut<'w, 'static> {
 ///
 /// This is passed to a callback in [`FilteredResourcesParamBuilder`](crate::system::FilteredResourcesParamBuilder).
 pub struct FilteredResourcesBuilder<'w> {
-    world: &'w mut SubWorld,
+    world: &'w mut World,
     access: Access<ComponentId>,
 }
 
 impl<'w> FilteredResourcesBuilder<'w> {
     /// Creates a new builder with no access.
-    pub fn new(world: &'w mut SubWorld) -> Self {
+    pub fn new(world: &'w mut World) -> Self {
         Self {
             world,
             access: Access::new(),
@@ -583,13 +583,13 @@ impl<'w> FilteredResourcesBuilder<'w> {
 ///
 /// This is passed to a callback in [`FilteredResourcesMutParamBuilder`](crate::system::FilteredResourcesMutParamBuilder).
 pub struct FilteredResourcesMutBuilder<'w> {
-    world: &'w mut SubWorld,
+    world: &'w mut World,
     access: Access<ComponentId>,
 }
 
 impl<'w> FilteredResourcesMutBuilder<'w> {
     /// Creates a new builder with no access.
-    pub fn new(world: &'w mut SubWorld) -> Self {
+    pub fn new(world: &'w mut World) -> Self {
         Self {
             world,
             access: Access::new(),

@@ -2,7 +2,7 @@ use crate::{
     prelude::{FromWorld, QueryState},
     query::{QueryData, QueryFilter},
     system::{Local, SystemMeta, SystemParam, SystemState},
-    world::SubWorld,
+    world::World,
 };
 use bevy_utils::synccell::SyncCell;
 use core::marker::PhantomData;
@@ -22,7 +22,7 @@ pub trait ExclusiveSystemParam: Sized {
     type Item<'s>: ExclusiveSystemParam<State = Self::State>;
 
     /// Creates a new instance of this param's [`State`](Self::State).
-    fn init(world: &mut SubWorld, system_meta: &mut SystemMeta) -> Self::State;
+    fn init(world: &mut World, system_meta: &mut SystemMeta) -> Self::State;
 
     /// Creates a parameter to be passed into an [`ExclusiveSystemParamFunction`].
     ///
@@ -40,7 +40,7 @@ impl<'a, D: QueryData + 'static, F: QueryFilter + 'static> ExclusiveSystemParam
     type State = QueryState<D, F>;
     type Item<'s> = &'s mut QueryState<D, F>;
 
-    fn init(world: &mut SubWorld, _system_meta: &mut SystemMeta) -> Self::State {
+    fn init(world: &mut World, _system_meta: &mut SystemMeta) -> Self::State {
         QueryState::new(world)
     }
 
@@ -53,7 +53,7 @@ impl<'a, P: SystemParam + 'static> ExclusiveSystemParam for &'a mut SystemState<
     type State = SystemState<P>;
     type Item<'s> = &'s mut SystemState<P>;
 
-    fn init(world: &mut SubWorld, _system_meta: &mut SystemMeta) -> Self::State {
+    fn init(world: &mut World, _system_meta: &mut SystemMeta) -> Self::State {
         SystemState::new(world)
     }
 
@@ -66,7 +66,7 @@ impl<'_s, T: FromWorld + Send + 'static> ExclusiveSystemParam for Local<'_s, T> 
     type State = SyncCell<T>;
     type Item<'s> = Local<'s, T>;
 
-    fn init(world: &mut SubWorld, _system_meta: &mut SystemMeta) -> Self::State {
+    fn init(world: &mut World, _system_meta: &mut SystemMeta) -> Self::State {
         SyncCell::new(T::from_world(world))
     }
 
@@ -79,7 +79,7 @@ impl<S: ?Sized> ExclusiveSystemParam for PhantomData<S> {
     type State = ();
     type Item<'s> = PhantomData<S>;
 
-    fn init(_world: &mut SubWorld, _system_meta: &mut SystemMeta) -> Self::State {}
+    fn init(_world: &mut World, _system_meta: &mut SystemMeta) -> Self::State {}
 
     fn get_param<'s>(_state: &'s mut Self::State, _system_meta: &SystemMeta) -> Self::Item<'s> {
         PhantomData
@@ -136,7 +136,7 @@ all_tuples!(
 
 #[cfg(test)]
 mod tests {
-    use crate::{schedule::Schedule, system::Local, world::SubWorld};
+    use crate::{schedule::Schedule, system::Local, world::World};
     use alloc::vec::Vec;
     use bevy_ecs_macros::Resource;
     use core::marker::PhantomData;
@@ -148,7 +148,7 @@ mod tests {
             test_value: u32,
         }
 
-        fn my_system(world: &mut SubWorld, mut local: Local<u32>, _phantom: PhantomData<Vec<u32>>) {
+        fn my_system(world: &mut World, mut local: Local<u32>, _phantom: PhantomData<Vec<u32>>) {
             assert_eq!(world.resource::<Res>().test_value, *local);
             *local += 1;
             world.resource_mut::<Res>().test_value += 1;
@@ -157,7 +157,7 @@ mod tests {
         let mut schedule = Schedule::default();
         schedule.add_systems(my_system);
 
-        let mut world = SubWorld::default();
+        let mut world = World::default();
         world.init_resource::<Res>();
 
         schedule.run(&mut world);

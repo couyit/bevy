@@ -183,7 +183,7 @@ pub struct ShadowSamplers {
 
 // TODO: this pattern for initializing the shaders / pipeline isn't ideal. this should be handled by the asset system
 impl FromWorld for ShadowSamplers {
-    fn from_world(world: &mut SubWorld) -> Self {
+    fn from_world(world: &mut World) -> Self {
         let render_device = world.resource::<RenderDevice>();
 
         let base_sampler_descriptor = SamplerDescriptor {
@@ -1616,7 +1616,7 @@ fn despawn_entities(commands: &mut Commands, entities: Vec<Entity>) {
     if entities.is_empty() {
         return;
     }
-    commands.queue(move |world: &mut SubWorld| {
+    commands.queue(move |world: &mut World| {
         for entity in entities {
             world.despawn(entity);
         }
@@ -2171,19 +2171,19 @@ pub struct ShadowPassNode {
 }
 
 impl FromWorld for EarlyShadowPassNode {
-    fn from_world(world: &mut SubWorld) -> Self {
+    fn from_world(world: &mut World) -> Self {
         Self(ShadowPassNode::from_world(world))
     }
 }
 
 impl FromWorld for LateShadowPassNode {
-    fn from_world(world: &mut SubWorld) -> Self {
+    fn from_world(world: &mut World) -> Self {
         Self(ShadowPassNode::from_world(world))
     }
 }
 
 impl FromWorld for ShadowPassNode {
-    fn from_world(world: &mut SubWorld) -> Self {
+    fn from_world(world: &mut World) -> Self {
         Self {
             main_view_query: QueryState::new(world),
             view_light_query: QueryState::new(world),
@@ -2192,7 +2192,7 @@ impl FromWorld for ShadowPassNode {
 }
 
 impl Node for EarlyShadowPassNode {
-    fn update(&mut self, world: &mut SubWorld) {
+    fn update(&mut self, world: &mut World) {
         self.0.update(world);
     }
 
@@ -2200,14 +2200,14 @@ impl Node for EarlyShadowPassNode {
         &self,
         graph: &mut RenderGraphContext,
         render_context: &mut RenderContext<'w>,
-        world: &'w SubWorld,
+        world: &'w World,
     ) -> Result<(), NodeRunError> {
         self.0.run(graph, render_context, world, false)
     }
 }
 
 impl Node for LateShadowPassNode {
-    fn update(&mut self, world: &mut SubWorld) {
+    fn update(&mut self, world: &mut World) {
         self.0.update(world);
     }
 
@@ -2215,14 +2215,14 @@ impl Node for LateShadowPassNode {
         &self,
         graph: &mut RenderGraphContext,
         render_context: &mut RenderContext<'w>,
-        world: &'w SubWorld,
+        world: &'w World,
     ) -> Result<(), NodeRunError> {
         self.0.run(graph, render_context, world, true)
     }
 }
 
 impl ShadowPassNode {
-    fn update(&mut self, world: &mut SubWorld) {
+    fn update(&mut self, world: &mut World) {
         self.main_view_query.update_archetypes(world);
         self.view_light_query.update_archetypes(world);
     }
@@ -2235,7 +2235,7 @@ impl ShadowPassNode {
         &self,
         graph: &mut RenderGraphContext,
         render_context: &mut RenderContext<'w>,
-        world: &'w SubWorld,
+        world: &'w World,
         is_late: bool,
     ) -> Result<(), NodeRunError> {
         let diagnostics = render_context.diagnostic_recorder();

@@ -7,7 +7,7 @@ use bevy_ecs::{
     query::{Has, With},
     resource::Resource,
     system::{Commands, Query, Res, ResMut},
-    world::{FromWorld, SubWorld},
+    world::{FromWorld, World},
 };
 use bevy_render::{
     render_resource::{
@@ -61,7 +61,7 @@ pub struct RenderSkyboxPrepassPipeline(pub CachedRenderPipelineId);
 pub struct SkyboxPrepassBindGroup(pub BindGroup);
 
 impl FromWorld for SkyboxPrepassPipeline {
-    fn from_world(world: &mut SubWorld) -> Self {
+    fn from_world(world: &mut World) -> Self {
         let render_device = world.resource::<RenderDevice>();
 
         Self {

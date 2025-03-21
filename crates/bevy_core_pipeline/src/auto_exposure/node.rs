@@ -7,7 +7,7 @@ use super::{
 use bevy_ecs::{
     query::QueryState,
     system::lifetimeless::Read,
-    world::{FromWorld, SubWorld},
+    world::{FromWorld, World},
 };
 use bevy_render::{
     globals::GlobalsBuffer,
@@ -32,7 +32,7 @@ pub struct AutoExposureNode {
 }
 
 impl FromWorld for AutoExposureNode {
-    fn from_world(world: &mut SubWorld) -> Self {
+    fn from_world(world: &mut World) -> Self {
         Self {
             query: QueryState::new(world),
         }
@@ -40,7 +40,7 @@ impl FromWorld for AutoExposureNode {
 }
 
 impl Node for AutoExposureNode {
-    fn update(&mut self, world: &mut SubWorld) {
+    fn update(&mut self, world: &mut World) {
         self.query.update_archetypes(world);
     }
 
@@ -48,7 +48,7 @@ impl Node for AutoExposureNode {
         &self,
         graph: &mut RenderGraphContext,
         render_context: &mut RenderContext,
-        world: &SubWorld,
+        world: &World,
     ) -> Result<(), NodeRunError> {
         let view_entity = graph.view_entity();
         let pipeline_cache = world.resource::<PipelineCache>();

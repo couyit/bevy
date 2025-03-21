@@ -131,7 +131,7 @@ pub struct ColoredMesh2dPipeline {
 }
 
 impl FromWorld for ColoredMesh2dPipeline {
-    fn from_world(world: &mut SubWorld) -> Self {
+    fn from_world(world: &mut World) -> Self {
         Self {
             mesh2d_pipeline: Mesh2dPipeline::from_world(world),
         }

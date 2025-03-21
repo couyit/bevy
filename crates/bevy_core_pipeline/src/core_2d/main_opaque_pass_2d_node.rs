@@ -1,5 +1,5 @@
 use crate::core_2d::Opaque2d;
-use bevy_ecs::{prelude::SubWorld, query::QueryItem};
+use bevy_ecs::{prelude::World, query::QueryItem};
 use bevy_render::{
     camera::ExtractedCamera,
     diagnostic::RecordDiagnostics,
@@ -32,7 +32,7 @@ impl ViewNode for MainOpaquePass2dNode {
         graph: &mut RenderGraphContext,
         render_context: &mut RenderContext<'w>,
         (camera, view, target, depth): QueryItem<'w, Self::ViewQuery>,
-        world: &'w SubWorld,
+        world: &'w World,
     ) -> Result<(), NodeRunError> {
         let (Some(opaque_phases), Some(alpha_mask_phases)) = (
             world.get_resource::<ViewBinnedRenderPhases<Opaque2d>>(),

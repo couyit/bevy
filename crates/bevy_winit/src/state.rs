@@ -147,11 +147,11 @@ impl<T: Event> WinitAppRunnerState<T> {
         self.user_event_received = false;
     }
 
-    fn world(&self) -> &SubWorld {
+    fn world(&self) -> &World {
         self.app.world()
     }
 
-    fn world_mut(&mut self) -> &mut SubWorld {
+    fn world_mut(&mut self) -> &mut World {
         self.app.world_mut()
     }
 }

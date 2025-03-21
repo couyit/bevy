@@ -5,7 +5,7 @@ use bevy_ecs::{
     prelude::*,
     schedule::{InternedScheduleLabel, InternedSystemSet, ScheduleBuildSettings, ScheduleLabel},
     system::{ScheduleSystem, SystemId, SystemInput},
-    world::World,
+    world::Worlds,
 };
 use bevy_platform_support::collections::{HashMap, HashSet};
 use core::fmt::Debug;
@@ -13,7 +13,7 @@ use core::fmt::Debug;
 #[cfg(feature = "trace")]
 use tracing::info_span;
 
-type ExtractFn = Box<dyn Fn(&mut SubWorld, &mut SubWorld) + Send>;
+type ExtractFn = Box<dyn Fn(&mut World, &mut World) + Send>;
 
 /// A secondary application with its own [`World`]. These can run independently of each other.
 ///
@@ -61,7 +61,7 @@ type ExtractFn = Box<dyn Fn(&mut SubWorld, &mut SubWorld) + Send>;
 /// ```
 pub struct SubApp {
     /// The data of this application.
-    world: SubWorld,
+    world: World,
     /// List of plugins that have been added.
     pub(crate) plugin_registry: Vec<Box<dyn Plugin>>,
     /// The names of plugins that have been added to this app. (used to track duplicates and
@@ -85,7 +85,7 @@ impl Debug for SubApp {
 
 impl Default for SubApp {
     fn default() -> Self {
-        let mut world = World::new();
+        let mut world = Worlds::new();
         world.init_resource::<Schedules>();
         Self {
             world,
@@ -118,12 +118,12 @@ impl SubApp {
     }
 
     /// Returns a reference to the [`World`].
-    pub fn world(&self) -> &SubWorld {
+    pub fn world(&self) -> &World {
         &self.world
     }
 
     /// Returns a mutable reference to the [`World`].
-    pub fn world_mut(&mut self) -> &mut SubWorld {
+    pub fn world_mut(&mut self) -> &mut World {
         &mut self.world
     }
 
@@ -150,7 +150,7 @@ impl SubApp {
     ///
     /// **Note:** There is no default extract method. Calling `extract` does nothing if
     /// [`set_extract`](Self::set_extract) has not been called.
-    pub fn extract(&mut self, world: &mut SubWorld) {
+    pub fn extract(&mut self, world: &mut World) {
         if let Some(f) = self.extract.as_mut() {
             f(world, &mut self.world);
         }
@@ -161,7 +161,7 @@ impl SubApp {
     /// The first argument is the `World` to extract data from, the second argument is the app `World`.
     pub fn set_extract<F>(&mut self, extract: F) -> &mut Self
     where
-        F: Fn(&mut SubWorld, &mut SubWorld) + Send + 'static,
+        F: Fn(&mut World, &mut World) + Send + 'static,
     {
         self.extract = Some(Box::new(extract));
         self

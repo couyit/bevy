@@ -9,7 +9,7 @@ use bevy_ecs::{
     prelude::Entity,
     reflect::{AppTypeRegistry, ReflectComponent, ReflectResource},
     resource::Resource,
-    world::SubWorld,
+    world::World,
 };
 use bevy_reflect::PartialReflect;
 use bevy_utils::default;
@@ -63,12 +63,12 @@ pub struct DynamicSceneBuilder<'w> {
     extracted_scene: BTreeMap<Entity, DynamicEntity>,
     component_filter: SceneFilter,
     resource_filter: SceneFilter,
-    original_world: &'w SubWorld,
+    original_world: &'w World,
 }
 
 impl<'w> DynamicSceneBuilder<'w> {
     /// Prepare a builder that will extract entities and their component from the given [`World`].
-    pub fn from_world(world: &'w SubWorld) -> Self {
+    pub fn from_world(world: &'w World) -> Self {
         Self {
             extracted_resources: default(),
             extracted_scene: default(),
@@ -400,7 +400,7 @@ mod tests {
         prelude::{Entity, Resource},
         query::With,
         reflect::{AppTypeRegistry, ReflectComponent, ReflectResource},
-        world::SubWorld,
+        world::World,
     };
 
     use bevy_reflect::Reflect;
@@ -425,7 +425,7 @@ mod tests {
 
     #[test]
     fn extract_one_entity() {
-        let mut world = SubWorld::default();
+        let mut world = World::default();
 
         let atr = AppTypeRegistry::default();
         atr.write().register::<ComponentA>();
@@ -445,7 +445,7 @@ mod tests {
 
     #[test]
     fn extract_one_entity_twice() {
-        let mut world = SubWorld::default();
+        let mut world = World::default();
 
         let atr = AppTypeRegistry::default();
         atr.write().register::<ComponentA>();
@@ -466,7 +466,7 @@ mod tests {
 
     #[test]
     fn extract_one_entity_two_components() {
-        let mut world = SubWorld::default();
+        let mut world = World::default();
 
         let atr = AppTypeRegistry::default();
         {
@@ -491,7 +491,7 @@ mod tests {
 
     #[test]
     fn extract_entity_order() {
-        let mut world = SubWorld::default();
+        let mut world = World::default();
         world.init_resource::<AppTypeRegistry>();
 
         // Spawn entities in order
@@ -517,7 +517,7 @@ mod tests {
 
     #[test]
     fn extract_query() {
-        let mut world = SubWorld::default();
+        let mut world = World::default();
 
         let atr = AppTypeRegistry::default();
         {
@@ -544,7 +544,7 @@ mod tests {
 
     #[test]
     fn remove_componentless_entity() {
-        let mut world = SubWorld::default();
+        let mut world = World::default();
 
         let atr = AppTypeRegistry::default();
         atr.write().register::<ComponentA>();
@@ -564,7 +564,7 @@ mod tests {
 
     #[test]
     fn extract_one_resource() {
-        let mut world = SubWorld::default();
+        let mut world = World::default();
 
         let atr = AppTypeRegistry::default();
         atr.write().register::<ResourceA>();
@@ -582,7 +582,7 @@ mod tests {
 
     #[test]
     fn extract_one_resource_twice() {
-        let mut world = SubWorld::default();
+        let mut world = World::default();
 
         let atr = AppTypeRegistry::default();
         atr.write().register::<ResourceA>();
@@ -601,7 +601,7 @@ mod tests {
 
     #[test]
     fn should_extract_allowed_components() {
-        let mut world = SubWorld::default();
+        let mut world = World::default();
 
         let atr = AppTypeRegistry::default();
         {
@@ -628,7 +628,7 @@ mod tests {
 
     #[test]
     fn should_not_extract_denied_components() {
-        let mut world = SubWorld::default();
+        let mut world = World::default();
 
         let atr = AppTypeRegistry::default();
         {
@@ -655,7 +655,7 @@ mod tests {
 
     #[test]
     fn should_extract_allowed_resources() {
-        let mut world = SubWorld::default();
+        let mut world = World::default();
 
         let atr = AppTypeRegistry::default();
         {
@@ -679,7 +679,7 @@ mod tests {
 
     #[test]
     fn should_not_extract_denied_resources() {
-        let mut world = SubWorld::default();
+        let mut world = World::default();
 
         let atr = AppTypeRegistry::default();
         {
@@ -707,7 +707,7 @@ mod tests {
         #[reflect(Resource, Component)]
         struct SomeType(i32);
 
-        let mut world = SubWorld::default();
+        let mut world = World::default();
         let atr = AppTypeRegistry::default();
         {
             let mut register = atr.write();

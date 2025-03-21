@@ -19,7 +19,7 @@ use bevy_ecs::{
     resource::Resource,
     schedule::IntoScheduleConfigs as _,
     system::{lifetimeless::Read, Commands, Query, Res, ResMut},
-    world::{FromWorld, SubWorld},
+    world::{FromWorld, World},
 };
 use bevy_image::BevyDefault as _;
 use bevy_reflect::{std_traits::ReflectDefault, Reflect};
@@ -288,7 +288,7 @@ impl ViewNode for ScreenSpaceReflectionsNode {
             view_bind_group,
             ssr_pipeline_id,
         ): QueryItem<'w, Self::ViewQuery>,
-        world: &'w SubWorld,
+        world: &'w World,
     ) -> Result<(), NodeRunError> {
         // Grab the render pipeline.
         let pipeline_cache = world.resource::<PipelineCache>();
@@ -349,7 +349,7 @@ impl ViewNode for ScreenSpaceReflectionsNode {
 }
 
 impl FromWorld for ScreenSpaceReflectionsPipeline {
-    fn from_world(world: &mut SubWorld) -> Self {
+    fn from_world(world: &mut World) -> Self {
         let mesh_view_layouts = world.resource::<MeshPipelineViewLayouts>().clone();
         let render_device = world.resource::<RenderDevice>();
         let render_adapter = world.resource::<RenderAdapter>();

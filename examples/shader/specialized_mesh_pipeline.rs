@@ -169,7 +169,7 @@ struct CustomMeshPipeline {
     shader_handle: Handle<Shader>,
 }
 impl FromWorld for CustomMeshPipeline {
-    fn from_world(world: &mut SubWorld) -> Self {
+    fn from_world(world: &mut World) -> Self {
         // Load the shader
         let shader_handle: Handle<Shader> = world.resource::<AssetServer>().load(SHADER_ASSET_PATH);
         Self {

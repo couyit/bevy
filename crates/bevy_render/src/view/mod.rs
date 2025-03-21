@@ -579,7 +579,7 @@ pub struct ViewUniforms {
 }
 
 impl FromWorld for ViewUniforms {
-    fn from_world(world: &mut SubWorld) -> Self {
+    fn from_world(world: &mut World) -> Self {
         let mut uniforms = DynamicUniformBuffer::default();
         uniforms.set_label(Some("view_uniforms_buffer"));
 

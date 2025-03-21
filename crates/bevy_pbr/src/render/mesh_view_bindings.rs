@@ -14,7 +14,7 @@ use bevy_ecs::{
     query::Has,
     resource::Resource,
     system::{Commands, Query, Res},
-    world::{FromWorld, SubWorld},
+    world::{FromWorld, World},
 };
 use bevy_image::BevyDefault as _;
 use bevy_math::Vec4;
@@ -411,7 +411,7 @@ pub struct MeshPipelineViewLayouts(
 );
 
 impl FromWorld for MeshPipelineViewLayouts {
-    fn from_world(world: &mut SubWorld) -> Self {
+    fn from_world(world: &mut World) -> Self {
         // Generates all possible view layouts for the mesh pipeline, based on all combinations of
         // [`MeshPipelineViewLayoutKey`] flags.
 

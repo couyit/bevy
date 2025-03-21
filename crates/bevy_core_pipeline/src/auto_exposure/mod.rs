@@ -94,7 +94,7 @@ impl Plugin for AutoExposurePlugin {
 }
 
 impl FromWorld for AutoExposureResources {
-    fn from_world(world: &mut SubWorld) -> Self {
+    fn from_world(world: &mut World) -> Self {
         Self {
             histogram: world
                 .resource::<RenderDevice>()

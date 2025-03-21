@@ -15,11 +15,11 @@ macro_rules! create_entities {
 #[derive(Component)]
 struct Data(f32);
 
-pub struct Benchmark<'w>(SubWorld, QueryState<&'w mut Data>);
+pub struct Benchmark<'w>(World, QueryState<&'w mut Data>);
 
 impl<'w> Benchmark<'w> {
     pub fn new() -> Self {
-        let mut world = SubWorld::new();
+        let mut world = World::new();
         for _ in 0..5 {
             world.spawn(Data(1.0));
         }

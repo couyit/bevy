@@ -1,6 +1,6 @@
 use crate::{
     system::{Command, SystemBuffer, SystemMeta},
-    world::{DeferredWorld, SubWorld},
+    world::{DeferredWorld, World},
 };
 use alloc::{boxed::Box, vec::Vec};
 use bevy_ptr::{OwningPtr, Unaligned};
@@ -20,7 +20,7 @@ struct CommandMeta {
     ///
     /// Advances `cursor` by the size of `T` in bytes.
     consume_command_and_get_size:
-        unsafe fn(value: OwningPtr<Unaligned>, world: Option<NonNull<SubWorld>>, cursor: &mut usize),
+        unsafe fn(value: OwningPtr<Unaligned>, world: Option<NonNull<World>>, cursor: &mut usize),
 }
 
 /// Densely and efficiently stores a queue of heterogenous types implementing [`Command`].
@@ -82,7 +82,7 @@ impl CommandQueue {
     /// Execute the queued [`Command`]s in the world after applying any commands in the world's internal queue.
     /// This clears the queue.
     #[inline]
-    pub fn apply(&mut self, world: &mut SubWorld) {
+    pub fn apply(&mut self, world: &mut World) {
         // flush the previously queued entities
         world.flush_entities();
 
@@ -220,7 +220,7 @@ impl RawCommandQueue {
     ///
     /// * Caller ensures that `self` has not outlived the underlying queue
     #[inline]
-    pub(crate) unsafe fn apply_or_drop_queued(&mut self, world: Option<NonNull<SubWorld>>) {
+    pub(crate) unsafe fn apply_or_drop_queued(&mut self, world: Option<NonNull<World>>) {
         // SAFETY: If this is the command queue on world, world will not be dropped as we have a mutable reference
         // If this is not the command queue on world we have exclusive ownership and self will not be mutated
         let start = *self.cursor.as_ref();
@@ -320,7 +320,7 @@ impl Drop for CommandQueue {
 
 impl SystemBuffer for CommandQueue {
     #[inline]
-    fn apply(&mut self, _system_meta: &SystemMeta, world: &mut SubWorld) {
+    fn apply(&mut self, _system_meta: &SystemMeta, world: &mut World) {
         #[cfg(feature = "trace")]
         let _span_guard = _system_meta.commands_span.enter();
         self.apply(world);
@@ -361,7 +361,7 @@ mod test {
     }
 
     impl Command for DropCheck {
-        fn apply(self, _: &mut SubWorld) {}
+        fn apply(self, _: &mut World) {}
     }
 
     #[test]
@@ -377,7 +377,7 @@ mod test {
         assert_eq!(drops_a.load(Ordering::Relaxed), 0);
         assert_eq!(drops_b.load(Ordering::Relaxed), 0);
 
-        let mut world = SubWorld::new();
+        let mut world = World::new();
         queue.apply(&mut world);
 
         assert_eq!(drops_a.load(Ordering::Relaxed), 1);
@@ -408,7 +408,7 @@ mod test {
     struct SpawnCommand;
 
     impl Command for SpawnCommand {
-        fn apply(self, world: &mut SubWorld) {
+        fn apply(self, world: &mut World) {
             world.spawn_empty();
         }
     }
@@ -420,7 +420,7 @@ mod test {
         queue.push(SpawnCommand);
         queue.push(SpawnCommand);
 
-        let mut world = SubWorld::new();
+        let mut world = World::new();
         queue.apply(&mut world);
 
         assert_eq!(world.entities().len(), 2);
@@ -437,7 +437,7 @@ mod test {
     )]
     struct PanicCommand(String);
     impl Command for PanicCommand {
-        fn apply(self, _: &mut SubWorld) {
+        fn apply(self, _: &mut World) {
             panic!("command is panicking");
         }
     }
@@ -451,7 +451,7 @@ mod test {
         queue.push(PanicCommand("I panic!".to_owned()));
         queue.push(SpawnCommand);
 
-        let mut world = SubWorld::new();
+        let mut world = World::new();
 
         let _ = std::panic::catch_unwind(AssertUnwindSafe(|| {
             queue.apply(&mut world);
@@ -472,14 +472,14 @@ mod test {
         #[derive(Resource, Default)]
         struct Order(Vec<usize>);
 
-        let mut world = SubWorld::new();
+        let mut world = World::new();
         world.init_resource::<Order>();
 
         fn add_index(index: usize) -> impl Command {
-            move |world: &mut SubWorld| world.resource_mut::<Order>().0.push(index)
+            move |world: &mut World| world.resource_mut::<Order>().0.push(index)
         }
         world.commands().queue(add_index(1));
-        world.commands().queue(|world: &mut SubWorld| {
+        world.commands().queue(|world: &mut World| {
             world.commands().queue(add_index(2));
             world.commands().queue(PanicCommand("I panic!".to_owned()));
             world.commands().queue(add_index(3));
@@ -516,7 +516,7 @@ mod test {
     )]
     struct CommandWithPadding(u8, u16);
     impl Command for CommandWithPadding {
-        fn apply(self, _: &mut SubWorld) {}
+        fn apply(self, _: &mut World) {}
     }
 
     #[cfg(miri)]

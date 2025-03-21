@@ -1806,7 +1806,7 @@ pub struct MeshPipeline {
 }
 
 impl FromWorld for MeshPipeline {
-    fn from_world(world: &mut SubWorld) -> Self {
+    fn from_world(world: &mut World) -> Self {
         let mut system_state: SystemState<(
             Res<RenderDevice>,
             Res<RenderAdapter>,

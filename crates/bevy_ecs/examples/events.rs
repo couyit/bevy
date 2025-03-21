@@ -7,7 +7,7 @@ use bevy_ecs::{event::EventRegistry, prelude::*};
 
 fn main() {
     // Create a new empty world and add the event as a resource
-    let mut world = SubWorld::new();
+    let mut world = World::new();
     // The event registry is stored as a resource, and allows us to quickly update all events at once.
     // This call adds both the registry resource and the events resource into the world.
     EventRegistry::register_event::<MyEvent>(&mut world);

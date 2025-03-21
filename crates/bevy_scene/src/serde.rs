@@ -516,7 +516,7 @@ mod tests {
     };
     use bevy_ecs::{
         entity::{hash_map::EntityHashMap, Entity},
-        prelude::{Component, ReflectComponent, ReflectResource, Resource, SubWorld},
+        prelude::{Component, ReflectComponent, ReflectResource, Resource, World},
         query::{With, Without},
         reflect::AppTypeRegistry,
         world::FromWorld,
@@ -589,13 +589,13 @@ mod tests {
     struct MyEntityRef(#[entities] Entity);
 
     impl FromWorld for MyEntityRef {
-        fn from_world(_world: &mut SubWorld) -> Self {
+        fn from_world(_world: &mut World) -> Self {
             Self(Entity::PLACEHOLDER)
         }
     }
 
-    fn create_world() -> SubWorld {
-        let mut world = SubWorld::new();
+    fn create_world() -> World {
+        let mut world = World::new();
         let registry = AppTypeRegistry::default();
         {
             let mut registry = registry.write();
@@ -727,7 +727,7 @@ mod tests {
         assert_eq!(1, dst_world.query::<&Baz>().iter(&dst_world).count());
     }
 
-    fn roundtrip_ron(world: &SubWorld) -> (DynamicScene, DynamicScene) {
+    fn roundtrip_ron(world: &World) -> (DynamicScene, DynamicScene) {
         let scene = DynamicScene::from_world(world);
         let registry = world.resource::<AppTypeRegistry>().read();
         let serialized = scene.serialize(&registry).unwrap();

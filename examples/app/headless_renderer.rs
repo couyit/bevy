@@ -341,7 +341,7 @@ impl render_graph::Node for ImageCopyDriver {
         &self,
         _graph: &mut RenderGraphContext,
         render_context: &mut RenderContext,
-        world: &SubWorld,
+        world: &World,
     ) -> Result<(), NodeRunError> {
         let image_copiers = world.get_resource::<ImageCopiers>().unwrap();
         let gpu_images = world

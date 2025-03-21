@@ -9,7 +9,7 @@ use bevy_ecs::{
     reflect::ReflectComponent,
     resource::Resource,
     system::{Local, Query, ResMut, SystemState},
-    world::{Mut, OnAdd, OnRemove, SubWorld},
+    world::{Mut, OnAdd, OnRemove, World},
 };
 use bevy_platform_support::collections::{HashMap, HashSet};
 use bevy_reflect::{std_traits::ReflectDefault, Reflect};
@@ -208,7 +208,7 @@ pub(crate) struct PendingSyncEntity {
     records: Vec<EntityRecord>,
 }
 
-pub(crate) fn entity_sync_system(main_world: &mut SubWorld, render_world: &mut SubWorld) {
+pub(crate) fn entity_sync_system(main_world: &mut World, render_world: &mut World) {
     main_world.resource_scope(|world, mut pending: Mut<PendingSyncEntity>| {
         // TODO : batching record
         for record in pending.drain(..) {
@@ -251,7 +251,7 @@ pub(crate) fn entity_sync_system(main_world: &mut SubWorld, render_world: &mut S
 }
 
 pub(crate) fn despawn_temporary_render_entities(
-    world: &mut SubWorld,
+    world: &mut World,
     state: &mut SystemState<Query<Entity, With<TemporaryRenderEntity>>>,
     mut local: Local<Vec<Entity>>,
 ) {
@@ -279,7 +279,7 @@ mod render_entities_world_query_impls {
         entity::Entity,
         query::{FilteredAccess, QueryData, ReadOnlyQueryData, WorldQuery},
         storage::{Table, TableRow},
-        world::{unsafe_world_cell::UnsafeWorldCell, SubWorld},
+        world::{unsafe_world_cell::UnsafeWorldCell, World},
     };
 
     /// SAFETY: defers completely to `&RenderEntity` implementation,
@@ -339,7 +339,7 @@ mod render_entities_world_query_impls {
             <&RenderEntity as WorldQuery>::update_component_access(&component_id, access);
         }
 
-        fn init_state(world: &mut SubWorld) -> ComponentId {
+        fn init_state(world: &mut World) -> ComponentId {
             <&RenderEntity as WorldQuery>::init_state(world)
         }
 
@@ -439,7 +439,7 @@ mod render_entities_world_query_impls {
             <&MainEntity as WorldQuery>::update_component_access(&component_id, access);
         }
 
-        fn init_state(world: &mut SubWorld) -> ComponentId {
+        fn init_state(world: &mut World) -> ComponentId {
             <&MainEntity as WorldQuery>::init_state(world)
         }
 
@@ -490,7 +490,7 @@ mod tests {
         observer::Trigger,
         query::With,
         system::{Query, ResMut},
-        world::{OnAdd, OnRemove, SubWorld},
+        world::{OnAdd, OnRemove, World},
     };
 
     use super::{
@@ -503,8 +503,8 @@ mod tests {
 
     #[test]
     fn sync_world() {
-        let mut main_world = SubWorld::new();
-        let mut render_world = SubWorld::new();
+        let mut main_world = World::new();
+        let mut render_world = World::new();
         main_world.init_resource::<PendingSyncEntity>();
 
         main_world.add_observer(

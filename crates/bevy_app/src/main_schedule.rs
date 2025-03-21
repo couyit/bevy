@@ -7,7 +7,7 @@ use bevy_ecs::{
         SystemSet,
     },
     system::Local,
-    world::{Mut, SubWorld},
+    world::{Mut, World},
 };
 
 /// The schedule that contains the app logic that is evaluated each tick of [`App::update()`].
@@ -266,7 +266,7 @@ impl MainScheduleOrder {
 
 impl Main {
     /// A system that runs the "main schedule"
-    pub fn run_main(world: &mut SubWorld, mut run_at_least_once: Local<bool>) {
+    pub fn run_main(world: &mut World, mut run_at_least_once: Local<bool>) {
         if !*run_at_least_once {
             world.resource_scope(|world, order: Mut<MainScheduleOrder>| {
                 for &label in &order.startup_labels {
@@ -368,7 +368,7 @@ impl FixedMainScheduleOrder {
 
 impl FixedMain {
     /// A system that runs the fixed timestep's "main schedule"
-    pub fn run_fixed_main(world: &mut SubWorld) {
+    pub fn run_fixed_main(world: &mut World) {
         world.resource_scope(|world, order: Mut<FixedMainScheduleOrder>| {
             for &label in &order.labels {
                 let _ = world.try_run_schedule(label);

@@ -144,7 +144,7 @@ impl ViewNode for PostProcessNode {
         _graph: &mut RenderGraphContext,
         render_context: &mut RenderContext,
         (view_target, _post_process_settings, settings_index): QueryItem<Self::ViewQuery>,
-        world: &SubWorld,
+        world: &World,
     ) -> Result<(), NodeRunError> {
         // Get the pipeline resource that contains the global data we need
         // to create the render pipeline
@@ -234,7 +234,7 @@ struct PostProcessPipeline {
 }
 
 impl FromWorld for PostProcessPipeline {
-    fn from_world(world: &mut SubWorld) -> Self {
+    fn from_world(world: &mut World) -> Self {
         let render_device = world.resource::<RenderDevice>();
 
         // We need to define the bind group layout used for our pipeline

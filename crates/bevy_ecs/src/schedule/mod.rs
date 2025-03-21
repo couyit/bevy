@@ -30,7 +30,7 @@ mod tests {
     use core::sync::atomic::{AtomicU32, Ordering};
 
     pub use crate::{
-        prelude::SubWorld,
+        prelude::World,
         resource::Resource,
         schedule::{Schedule, SystemSet},
         system::{Res, ResMut},
@@ -54,7 +54,7 @@ mod tests {
     #[derive(Resource, Default)]
     struct Counter(pub AtomicU32);
 
-    fn make_exclusive_system(tag: u32) -> impl FnMut(&mut SubWorld) {
+    fn make_exclusive_system(tag: u32) -> impl FnMut(&mut World) {
         move |world| world.resource_mut::<SystemOrder>().0.push(tag)
     }
 
@@ -66,7 +66,7 @@ mod tests {
         resource.0.push(u32::MAX);
     }
 
-    fn named_exclusive_system(world: &mut SubWorld) {
+    fn named_exclusive_system(world: &mut World) {
         world.resource_mut::<SystemOrder>().0.push(u32::MAX);
     }
 
@@ -79,7 +79,7 @@ mod tests {
 
         #[test]
         fn run_system() {
-            let mut world = SubWorld::default();
+            let mut world = World::default();
             let mut schedule = Schedule::default();
 
             world.init_resource::<SystemOrder>();
@@ -92,7 +92,7 @@ mod tests {
 
         #[test]
         fn run_exclusive_system() {
-            let mut world = SubWorld::default();
+            let mut world = World::default();
             let mut schedule = Schedule::default();
 
             world.init_resource::<SystemOrder>();
@@ -110,7 +110,7 @@ mod tests {
             use bevy_tasks::{ComputeTaskPool, TaskPool};
             use std::sync::Barrier;
 
-            let mut world = SubWorld::default();
+            let mut world = World::default();
             let mut schedule = Schedule::default();
             let thread_count = ComputeTaskPool::get_or_init(TaskPool::default).thread_num();
 
@@ -132,7 +132,7 @@ mod tests {
 
         #[test]
         fn order_systems() {
-            let mut world = SubWorld::default();
+            let mut world = World::default();
             let mut schedule = Schedule::default();
 
             world.init_resource::<SystemOrder>();
@@ -170,7 +170,7 @@ mod tests {
 
         #[test]
         fn order_exclusive_systems() {
-            let mut world = SubWorld::default();
+            let mut world = World::default();
             let mut schedule = Schedule::default();
 
             world.init_resource::<SystemOrder>();
@@ -187,7 +187,7 @@ mod tests {
 
         #[test]
         fn add_systems_correct_order() {
-            let mut world = SubWorld::new();
+            let mut world = World::new();
             let mut schedule = Schedule::default();
 
             world.init_resource::<SystemOrder>();
@@ -208,7 +208,7 @@ mod tests {
 
         #[test]
         fn add_systems_correct_order_nested() {
-            let mut world = SubWorld::new();
+            let mut world = World::new();
             let mut schedule = Schedule::default();
 
             world.init_resource::<SystemOrder>();
@@ -258,7 +258,7 @@ mod tests {
 
         #[test]
         fn system_with_condition() {
-            let mut world = SubWorld::default();
+            let mut world = World::default();
             let mut schedule = Schedule::default();
 
             world.init_resource::<RunConditionBool>();
@@ -278,7 +278,7 @@ mod tests {
 
         #[test]
         fn systems_with_distributive_condition() {
-            let mut world = SubWorld::default();
+            let mut world = World::default();
             let mut schedule = Schedule::default();
 
             world.insert_resource(RunConditionBool(true));
@@ -304,7 +304,7 @@ mod tests {
 
         #[test]
         fn run_exclusive_system_with_condition() {
-            let mut world = SubWorld::default();
+            let mut world = World::default();
             let mut schedule = Schedule::default();
 
             world.init_resource::<RunConditionBool>();
@@ -324,7 +324,7 @@ mod tests {
 
         #[test]
         fn multiple_conditions_on_system() {
-            let mut world = SubWorld::default();
+            let mut world = World::default();
             let mut schedule = Schedule::default();
 
             world.init_resource::<Counter>();
@@ -342,7 +342,7 @@ mod tests {
 
         #[test]
         fn multiple_conditions_on_system_sets() {
-            let mut world = SubWorld::default();
+            let mut world = World::default();
             let mut schedule = Schedule::default();
 
             world.init_resource::<Counter>();
@@ -362,7 +362,7 @@ mod tests {
 
         #[test]
         fn systems_nested_in_system_sets() {
-            let mut world = SubWorld::default();
+            let mut world = World::default();
             let mut schedule = Schedule::default();
 
             world.init_resource::<Counter>();
@@ -385,7 +385,7 @@ mod tests {
             #[derive(Resource, Default)]
             struct Bool2(pub bool);
 
-            let mut world = SubWorld::default();
+            let mut world = World::default();
             world.init_resource::<Counter>();
             world.init_resource::<RunConditionBool>();
             world.init_resource::<Bool2>();
@@ -433,7 +433,7 @@ mod tests {
             #[derive(Resource, Default)]
             struct Bool2(pub bool);
 
-            let mut world = SubWorld::default();
+            let mut world = World::default();
             world.init_resource::<Counter>();
             world.init_resource::<RunConditionBool>();
             world.init_resource::<Bool2>();
@@ -483,7 +483,7 @@ mod tests {
             #[derive(Resource, Default)]
             struct Bool2(pub bool);
 
-            let mut world = SubWorld::default();
+            let mut world = World::default();
             world.init_resource::<Counter>();
             world.init_resource::<RunConditionBool>();
             world.init_resource::<Bool2>();
@@ -542,7 +542,7 @@ mod tests {
 
         #[test]
         fn dependency_cycle() {
-            let mut world = SubWorld::new();
+            let mut world = World::new();
             let mut schedule = Schedule::default();
 
             schedule.configure_sets(TestSet::A.after(TestSet::B));
@@ -557,7 +557,7 @@ mod tests {
             fn foo() {}
             fn bar() {}
 
-            let mut world = SubWorld::new();
+            let mut world = World::new();
             let mut schedule = Schedule::default();
 
             schedule.add_systems((foo.after(bar), bar.after(foo)));
@@ -577,7 +577,7 @@ mod tests {
 
         #[test]
         fn hierarchy_cycle() {
-            let mut world = SubWorld::new();
+            let mut world = World::new();
             let mut schedule = Schedule::default();
 
             schedule.configure_sets(TestSet::A.in_set(TestSet::B));
@@ -593,7 +593,7 @@ mod tests {
             fn foo() {}
             fn bar() {}
 
-            let mut world = SubWorld::new();
+            let mut world = World::new();
             let mut schedule = Schedule::default();
 
             // Schedule `bar` to run after `foo`.
@@ -638,7 +638,7 @@ mod tests {
 
         #[test]
         fn hierarchy_redundancy() {
-            let mut world = SubWorld::new();
+            let mut world = World::new();
             let mut schedule = Schedule::default();
 
             schedule.set_build_settings(ScheduleBuildSettings {
@@ -665,7 +665,7 @@ mod tests {
 
         #[test]
         fn cross_dependency() {
-            let mut world = SubWorld::new();
+            let mut world = World::new();
             let mut schedule = Schedule::default();
 
             // Add `B` and give it both kinds of relationships with `A`.
@@ -680,7 +680,7 @@ mod tests {
 
         #[test]
         fn sets_have_order_but_intersect() {
-            let mut world = SubWorld::new();
+            let mut world = World::new();
             let mut schedule = Schedule::default();
 
             fn foo() {}
@@ -711,7 +711,7 @@ mod tests {
             fn res_ref(_x: Res<X>) {}
             fn res_mut(_x: ResMut<X>) {}
 
-            let mut world = SubWorld::new();
+            let mut world = World::new();
             let mut schedule = Schedule::default();
 
             schedule.set_build_settings(ScheduleBuildSettings {
@@ -761,14 +761,14 @@ mod tests {
         fn event_reader_system(_reader: EventReader<E>) {}
         fn event_writer_system(_writer: EventWriter<E>) {}
         fn event_resource_system(_events: ResMut<Events<E>>) {}
-        fn read_world_system(_world: &SubWorld) {}
-        fn write_world_system(_world: &mut SubWorld) {}
+        fn read_world_system(_world: &World) {}
+        fn write_world_system(_world: &mut World) {}
 
         // Tests for conflict detection
 
         #[test]
         fn one_of_everything() {
-            let mut world = SubWorld::new();
+            let mut world = World::new();
             world.insert_resource(R);
             world.spawn(A);
             world.init_resource::<Events<E>>();
@@ -785,7 +785,7 @@ mod tests {
 
         #[test]
         fn read_only() {
-            let mut world = SubWorld::new();
+            let mut world = World::new();
             world.insert_resource(R);
             world.spawn(A);
             world.init_resource::<Events<E>>();
@@ -815,7 +815,7 @@ mod tests {
 
         #[test]
         fn read_world() {
-            let mut world = SubWorld::new();
+            let mut world = World::new();
             world.insert_resource(R);
             world.spawn(A);
             world.init_resource::<Events<E>>();
@@ -835,7 +835,7 @@ mod tests {
 
         #[test]
         fn resources() {
-            let mut world = SubWorld::new();
+            let mut world = World::new();
             world.insert_resource(R);
 
             let mut schedule = Schedule::default();
@@ -848,7 +848,7 @@ mod tests {
 
         #[test]
         fn nonsend() {
-            let mut world = SubWorld::new();
+            let mut world = World::new();
             world.insert_resource(R);
 
             let mut schedule = Schedule::default();
@@ -861,7 +861,7 @@ mod tests {
 
         #[test]
         fn components() {
-            let mut world = SubWorld::new();
+            let mut world = World::new();
             world.spawn(A);
 
             let mut schedule = Schedule::default();
@@ -875,7 +875,7 @@ mod tests {
         #[test]
         #[ignore = "Known failing but fix is non-trivial: https://github.com/bevyengine/bevy/issues/4381"]
         fn filtered_components() {
-            let mut world = SubWorld::new();
+            let mut world = World::new();
             world.spawn(A);
 
             let mut schedule = Schedule::default();
@@ -891,7 +891,7 @@ mod tests {
 
         #[test]
         fn events() {
-            let mut world = SubWorld::new();
+            let mut world = World::new();
             world.init_resource::<Events<E>>();
 
             let mut schedule = Schedule::default();
@@ -911,7 +911,7 @@ mod tests {
         /// conflict with each other.
         #[test]
         fn shared_resource_mut_component() {
-            let mut world = SubWorld::new();
+            let mut world = World::new();
             world.insert_resource(RC);
 
             let mut schedule = Schedule::default();
@@ -924,7 +924,7 @@ mod tests {
 
         #[test]
         fn resource_mut_and_entity_ref() {
-            let mut world = SubWorld::new();
+            let mut world = World::new();
             world.insert_resource(R);
 
             let mut schedule = Schedule::default();
@@ -937,7 +937,7 @@ mod tests {
 
         #[test]
         fn resource_and_entity_mut() {
-            let mut world = SubWorld::new();
+            let mut world = World::new();
             world.insert_resource(R);
 
             let mut schedule = Schedule::default();
@@ -950,7 +950,7 @@ mod tests {
 
         #[test]
         fn write_component_and_entity_ref() {
-            let mut world = SubWorld::new();
+            let mut world = World::new();
             world.insert_resource(R);
 
             let mut schedule = Schedule::default();
@@ -963,7 +963,7 @@ mod tests {
 
         #[test]
         fn read_component_and_entity_mut() {
-            let mut world = SubWorld::new();
+            let mut world = World::new();
             world.insert_resource(R);
 
             let mut schedule = Schedule::default();
@@ -976,7 +976,7 @@ mod tests {
 
         #[test]
         fn exclusive() {
-            let mut world = SubWorld::new();
+            let mut world = World::new();
             world.insert_resource(R);
             world.spawn(A);
             world.init_resource::<Events<E>>();
@@ -997,7 +997,7 @@ mod tests {
         // Tests for silencing and resolving ambiguities
         #[test]
         fn before_and_after() {
-            let mut world = SubWorld::new();
+            let mut world = World::new();
             world.init_resource::<Events<E>>();
 
             let mut schedule = Schedule::default();
@@ -1014,7 +1014,7 @@ mod tests {
 
         #[test]
         fn ignore_all_ambiguities() {
-            let mut world = SubWorld::new();
+            let mut world = World::new();
             world.insert_resource(R);
 
             let mut schedule = Schedule::default();
@@ -1031,7 +1031,7 @@ mod tests {
 
         #[test]
         fn ambiguous_with_label() {
-            let mut world = SubWorld::new();
+            let mut world = World::new();
             world.insert_resource(R);
 
             #[derive(SystemSet, Hash, PartialEq, Eq, Debug, Clone)]
@@ -1051,7 +1051,7 @@ mod tests {
 
         #[test]
         fn ambiguous_with_system() {
-            let mut world = SubWorld::new();
+            let mut world = World::new();
 
             let mut schedule = Schedule::default();
             schedule.add_systems((
@@ -1075,7 +1075,7 @@ mod tests {
             fn system_d(_res: ResMut<R>) {}
             fn system_e(_res: ResMut<R>) {}
 
-            let mut world = SubWorld::new();
+            let mut world = World::new();
             world.insert_resource(R);
 
             let mut schedule = Schedule::new(TestSchedule);
@@ -1135,7 +1135,7 @@ mod tests {
             let mut schedule = Schedule::new(TestSchedule);
             schedule.add_systems((resmut_system, resmut_system).run_if(|| true));
 
-            let mut world = SubWorld::new();
+            let mut world = World::new();
             schedule.graph_mut().initialize(&mut world);
             let _ = schedule.graph_mut().build_schedule(
                 &mut world,
@@ -1160,7 +1160,7 @@ mod tests {
 
         #[test]
         fn ignore_component_resource_ambiguities() {
-            let mut world = SubWorld::new();
+            let mut world = World::new();
             world.insert_resource(R);
             world.allow_ambiguous_resource::<R>();
             let mut schedule = Schedule::new(TestSchedule);

@@ -8,7 +8,7 @@ use bevy_ecs::component::Components;
 use bevy_ecs::{
     archetype::Archetype,
     component::{ComponentId, Tick},
-    prelude::{Entity, Resource, SubWorld},
+    prelude::{Entity, Resource, World},
     query::{FilteredAccess, QueryData, QueryFilter, ReadFetch, WorldQuery},
     storage::{Table, TableRow},
     world::unsafe_world_cell::UnsafeWorldCell,
@@ -231,7 +231,7 @@ unsafe impl<A: AsAssetId> WorldQuery for AssetChanged<A> {
         access.add_resource_read(state.resource_id);
     }
 
-    fn init_state(world: &mut SubWorld) -> AssetChangedState<A> {
+    fn init_state(world: &mut World) -> AssetChangedState<A> {
         let resource_id = world.init_resource::<AssetChanges<A::Asset>>();
         let asset_id = world.register_component::<A>();
         AssetChangedState {

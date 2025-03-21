@@ -4,7 +4,7 @@ use crate::{
     entity::Entity,
     query::{DebugCheckedUnwrap, FilteredAccess, StorageSwitch, WorldQuery},
     storage::{ComponentSparseSet, Table, TableRow},
-    world::{unsafe_world_cell::UnsafeWorldCell, SubWorld},
+    world::{unsafe_world_cell::UnsafeWorldCell, World},
 };
 use bevy_ptr::{ThinSlicePtr, UnsafeCellDeref};
 use core::{cell::UnsafeCell, marker::PhantomData};
@@ -180,7 +180,7 @@ unsafe impl<T: Component> WorldQuery for With<T> {
         access.and_with(id);
     }
 
-    fn init_state(world: &mut SubWorld) -> ComponentId {
+    fn init_state(world: &mut World) -> ComponentId {
         world.register_component::<T>()
     }
 
@@ -280,7 +280,7 @@ unsafe impl<T: Component> WorldQuery for Without<T> {
         access.and_without(id);
     }
 
-    fn init_state(world: &mut SubWorld) -> ComponentId {
+    fn init_state(world: &mut World) -> ComponentId {
         world.register_component::<T>()
     }
 
@@ -727,7 +727,7 @@ unsafe impl<T: Component> WorldQuery for Added<T> {
         access.add_component_read(id);
     }
 
-    fn init_state(world: &mut SubWorld) -> ComponentId {
+    fn init_state(world: &mut World) -> ComponentId {
         world.register_component::<T>()
     }
 
@@ -954,7 +954,7 @@ unsafe impl<T: Component> WorldQuery for Changed<T> {
         access.add_component_read(id);
     }
 
-    fn init_state(world: &mut SubWorld) -> ComponentId {
+    fn init_state(world: &mut World) -> ComponentId {
         world.register_component::<T>()
     }
 

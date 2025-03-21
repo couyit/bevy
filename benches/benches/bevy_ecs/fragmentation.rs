@@ -21,7 +21,7 @@ fn iter_frag_empty(c: &mut Criterion) {
     group.measurement_time(core::time::Duration::from_secs(4));
 
     group.bench_function("foreach_table", |b| {
-        let mut world = SubWorld::new();
+        let mut world = World::new();
         spawn_empty_frag_archetype::<Table>(&mut world);
         let mut q: SystemState<Query<(Entity, &Table)>> =
             SystemState::<Query<(Entity, &Table<0>)>>::new(&mut world);
@@ -35,7 +35,7 @@ fn iter_frag_empty(c: &mut Criterion) {
         });
     });
     group.bench_function("foreach_sparse", |b| {
-        let mut world = SubWorld::new();
+        let mut world = World::new();
         spawn_empty_frag_archetype::<Sparse>(&mut world);
         let mut q: SystemState<Query<(Entity, &Sparse)>> =
             SystemState::<Query<(Entity, &Sparse<0>)>>::new(&mut world);
@@ -50,7 +50,7 @@ fn iter_frag_empty(c: &mut Criterion) {
     });
     group.finish();
 
-    fn spawn_empty_frag_archetype<T: Component + Default>(world: &mut SubWorld) {
+    fn spawn_empty_frag_archetype<T: Component + Default>(world: &mut World) {
         for i in 0..65536 {
             let mut e = world.spawn_empty();
             if flip_coin() {

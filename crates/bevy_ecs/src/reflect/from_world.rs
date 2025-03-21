@@ -9,7 +9,7 @@
 use alloc::boxed::Box;
 use bevy_reflect::{FromType, Reflect};
 
-use crate::world::{FromWorld, SubWorld};
+use crate::world::{FromWorld, World};
 
 /// A struct used to operate on the reflected [`FromWorld`] trait of a type.
 ///
@@ -22,7 +22,7 @@ pub struct ReflectFromWorld(ReflectFromWorldFns);
 #[derive(Clone)]
 pub struct ReflectFromWorldFns {
     /// Function pointer implementing [`ReflectFromWorld::from_world()`].
-    pub from_world: fn(&mut SubWorld) -> Box<dyn Reflect>,
+    pub from_world: fn(&mut World) -> Box<dyn Reflect>,
 }
 
 impl ReflectFromWorldFns {
@@ -38,7 +38,7 @@ impl ReflectFromWorldFns {
 
 impl ReflectFromWorld {
     /// Constructs default reflected [`FromWorld`] from world using [`from_world()`](FromWorld::from_world).
-    pub fn from_world(&self, world: &mut SubWorld) -> Box<dyn Reflect> {
+    pub fn from_world(&self, world: &mut World) -> Box<dyn Reflect> {
         (self.0.from_world)(world)
     }
 

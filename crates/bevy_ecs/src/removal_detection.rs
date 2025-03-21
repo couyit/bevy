@@ -7,7 +7,7 @@ use crate::{
     prelude::Local,
     storage::SparseSet,
     system::{ReadOnlySystemParam, SystemMeta, SystemParam},
-    world::{unsafe_world_cell::UnsafeWorldCell, SubWorld},
+    world::{unsafe_world_cell::UnsafeWorldCell, World},
 };
 
 use derive_more::derive::Into;
@@ -254,7 +254,7 @@ unsafe impl<'a> SystemParam for &'a RemovedComponentEvents {
     type State = ();
     type Item<'w, 's> = &'w RemovedComponentEvents;
 
-    fn init_state(_world: &mut SubWorld, _system_meta: &mut SystemMeta) -> Self::State {}
+    fn init_state(_world: &mut World, _system_meta: &mut SystemMeta) -> Self::State {}
 
     #[inline]
     unsafe fn get_param<'w, 's>(

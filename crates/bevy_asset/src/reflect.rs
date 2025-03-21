@@ -1,7 +1,7 @@
 use alloc::boxed::Box;
 use core::any::{Any, TypeId};
 
-use bevy_ecs::world::{unsafe_world_cell::UnsafeWorldCell, SubWorld};
+use bevy_ecs::world::{unsafe_world_cell::UnsafeWorldCell, World};
 use bevy_reflect::{FromReflect, FromType, PartialReflect, Reflect};
 
 use crate::{Asset, AssetId, Assets, Handle, UntypedAssetId, UntypedHandle};
@@ -18,16 +18,16 @@ pub struct ReflectAsset {
     handle_type_id: TypeId,
     assets_resource_type_id: TypeId,
 
-    get: fn(&SubWorld, UntypedHandle) -> Option<&dyn Reflect>,
+    get: fn(&World, UntypedHandle) -> Option<&dyn Reflect>,
     // SAFETY:
     // - may only be called with an [`UnsafeWorldCell`] which can be used to access the corresponding `Assets<T>` resource mutably
     // - may only be used to access **at most one** access at once
     get_unchecked_mut: unsafe fn(UnsafeWorldCell<'_>, UntypedHandle) -> Option<&mut dyn Reflect>,
-    add: fn(&mut SubWorld, &dyn PartialReflect) -> UntypedHandle,
-    insert: fn(&mut SubWorld, UntypedHandle, &dyn PartialReflect),
-    len: fn(&SubWorld) -> usize,
-    ids: for<'w> fn(&'w SubWorld) -> Box<dyn Iterator<Item = UntypedAssetId> + 'w>,
-    remove: fn(&mut SubWorld, UntypedHandle) -> Option<Box<dyn Reflect>>,
+    add: fn(&mut World, &dyn PartialReflect) -> UntypedHandle,
+    insert: fn(&mut World, UntypedHandle, &dyn PartialReflect),
+    len: fn(&World) -> usize,
+    ids: for<'w> fn(&'w World) -> Box<dyn Iterator<Item = UntypedAssetId> + 'w>,
+    remove: fn(&mut World, UntypedHandle) -> Option<Box<dyn Reflect>>,
 }
 
 impl ReflectAsset {
@@ -42,14 +42,14 @@ impl ReflectAsset {
     }
 
     /// Equivalent of [`Assets::get`]
-    pub fn get<'w>(&self, world: &'w SubWorld, handle: UntypedHandle) -> Option<&'w dyn Reflect> {
+    pub fn get<'w>(&self, world: &'w World, handle: UntypedHandle) -> Option<&'w dyn Reflect> {
         (self.get)(world, handle)
     }
 
     /// Equivalent of [`Assets::get_mut`]
     pub fn get_mut<'w>(
         &self,
-        world: &'w mut SubWorld,
+        world: &'w mut World,
         handle: UntypedHandle,
     ) -> Option<&'w mut dyn Reflect> {
         // SAFETY: unique world access
@@ -103,31 +103,31 @@ impl ReflectAsset {
     }
 
     /// Equivalent of [`Assets::add`]
-    pub fn add(&self, world: &mut SubWorld, value: &dyn PartialReflect) -> UntypedHandle {
+    pub fn add(&self, world: &mut World, value: &dyn PartialReflect) -> UntypedHandle {
         (self.add)(world, value)
     }
     /// Equivalent of [`Assets::insert`]
-    pub fn insert(&self, world: &mut SubWorld, handle: UntypedHandle, value: &dyn PartialReflect) {
+    pub fn insert(&self, world: &mut World, handle: UntypedHandle, value: &dyn PartialReflect) {
         (self.insert)(world, handle, value);
     }
 
     /// Equivalent of [`Assets::remove`]
-    pub fn remove(&self, world: &mut SubWorld, handle: UntypedHandle) -> Option<Box<dyn Reflect>> {
+    pub fn remove(&self, world: &mut World, handle: UntypedHandle) -> Option<Box<dyn Reflect>> {
         (self.remove)(world, handle)
     }
 
     /// Equivalent of [`Assets::len`]
-    pub fn len(&self, world: &SubWorld) -> usize {
+    pub fn len(&self, world: &World) -> usize {
         (self.len)(world)
     }
 
     /// Equivalent of [`Assets::is_empty`]
-    pub fn is_empty(&self, world: &SubWorld) -> bool {
+    pub fn is_empty(&self, world: &World) -> bool {
         self.len(world) == 0
     }
 
     /// Equivalent of [`Assets::ids`]
-    pub fn ids<'w>(&self, world: &'w SubWorld) -> impl Iterator<Item = UntypedAssetId> + 'w {
+    pub fn ids<'w>(&self, world: &'w World) -> impl Iterator<Item = UntypedAssetId> + 'w {
         (self.ids)(world)
     }
 }

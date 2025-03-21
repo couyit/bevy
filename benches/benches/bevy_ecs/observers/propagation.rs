@@ -20,7 +20,7 @@ pub fn event_propagation(criterion: &mut Criterion) {
     group.measurement_time(core::time::Duration::from_secs(4));
 
     group.bench_function("single_event_type", |bencher| {
-        let mut world = SubWorld::new();
+        let mut world = World::new();
         let (roots, leaves, nodes) = spawn_listener_hierarchy(&mut world);
         add_listeners_to_hierarchy::<DENSITY, 1>(&roots, &leaves, &nodes, &mut world);
 
@@ -30,7 +30,7 @@ pub fn event_propagation(criterion: &mut Criterion) {
     });
 
     group.bench_function("single_event_type_no_listeners", |bencher| {
-        let mut world = SubWorld::new();
+        let mut world = World::new();
         let (roots, leaves, nodes) = spawn_listener_hierarchy(&mut world);
         add_listeners_to_hierarchy::<DENSITY, 1>(&roots, &leaves, &nodes, &mut world);
 
@@ -41,7 +41,7 @@ pub fn event_propagation(criterion: &mut Criterion) {
     });
 
     group.bench_function("four_event_types", |bencher| {
-        let mut world = SubWorld::new();
+        let mut world = World::new();
         let (roots, leaves, nodes) = spawn_listener_hierarchy(&mut world);
         const FRAC_N_EVENTS_4: usize = N_EVENTS / 4;
         const FRAC_DENSITY_4: usize = DENSITY / 4;
@@ -69,7 +69,7 @@ impl<const N: usize> Event for TestEvent<N> {
     const AUTO_PROPAGATE: bool = true;
 }
 
-fn send_events<const N: usize, const N_EVENTS: usize>(world: &mut SubWorld, leaves: &[Entity]) {
+fn send_events<const N: usize, const N_EVENTS: usize>(world: &mut World, leaves: &[Entity]) {
     let target = leaves.iter().choose(&mut rand::thread_rng()).unwrap();
 
     (0..N_EVENTS).for_each(|_| {
@@ -77,7 +77,7 @@ fn send_events<const N: usize, const N_EVENTS: usize>(world: &mut SubWorld, leav
     });
 }
 
-fn spawn_listener_hierarchy(world: &mut SubWorld) -> (Vec<Entity>, Vec<Entity>, Vec<Entity>) {
+fn spawn_listener_hierarchy(world: &mut World) -> (Vec<Entity>, Vec<Entity>, Vec<Entity>) {
     let mut roots = vec![];
     let mut leaves = vec![];
     let mut nodes = vec![];
@@ -101,7 +101,7 @@ fn add_listeners_to_hierarchy<const DENSITY: usize, const N: usize>(
     roots: &[Entity],
     leaves: &[Entity],
     nodes: &[Entity],
-    world: &mut SubWorld,
+    world: &mut World,
 ) {
     for e in roots.iter() {
         world.entity_mut(*e).observe(empty_listener::<N>);

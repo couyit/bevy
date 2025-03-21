@@ -290,7 +290,7 @@ mod tests {
 
     #[test]
     fn simple_set_and_get_navmap() {
-        let mut world = SubWorld::new();
+        let mut world = World::new();
         let a = world.spawn_empty().id();
         let b = world.spawn_empty().id();
 
@@ -306,7 +306,7 @@ mod tests {
 
     #[test]
     fn symmetrical_edges() {
-        let mut world = SubWorld::new();
+        let mut world = World::new();
         let a = world.spawn_empty().id();
         let b = world.spawn_empty().id();
 
@@ -319,7 +319,7 @@ mod tests {
 
     #[test]
     fn remove_nodes() {
-        let mut world = SubWorld::new();
+        let mut world = World::new();
         let a = world.spawn_empty().id();
         let b = world.spawn_empty().id();
 
@@ -338,7 +338,7 @@ mod tests {
 
     #[test]
     fn remove_multiple_nodes() {
-        let mut world = SubWorld::new();
+        let mut world = World::new();
         let a = world.spawn_empty().id();
         let b = world.spawn_empty().id();
         let c = world.spawn_empty().id();
@@ -363,7 +363,7 @@ mod tests {
 
     #[test]
     fn edges() {
-        let mut world = SubWorld::new();
+        let mut world = World::new();
         let a = world.spawn_empty().id();
         let b = world.spawn_empty().id();
         let c = world.spawn_empty().id();
@@ -382,7 +382,7 @@ mod tests {
 
     #[test]
     fn looping_edges() {
-        let mut world = SubWorld::new();
+        let mut world = World::new();
         let a = world.spawn_empty().id();
         let b = world.spawn_empty().id();
         let c = world.spawn_empty().id();
@@ -401,7 +401,7 @@ mod tests {
 
     #[test]
     fn nav_with_system_param() {
-        let mut world = SubWorld::new();
+        let mut world = World::new();
         let a = world.spawn_empty().id();
         let b = world.spawn_empty().id();
         let c = world.spawn_empty().id();

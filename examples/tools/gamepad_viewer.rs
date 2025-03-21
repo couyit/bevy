@@ -49,7 +49,7 @@ struct ButtonMaterials {
     active: MeshMaterial2d<ColorMaterial>,
 }
 impl FromWorld for ButtonMaterials {
-    fn from_world(world: &mut SubWorld) -> Self {
+    fn from_world(world: &mut World) -> Self {
         Self {
             normal: world.add_asset(NORMAL_BUTTON_COLOR).into(),
             active: world.add_asset(ACTIVE_BUTTON_COLOR).into(),
@@ -64,7 +64,7 @@ struct ButtonMeshes {
     trigger: Mesh2d,
 }
 impl FromWorld for ButtonMeshes {
-    fn from_world(world: &mut SubWorld) -> Self {
+    fn from_world(world: &mut World) -> Self {
         Self {
             circle: world.add_asset(Circle::new(BUTTON_RADIUS)).into(),
             triangle: world

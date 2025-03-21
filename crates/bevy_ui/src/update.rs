@@ -227,7 +227,7 @@ mod tests {
     use bevy_ecs::hierarchy::ChildOf;
     use bevy_ecs::schedule::IntoScheduleConfigs;
     use bevy_ecs::schedule::Schedule;
-    use bevy_ecs::world::SubWorld;
+    use bevy_ecs::world::World;
     use bevy_image::Image;
     use bevy_math::UVec2;
     use bevy_render::camera::Camera;
@@ -248,8 +248,8 @@ mod tests {
     use crate::UiScale;
     use crate::UiTargetCamera;
 
-    fn setup_test_world_and_schedule() -> (SubWorld, Schedule) {
-        let mut world = SubWorld::new();
+    fn setup_test_world_and_schedule() -> (World, Schedule) {
+        let mut world = World::new();
 
         world.init_resource::<UiScale>();
 

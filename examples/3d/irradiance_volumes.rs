@@ -483,7 +483,7 @@ fn handle_mouse_clicks(
 }
 
 impl FromWorld for ExampleAssets {
-    fn from_world(world: &mut SubWorld) -> Self {
+    fn from_world(world: &mut World) -> Self {
         let fox_animation =
             world.load_asset(GltfAssetLabel::Animation(1).from_asset("models/animated/Fox.glb"));
         let (fox_animation_graph, fox_animation_node) =

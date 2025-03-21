@@ -13,11 +13,11 @@ struct Rotation(Vec3);
 #[derive(Component, Copy, Clone)]
 struct Velocity(Vec3);
 
-pub struct Benchmark(SubWorld, Box<dyn System<In = (), Out = ()>>);
+pub struct Benchmark(World, Box<dyn System<In = (), Out = ()>>);
 
 impl Benchmark {
     pub fn new() -> Self {
-        let mut world = SubWorld::new();
+        let mut world = World::new();
 
         world.spawn_batch(core::iter::repeat_n(
             (

@@ -14,6 +14,11 @@ pub mod unsafe_world_cell;
 #[cfg(feature = "bevy_reflect")]
 pub mod reflect;
 
+use crate::{
+    change_detection::TicksMut,
+    component::ComponentTicks,
+    storage::{ResourceData, Resources},
+};
 pub use crate::{
     change_detection::{Mut, Ref, CHECK_TICK_THRESHOLD},
     world::command_queue::CommandQueue,
@@ -28,7 +33,7 @@ pub use entity_ref::{
     Entry, FilteredEntityMut, FilteredEntityRef, OccupiedEntry, TryFromFilteredError, VacantEntry,
 };
 pub use filtered_resource::*;
-use identifier::WorldId;
+use identifier::WorldsId;
 pub use spawn_batch::*;
 
 #[expect(
@@ -69,26 +74,42 @@ use crate::{
 };
 use alloc::{boxed::Box, vec::Vec};
 use bevy_platform_support::sync::atomic::{AtomicU32, Ordering};
-use bevy_ptr::Ptr;
+use bevy_ptr::{OwningPtr, Ptr};
 use core::{any::TypeId, fmt};
 use log::warn;
 use unsafe_world_cell::{UnsafeEntityCell, UnsafeWorldCell};
 
 #[derive(Clone, Copy)]
-pub struct SubWorldId(usize);
+pub struct WorldId(usize);
 
-pub struct World {
-    id: WorldId,
-    pub(crate) indices: TypeIdMap<SubWorldId>,
-    pub(crate) sub_worlds: Vec<SubWorld>,
+pub struct Worlds {
+    id: WorldsId,
+    pub(crate) indices: TypeIdMap<WorldId>,
+    pub(crate) worlds: Vec<World>,
+
+    pub(crate) change_tick: AtomicU32,
+    pub(crate) last_change_tick: Tick,
+
+    pub(crate) components: Components,
+    pub(crate) component_ids: ComponentIds,
+    pub(crate) resources: Resources<true>,
+    pub(crate) non_send_resources: Resources<false>,
 }
 
-impl Default for World {
+impl Default for Worlds {
     fn default() -> Self {
         let mut world = Self {
-            id: WorldId::new().unwrap(),
+            id: WorldsId::new().unwrap(),
             indices: TypeIdMap::default(),
-            sub_worlds: Vec::with_capacity(1),
+            worlds: Vec::with_capacity(1),
+
+            change_tick: AtomicU32::new(1),
+            last_change_tick: Tick::new(0),
+
+            components: Default::default(),
+            component_ids: Default::default(),
+            resources: Default::default(),
+            non_send_resources: Default::default(),
         };
 
         world.create_sub_world::<MainSubWorld>();
@@ -97,36 +118,71 @@ impl Default for World {
     }
 }
 
-impl World {
+impl Worlds {
     pub fn new() -> Self {
         Self::default()
     }
 
-    pub fn create_sub_world<T: SubWorldLabel>(&mut self) -> SubWorldId {
-        let id = SubWorldId(self.sub_worlds.len());
+    pub fn create_sub_world<T: SubWorldLabel>(&mut self) -> WorldId {
+        let id = WorldId(self.worlds.len());
 
         self.indices.insert(TypeId::of::<T>(), id);
-        self.sub_worlds.push(SubWorld::new(id));
+        self.worlds.push(World::new(id));
 
         id
     }
 
-    pub fn get_sub_world<T: SubWorldLabel>(&self) -> &SubWorld {
+    pub fn get_sub_world<T: SubWorldLabel>(&self) -> &World {
         let id = self.indices.get(&TypeId::of::<T>()).unwrap();
-        &self.sub_worlds[id.0]
+        &self.worlds[id.0]
     }
 
-    pub fn get_sub_world_mut<T: SubWorldLabel>(&mut self) -> &mut SubWorld {
+    pub fn get_sub_world_mut<T: SubWorldLabel>(&mut self) -> &mut World {
         let id = self.indices.get(&TypeId::of::<T>()).unwrap();
-        &mut self.sub_worlds[id.0]
+        &mut self.worlds[id.0]
     }
 
-    pub fn get_main(&self) -> &SubWorld {
+    pub fn get_main(&self) -> &World {
         self.get_sub_world::<MainSubWorld>()
     }
 
-    pub fn get_main_mut(&mut self) -> &mut SubWorld {
+    pub fn get_main_mut(&mut self) -> &mut World {
         self.get_sub_world_mut::<MainSubWorld>()
+    }
+
+    pub fn components_registrator(&mut self) -> ComponentsRegistrator {
+        unsafe { ComponentsRegistrator::new(&mut self.components, &mut self.component_ids) }
+    }
+
+    /// Reads the current change tick of this world.
+    ///
+    /// If you have exclusive (`&mut`) access to the world, consider using [`change_tick()`](Self::change_tick),
+    /// which is more efficient since it does not require atomic synchronization.
+    #[inline]
+    pub fn read_change_tick(&self) -> Tick {
+        let tick = self.change_tick.load(Ordering::Acquire);
+        Tick::new(tick)
+    }
+
+    /// Reads the current change tick of this world.
+    ///
+    /// This does the same thing as [`read_change_tick()`](Self::read_change_tick), only this method
+    /// is more efficient since it does not require atomic synchronization.
+    #[inline]
+    pub fn change_tick(&mut self) -> Tick {
+        let tick = *self.change_tick.get_mut();
+        Tick::new(tick)
+    }
+
+    /// When called from within an exclusive system (a [`System`] that takes `&mut World` as its first
+    /// parameter), this method returns the [`Tick`] indicating the last time the exclusive system was run.
+    ///
+    /// Otherwise, this returns the `Tick` indicating the last time that [`World::clear_trackers`] was called.
+    ///
+    /// [`System`]: crate::system::System
+    #[inline]
+    pub fn last_change_tick(&self) -> Tick {
+        self.last_change_tick
     }
 
     /// Registers a new [`Resource`] type and returns the [`ComponentId`] created for it.
@@ -179,7 +235,6 @@ impl World {
         let caller = MaybeLocation::caller();
         let component_id = self.components_registrator().register_resource::<R>();
         if self
-            .storages
             .resources
             .get(component_id)
             .is_none_or(|data| !data.is_present())
@@ -240,7 +295,6 @@ impl World {
         let caller = MaybeLocation::caller();
         let component_id = self.components_registrator().register_non_send::<R>();
         if self
-            .storages
             .non_send_resources
             .get(component_id)
             .is_none_or(|data| !data.is_present())
@@ -282,7 +336,7 @@ impl World {
     #[inline]
     pub fn remove_resource<R: Resource>(&mut self) -> Option<R> {
         let component_id = self.components.get_resource_id(TypeId::of::<R>())?;
-        let (ptr, _, _) = self.storages.resources.get_mut(component_id)?.remove()?;
+        let (ptr, _, _) = self.resources.get_mut(component_id)?.remove()?;
         // SAFETY: `component_id` was gotten via looking up the `R` type
         unsafe { Some(ptr.read::<R>()) }
     }
@@ -301,11 +355,7 @@ impl World {
     #[inline]
     pub fn remove_non_send_resource<R: 'static>(&mut self) -> Option<R> {
         let component_id = self.components.get_resource_id(TypeId::of::<R>())?;
-        let (ptr, _, _) = self
-            .storages
-            .non_send_resources
-            .get_mut(component_id)?
-            .remove()?;
+        let (ptr, _, _) = self.non_send_resources.get_mut(component_id)?.remove()?;
         // SAFETY: `component_id` was gotten via looking up the `R` type
         unsafe { Some(ptr.read::<R>()) }
     }
@@ -315,15 +365,14 @@ impl World {
     pub fn contains_resource<R: Resource>(&self) -> bool {
         self.components
             .get_resource_id(TypeId::of::<R>())
-            .and_then(|component_id| self.storages.resources.get(component_id))
+            .and_then(|component_id| self.resources.get(component_id))
             .is_some_and(ResourceData::is_present)
     }
 
     /// Returns `true` if a resource with provided `component_id` exists. Otherwise returns `false`.
     #[inline]
     pub fn contains_resource_by_id(&self, component_id: ComponentId) -> bool {
-        self.storages
-            .resources
+        self.resources
             .get(component_id)
             .is_some_and(ResourceData::is_present)
     }
@@ -333,15 +382,14 @@ impl World {
     pub fn contains_non_send<R: 'static>(&self) -> bool {
         self.components
             .get_resource_id(TypeId::of::<R>())
-            .and_then(|component_id| self.storages.non_send_resources.get(component_id))
+            .and_then(|component_id| self.non_send_resources.get(component_id))
             .is_some_and(ResourceData::is_present)
     }
 
     /// Returns `true` if a resource with provided `component_id` exists. Otherwise returns `false`.
     #[inline]
     pub fn contains_non_send_by_id(&self, component_id: ComponentId) -> bool {
-        self.storages
-            .non_send_resources
+        self.non_send_resources
             .get(component_id)
             .is_some_and(ResourceData::is_present)
     }
@@ -367,14 +415,11 @@ impl World {
     /// - When called elsewhere, this will check for additions since the last time that [`World::clear_trackers`]
     ///   was called.
     pub fn is_resource_added_by_id(&self, component_id: ComponentId) -> bool {
-        self.storages
-            .resources
-            .get(component_id)
-            .is_some_and(|resource| {
-                resource.get_ticks().is_some_and(|ticks| {
-                    ticks.is_added(self.last_change_tick(), self.read_change_tick())
-                })
+        self.resources.get(component_id).is_some_and(|resource| {
+            resource.get_ticks().is_some_and(|ticks| {
+                ticks.is_added(self.last_change_tick(), self.read_change_tick())
             })
+        })
     }
 
     /// Returns `true` if a resource of type `R` exists and was modified since the world's
@@ -398,14 +443,11 @@ impl World {
     /// - When called elsewhere, this will check for changes since the last time that [`World::clear_trackers`]
     ///   was called.
     pub fn is_resource_changed_by_id(&self, component_id: ComponentId) -> bool {
-        self.storages
-            .resources
-            .get(component_id)
-            .is_some_and(|resource| {
-                resource.get_ticks().is_some_and(|ticks| {
-                    ticks.is_changed(self.last_change_tick(), self.read_change_tick())
-                })
+        self.resources.get(component_id).is_some_and(|resource| {
+            resource.get_ticks().is_some_and(|ticks| {
+                ticks.is_changed(self.last_change_tick(), self.read_change_tick())
             })
+        })
     }
 
     /// Retrieves the change ticks for the given resource.
@@ -422,8 +464,7 @@ impl World {
         &self,
         component_id: ComponentId,
     ) -> Option<ComponentTicks> {
-        self.storages
-            .resources
+        self.resources
             .get(component_id)
             .and_then(ResourceData::get_ticks)
     }
@@ -612,7 +653,6 @@ impl World {
 
         let component_id = self.components_registrator().register_resource::<R>();
         if self
-            .storages
             .resources
             .get(component_id)
             .is_none_or(|data| !data.is_present())
@@ -627,12 +667,7 @@ impl World {
         }
 
         // SAFETY: The resource was just initialized if it was empty.
-        let data = unsafe {
-            self.storages
-                .resources
-                .get_mut(component_id)
-                .debug_checked_unwrap()
-        };
+        let data = unsafe { self.resources.get_mut(component_id).debug_checked_unwrap() };
         // SAFETY: The resource must be present, as we would have inserted it if it was empty.
         let data = unsafe {
             data.get_mut(last_change_tick, change_tick)
@@ -738,10 +773,7 @@ impl World {
     ///
     /// See also [`try_resource_scope`](Self::try_resource_scope).
     #[track_caller]
-    pub fn resource_scope<R: Resource, U>(
-        &mut self,
-        f: impl FnOnce(&mut SubWorld, Mut<R>) -> U,
-    ) -> U {
+    pub fn resource_scope<R: Resource, U>(&mut self, f: impl FnOnce(&mut World, Mut<R>) -> U) -> U {
         self.try_resource_scope(f)
             .unwrap_or_else(|| panic!("resource does not exist: {}", core::any::type_name::<R>()))
     }
@@ -755,14 +787,13 @@ impl World {
     /// See also [`resource_scope`](Self::resource_scope).
     pub fn try_resource_scope<R: Resource, U>(
         &mut self,
-        f: impl FnOnce(&mut SubWorld, Mut<R>) -> U,
+        f: impl FnOnce(&mut Worlds, Mut<R>) -> U,
     ) -> Option<U> {
         let last_change_tick = self.last_change_tick();
         let change_tick = self.change_tick();
 
         let component_id = self.components.get_resource_id(TypeId::of::<R>())?;
         let (ptr, mut ticks, mut caller) = self
-            .storages
             .resources
             .get_mut(component_id)
             .and_then(ResourceData::remove)?;
@@ -788,7 +819,7 @@ impl World {
         OwningPtr::make(value, |ptr| {
             // SAFETY: pointer is of type R
             unsafe {
-                self.storages.resources.get_mut(component_id).map(|info| {
+                self.resources.get_mut(component_id).map(|info| {
                     info.insert_with_ticks(ptr, ticks, caller);
                 })
             }
@@ -858,11 +889,8 @@ impl World {
         component_id: ComponentId,
     ) -> &mut ResourceData<true> {
         let archetypes = &mut self.archetypes;
-        self.storages
-            .resources
-            .initialize_with(component_id, &self.components, || {
-                archetypes.new_archetype_component_id()
-            })
+        self.resources
+            .initialize_with(component_id, &self.components)
     }
 
     /// # Panics
@@ -873,11 +901,8 @@ impl World {
         component_id: ComponentId,
     ) -> &mut ResourceData<false> {
         let archetypes = &mut self.archetypes;
-        self.storages
-            .non_send_resources
-            .initialize_with(component_id, &self.components, || {
-                archetypes.new_archetype_component_id()
-            })
+        self.non_send_resources
+            .initialize_with(component_id, &self.components)
     }
 
     /// Clears all resources in this [`World`].
@@ -888,8 +913,8 @@ impl World {
     /// This can easily cause systems expecting certain resources to immediately start panicking.
     /// Use with caution.
     pub fn clear_resources(&mut self) {
-        self.storages.resources.clear();
-        self.storages.non_send_resources.clear();
+        self.resources.clear();
+        self.non_send_resources.clear();
     }
 
     /// Gets a pointer to the resource with the id [`ComponentId`] if it exists.
@@ -1095,43 +1120,36 @@ impl World {
     /// ```
     #[inline]
     pub fn iter_resources_mut(&mut self) -> impl Iterator<Item = (&ComponentInfo, MutUntyped<'_>)> {
-        self.storages
-            .resources
-            .iter()
-            .filter_map(|(component_id, data)| {
-                // SAFETY: If a resource has been initialized, a corresponding ComponentInfo must exist with its ID.
-                let component_info = unsafe {
-                    self.components
-                        .get_info(component_id)
-                        .debug_checked_unwrap()
-                };
-                let (ptr, ticks, caller) = data.get_with_ticks()?;
+        self.resources.iter().filter_map(|(component_id, data)| {
+            // SAFETY: If a resource has been initialized, a corresponding ComponentInfo must exist with its ID.
+            let component_info = unsafe {
+                self.components
+                    .get_info(component_id)
+                    .debug_checked_unwrap()
+            };
+            let (ptr, ticks, caller) = data.get_with_ticks()?;
 
+            // SAFETY:
+            // - We have exclusive access to the world, so no other code can be aliasing the `TickCells`
+            // - We only hold one `TicksMut` at a time, and we let go of it before getting the next one
+            let ticks = unsafe {
+                TicksMut::from_tick_cells(ticks, self.last_change_tick(), self.read_change_tick())
+            };
+
+            let mut_untyped = MutUntyped {
                 // SAFETY:
-                // - We have exclusive access to the world, so no other code can be aliasing the `TickCells`
-                // - We only hold one `TicksMut` at a time, and we let go of it before getting the next one
-                let ticks = unsafe {
-                    TicksMut::from_tick_cells(
-                        ticks,
-                        self.last_change_tick(),
-                        self.read_change_tick(),
-                    )
-                };
+                // - We have exclusive access to the world, so no other code can be aliasing the `Ptr`
+                // - We iterate one resource at a time, and we let go of each `PtrMut` before getting the next one
+                value: unsafe { ptr.assert_unique() },
+                ticks,
+                // SAFETY:
+                // - We have exclusive access to the world, so no other code can be aliasing the `Ptr`
+                // - We iterate one resource at a time, and we let go of each `PtrMut` before getting the next one
+                changed_by: unsafe { caller.map(|caller| caller.deref_mut()) },
+            };
 
-                let mut_untyped = MutUntyped {
-                    // SAFETY:
-                    // - We have exclusive access to the world, so no other code can be aliasing the `Ptr`
-                    // - We iterate one resource at a time, and we let go of each `PtrMut` before getting the next one
-                    value: unsafe { ptr.assert_unique() },
-                    ticks,
-                    // SAFETY:
-                    // - We have exclusive access to the world, so no other code can be aliasing the `Ptr`
-                    // - We iterate one resource at a time, and we let go of each `PtrMut` before getting the next one
-                    changed_by: unsafe { caller.map(|caller| caller.deref_mut()) },
-                };
-
-                Some((component_info, mut_untyped))
-            })
+            Some((component_info, mut_untyped))
+        })
     }
 
     /// Gets a `!Send` resource to the resource with the id [`ComponentId`] if it exists.
@@ -1179,10 +1197,7 @@ impl World {
     /// **You should prefer to use the typed API [`World::remove_resource`] where possible and only
     /// use this in cases where the actual types are not known at compile time.**
     pub fn remove_resource_by_id(&mut self, component_id: ComponentId) -> Option<()> {
-        self.storages
-            .resources
-            .get_mut(component_id)?
-            .remove_and_drop();
+        self.resources.get_mut(component_id)?.remove_and_drop();
         Some(())
     }
 
@@ -1194,11 +1209,44 @@ impl World {
     /// # Panics
     /// This function will panic if it isn't called from the same thread that the resource was inserted from.
     pub fn remove_non_send_by_id(&mut self, component_id: ComponentId) -> Option<()> {
-        self.storages
-            .non_send_resources
+        self.non_send_resources
             .get_mut(component_id)?
             .remove_and_drop();
         Some(())
+    }
+
+    /// Sends an [`Event`].
+    /// This method returns the [ID](`EventId`) of the sent `event`,
+    /// or [`None`] if the `event` could not be sent.
+    #[inline]
+    pub fn send_event<E: Event>(&mut self, event: E) -> Option<EventId<E>> {
+        self.send_event_batch(core::iter::once(event))?.next()
+    }
+
+    /// Sends the default value of the [`Event`] of type `E`.
+    /// This method returns the [ID](`EventId`) of the sent `event`,
+    /// or [`None`] if the `event` could not be sent.
+    #[inline]
+    pub fn send_event_default<E: Event + Default>(&mut self) -> Option<EventId<E>> {
+        self.send_event(E::default())
+    }
+
+    /// Sends a batch of [`Event`]s from an iterator.
+    /// This method returns the [IDs](`EventId`) of the sent `events`,
+    /// or [`None`] if the `event` could not be sent.
+    #[inline]
+    pub fn send_event_batch<E: Event>(
+        &mut self,
+        events: impl IntoIterator<Item = E>,
+    ) -> Option<SendBatchIds<E>> {
+        let Some(mut events_resource) = self.get_resource_mut::<Events<E>>() else {
+            log::error!(
+                "Unable to send event `{}`\n\tEvent must be added to the app with `add_event()`\n\thttps://docs.rs/bevy/*/bevy/app/struct.App.html#method.add_event ",
+                core::any::type_name::<E>()
+            );
+            return None;
+        };
+        Some(events_resource.send_batch(events))
     }
 }
 
@@ -1226,8 +1274,8 @@ impl SubWorldLabel for MainSubWorld {}
 /// which are unique instances of a given type that don't belong to a specific Entity.
 /// There are also *non send resources*, which can only be accessed on the main thread.
 /// See [`Resource`] for usage.
-pub struct SubWorld {
-    id: SubWorldId,
+pub struct World {
+    id: WorldId,
     pub(crate) entities: Entities,
     pub(crate) components: Components,
     pub(crate) component_ids: ComponentIds,
@@ -1243,7 +1291,7 @@ pub struct SubWorld {
     pub(crate) command_queue: RawCommandQueue,
 }
 
-impl Drop for SubWorld {
+impl Drop for World {
     fn drop(&mut self) {
         // SAFETY: Not passing a pointer so the argument is always valid
         unsafe { self.command_queue.apply_or_drop_queued(None) };
@@ -1256,8 +1304,8 @@ impl Drop for SubWorld {
     }
 }
 
-impl SubWorld {
-    fn new(id: SubWorldId) -> Self {
+impl World {
+    fn new(id: WorldId) -> Self {
         let mut world = Self {
             id,
             entities: Entities::new(),
@@ -1306,7 +1354,7 @@ impl SubWorld {
 
     /// Retrieves this [`World`]'s unique ID
     #[inline]
-    pub fn id(&self) -> SubWorldId {
+    pub fn id(&self) -> WorldId {
         self.id
     }
 
@@ -1819,7 +1867,7 @@ impl SubWorld {
         #[inline(never)]
         #[cold]
         #[track_caller]
-        fn panic_no_entity(world: &SubWorld, entity: Entity) -> ! {
+        fn panic_no_entity(world: &World, entity: Entity) -> ! {
             panic!(
                 "Entity {entity} {}",
                 world.entities.entity_does_not_exist_error_details(entity)
@@ -3210,40 +3258,6 @@ impl SubWorld {
         }
     }
 
-    /// Sends an [`Event`].
-    /// This method returns the [ID](`EventId`) of the sent `event`,
-    /// or [`None`] if the `event` could not be sent.
-    #[inline]
-    pub fn send_event<E: Event>(&mut self, event: E) -> Option<EventId<E>> {
-        self.send_event_batch(core::iter::once(event))?.next()
-    }
-
-    /// Sends the default value of the [`Event`] of type `E`.
-    /// This method returns the [ID](`EventId`) of the sent `event`,
-    /// or [`None`] if the `event` could not be sent.
-    #[inline]
-    pub fn send_event_default<E: Event + Default>(&mut self) -> Option<EventId<E>> {
-        self.send_event(E::default())
-    }
-
-    /// Sends a batch of [`Event`]s from an iterator.
-    /// This method returns the [IDs](`EventId`) of the sent `events`,
-    /// or [`None`] if the `event` could not be sent.
-    #[inline]
-    pub fn send_event_batch<E: Event>(
-        &mut self,
-        events: impl IntoIterator<Item = E>,
-    ) -> Option<SendBatchIds<E>> {
-        let Some(mut events_resource) = self.get_resource_mut::<Events<E>>() else {
-            log::error!(
-                "Unable to send event `{}`\n\tEvent must be added to the app with `add_event()`\n\thttps://docs.rs/bevy/*/bevy/app/struct.App.html#method.add_event ",
-                core::any::type_name::<E>()
-            );
-            return None;
-        };
-        Some(events_resource.send_batch(events))
-    }
-
     /// Empties queued entities and adds them to the empty [`Archetype`](crate::archetype::Archetype).
     /// This should be called before doing operations that might operate on queued entities,
     /// such as inserting a [`Component`].
@@ -3436,10 +3450,10 @@ impl SubWorld {
     pub fn last_change_tick_scope<T>(
         &mut self,
         last_change_tick: Tick,
-        f: impl FnOnce(&mut SubWorld) -> T,
+        f: impl FnOnce(&mut World) -> T,
     ) -> T {
         struct LastTickGuard<'a> {
-            world: &'a mut SubWorld,
+            world: &'a mut World,
             last_tick: Tick,
         }
 
@@ -3535,7 +3549,7 @@ impl SubWorld {
     }
 }
 
-impl SubWorld {
+impl World {
     /// Retrieves an immutable untyped reference to the given `entity`'s [`Component`] of the given [`ComponentId`].
     /// Returns `None` if the `entity` does not have a [`Component`] of the given type.
     ///
@@ -3568,7 +3582,7 @@ impl SubWorld {
 }
 
 // Schedule-related methods
-impl SubWorld {
+impl World {
     /// Adds the specified [`Schedule`] to the world. The schedule can later be run
     /// by calling [`.run_schedule(label)`](Self::run_schedule) or by directly
     /// accessing the [`Schedules`] resource.
@@ -3593,7 +3607,7 @@ impl SubWorld {
     pub fn try_schedule_scope<R>(
         &mut self,
         label: impl ScheduleLabel,
-        f: impl FnOnce(&mut SubWorld, &mut Schedule) -> R,
+        f: impl FnOnce(&mut World, &mut Schedule) -> R,
     ) -> Result<R, TryRunScheduleError> {
         let label = label.intern();
         let Some(mut schedule) = self
@@ -3653,7 +3667,7 @@ impl SubWorld {
     pub fn schedule_scope<R>(
         &mut self,
         label: impl ScheduleLabel,
-        f: impl FnOnce(&mut SubWorld, &mut Schedule) -> R,
+        f: impl FnOnce(&mut World, &mut Schedule) -> R,
     ) -> R {
         self.try_schedule_scope(label, f)
             .unwrap_or_else(|e| panic!("{e}"))
@@ -3702,7 +3716,7 @@ impl SubWorld {
     }
 }
 
-impl fmt::Debug for SubWorld {
+impl fmt::Debug for World {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         // SAFETY: `UnsafeWorldCell` requires that this must only access metadata.
         // Accessing any data stored in the world would be unsound.
@@ -3717,9 +3731,9 @@ impl fmt::Debug for SubWorld {
 }
 
 // SAFETY: all methods on the world ensure that non-send resources are only accessible on the main thread
-unsafe impl Send for SubWorld {}
+unsafe impl Send for World {}
 // SAFETY: all methods on the world ensure that non-send resources are only accessible on the main thread
-unsafe impl Sync for SubWorld {}
+unsafe impl Sync for World {}
 
 /// Creates an instance of the type this trait is implemented for
 /// using data from the supplied [`World`].
@@ -3759,12 +3773,22 @@ unsafe impl Sync for SubWorld {}
 /// ```
 pub trait FromWorld {
     /// Creates `Self` using data from the given [`World`].
-    fn from_world(world: &mut SubWorld) -> Self;
+    fn from_world(world: &mut Worlds) -> Self;
 }
 
 impl<T: Default> FromWorld for T {
     /// Creates `Self` using [`default()`](`Default::default`).
-    fn from_world(_world: &mut SubWorld) -> Self {
+    fn from_world(_world: &mut Worlds) -> Self {
+        T::default()
+    }
+}
+
+pub trait FromSubWorld {
+    fn from_sub_world(sub_world: &mut World) -> Self;
+}
+
+impl<T: Default> FromSubWorld for T {
+    fn from_sub_world(_sub_world: &mut World) -> Self {
         T::default()
     }
 }
@@ -3772,13 +3796,13 @@ impl<T: Default> FromWorld for T {
 #[cfg(test)]
 #[expect(clippy::print_stdout, reason = "Allowed in tests.")]
 mod tests {
-    use super::SubWorld;
+    use super::World;
     use crate::{
         change_detection::MaybeLocation,
         component::ComponentInfo,
         entity::hash_set::EntityHashSet,
         entity_disabling::{DefaultQueryFilters, Disabled},
-        world::{error::EntityMutableFetchError, DeferredWorld, World},
+        world::{error::EntityMutableFetchError, DeferredWorld, Worlds},
     };
     use alloc::{borrow::ToOwned, sync::Arc, vec, vec::Vec};
     use bevy_ecs_macros::Component;
@@ -3882,7 +3906,7 @@ mod tests {
         let helper = DropTestHelper::new();
 
         let res = std::panic::catch_unwind(|| {
-            let mut world = World::new();
+            let mut world = Worlds::new();
             world
                 .spawn_empty()
                 .insert(helper.make_component(true, 0))
@@ -3904,6 +3928,227 @@ mod tests {
         );
     }
 
+    struct TestResource(u32);
+
+    #[derive(Resource)]
+    struct TestResource2(String);
+
+    #[derive(Resource)]
+    struct TestResource3;
+
+    #[test]
+    fn get_resource_by_id() {
+        let mut world = World::new();
+        world.insert_resource(TestResource(42));
+        let component_id = world
+            .components()
+            .get_resource_id(TypeId::of::<TestResource>())
+            .unwrap();
+
+        let resource = world.get_resource_by_id(component_id).unwrap();
+        // SAFETY: `TestResource` is the correct resource type
+        let resource = unsafe { resource.deref::<TestResource>() };
+
+        assert_eq!(resource.0, 42);
+    }
+
+    #[test]
+    fn get_resource_mut_by_id() {
+        let mut world = World::new();
+        world.insert_resource(TestResource(42));
+        let component_id = world
+            .components()
+            .get_resource_id(TypeId::of::<TestResource>())
+            .unwrap();
+
+        {
+            let mut resource = world.get_resource_mut_by_id(component_id).unwrap();
+            resource.set_changed();
+            // SAFETY: `TestResource` is the correct resource type
+            let resource = unsafe { resource.into_inner().deref_mut::<TestResource>() };
+            resource.0 = 43;
+        }
+
+        let resource = world.get_resource_by_id(component_id).unwrap();
+        // SAFETY: `TestResource` is the correct resource type
+        let resource = unsafe { resource.deref::<TestResource>() };
+
+        assert_eq!(resource.0, 43);
+    }
+
+    #[test]
+    fn iter_resources() {
+        let mut world = World::new();
+        // Remove DefaultQueryFilters so it doesn't show up in the iterator
+        world.remove_resource::<DefaultQueryFilters>();
+        world.insert_resource(TestResource(42));
+        world.insert_resource(TestResource2("Hello, world!".to_string()));
+        world.insert_resource(TestResource3);
+        world.remove_resource::<TestResource3>();
+
+        let mut iter = world.iter_resources();
+
+        let (info, ptr) = iter.next().unwrap();
+        assert_eq!(info.name(), core::any::type_name::<TestResource>());
+        // SAFETY: We know that the resource is of type `TestResource`
+        assert_eq!(unsafe { ptr.deref::<TestResource>().0 }, 42);
+
+        let (info, ptr) = iter.next().unwrap();
+        assert_eq!(info.name(), core::any::type_name::<TestResource2>());
+        assert_eq!(
+            // SAFETY: We know that the resource is of type `TestResource2`
+            unsafe { &ptr.deref::<TestResource2>().0 },
+            &"Hello, world!".to_string()
+        );
+
+        assert!(iter.next().is_none());
+    }
+
+    #[test]
+    fn iter_resources_mut() {
+        let mut world = World::new();
+        // Remove DefaultQueryFilters so it doesn't show up in the iterator
+        world.remove_resource::<DefaultQueryFilters>();
+        world.insert_resource(TestResource(42));
+        world.insert_resource(TestResource2("Hello, world!".to_string()));
+        world.insert_resource(TestResource3);
+        world.remove_resource::<TestResource3>();
+
+        let mut iter = world.iter_resources_mut();
+
+        let (info, mut mut_untyped) = iter.next().unwrap();
+        assert_eq!(info.name(), core::any::type_name::<TestResource>());
+        // SAFETY: We know that the resource is of type `TestResource`
+        unsafe {
+            mut_untyped.as_mut().deref_mut::<TestResource>().0 = 43;
+        };
+
+        let (info, mut mut_untyped) = iter.next().unwrap();
+        assert_eq!(info.name(), core::any::type_name::<TestResource2>());
+        // SAFETY: We know that the resource is of type `TestResource2`
+        unsafe {
+            mut_untyped.as_mut().deref_mut::<TestResource2>().0 = "Hello, world?".to_string();
+        };
+
+        assert!(iter.next().is_none());
+        drop(iter);
+
+        assert_eq!(world.resource::<TestResource>().0, 43);
+        assert_eq!(
+            world.resource::<TestResource2>().0,
+            "Hello, world?".to_string()
+        );
+    }
+
+    #[test]
+    fn dynamic_resource() {
+        let mut world = World::new();
+
+        let descriptor = ComponentDescriptor::new_resource::<TestResource>();
+
+        let component_id = world.register_resource_with_descriptor(descriptor);
+
+        let value = 0;
+        OwningPtr::make(value, |ptr| {
+            // SAFETY: value is valid for the layout of `TestResource`
+            unsafe {
+                world.insert_resource_by_id(component_id, ptr, MaybeLocation::caller());
+            }
+        });
+
+        // SAFETY: We know that the resource is of type `TestResource`
+        let resource = unsafe {
+            world
+                .get_resource_by_id(component_id)
+                .unwrap()
+                .deref::<TestResource>()
+        };
+        assert_eq!(resource.0, 0);
+
+        assert!(world.remove_resource_by_id(component_id).is_some());
+    }
+
+    #[test]
+    fn custom_resource_with_layout() {
+        static DROP_COUNT: AtomicU32 = AtomicU32::new(0);
+
+        let mut world = World::new();
+
+        // SAFETY: the drop function is valid for the layout and the data will be safe to access from any thread
+        let descriptor = unsafe {
+            ComponentDescriptor::new_with_layout(
+                "Custom Test Component".to_string(),
+                StorageType::Table,
+                core::alloc::Layout::new::<[u8; 8]>(),
+                Some(|ptr| {
+                    let data = ptr.read::<[u8; 8]>();
+                    assert_eq!(data, [0, 1, 2, 3, 4, 5, 6, 7]);
+                    DROP_COUNT.fetch_add(1, Ordering::SeqCst);
+                }),
+                true,
+                ComponentCloneBehavior::Default,
+            )
+        };
+
+        let component_id = world.register_resource_with_descriptor(descriptor);
+
+        let value: [u8; 8] = [0, 1, 2, 3, 4, 5, 6, 7];
+        OwningPtr::make(value, |ptr| {
+            // SAFETY: value is valid for the component layout
+            unsafe {
+                world.insert_resource_by_id(component_id, ptr, MaybeLocation::caller());
+            }
+        });
+
+        // SAFETY: [u8; 8] is the correct type for the resource
+        let data = unsafe {
+            world
+                .get_resource_by_id(component_id)
+                .unwrap()
+                .deref::<[u8; 8]>()
+        };
+        assert_eq!(*data, [0, 1, 2, 3, 4, 5, 6, 7]);
+
+        assert!(world.remove_resource_by_id(component_id).is_some());
+
+        assert_eq!(DROP_COUNT.load(Ordering::SeqCst), 1);
+    }
+
+    #[derive(Resource)]
+    struct TestFromWorld(u32);
+    impl FromWorld for TestFromWorld {
+        fn from_world(world: &mut World) -> Self {
+            let b = world.resource::<TestResource>();
+            Self(b.0)
+        }
+    }
+
+    #[test]
+    fn init_resource_does_not_overwrite() {
+        let mut world = World::new();
+        world.insert_resource(TestResource(0));
+        world.init_resource::<TestFromWorld>();
+        world.insert_resource(TestResource(1));
+        world.init_resource::<TestFromWorld>();
+
+        let resource = world.resource::<TestFromWorld>();
+
+        assert_eq!(resource.0, 0);
+    }
+
+    #[test]
+    fn init_non_send_resource_does_not_overwrite() {
+        let mut world = World::new();
+        world.insert_resource(TestResource(0));
+        world.init_non_send_resource::<TestFromWorld>();
+        world.insert_resource(TestResource(1));
+        world.init_non_send_resource::<TestFromWorld>();
+
+        let resource = world.non_send_resource::<TestFromWorld>();
+
+        assert_eq!(resource.0, 0);
+    }
+
     #[derive(Component)]
     struct Foo;
 
@@ -3915,7 +4160,7 @@ mod tests {
 
     #[test]
     fn inspect_entity_components() {
-        let mut world = World::new().get_main();
+        let mut world = Worlds::new().get_main();
         let ent0 = world.spawn((Foo, Bar, Baz)).id();
         let ent1 = world.spawn((Foo, Bar)).id();
         let ent2 = world.spawn((Bar, Baz)).id();
@@ -3974,10 +4219,10 @@ mod tests {
 
     #[test]
     fn iterate_entities() {
-        let mut world = World::new();
+        let mut world = Worlds::new();
         let mut entity_counters = <HashMap<_, _>>::default();
 
-        let iterate_and_count_entities = |world: &SubWorld, entity_counters: &mut HashMap<_, _>| {
+        let iterate_and_count_entities = |world: &World, entity_counters: &mut HashMap<_, _>| {
             entity_counters.clear();
             for entity in world.iter_entities() {
                 let counter = entity_counters.entry(entity.id()).or_insert(0);
@@ -4049,7 +4294,7 @@ mod tests {
         #[derive(Component, PartialEq, Debug)]
         struct B(i32);
 
-        let mut world = World::new();
+        let mut world = Worlds::new();
 
         let a1 = world.spawn(A(1)).id();
         let a2 = world.spawn(A(2)).id();
@@ -4091,13 +4336,13 @@ mod tests {
 
     #[test]
     fn spawn_empty_bundle() {
-        let mut world = World::new();
+        let mut world = Worlds::new();
         world.spawn(());
     }
 
     #[test]
     fn get_entity() {
-        let mut world = SubWorld::new();
+        let mut world = World::new();
 
         let e1 = world.spawn_empty().id();
         let e2 = world.spawn_empty().id();
@@ -4147,7 +4392,7 @@ mod tests {
 
     #[test]
     fn get_entity_mut() {
-        let mut world = SubWorld::new();
+        let mut world = World::new();
 
         let e1 = world.spawn_empty().id();
         let e2 = world.spawn_empty().id();
@@ -4211,7 +4456,7 @@ mod tests {
     fn entity_spawn_despawn_tracking() {
         use core::panic::Location;
 
-        let mut world = SubWorld::new();
+        let mut world = World::new();
         let entity = world.spawn_empty().id();
         assert_eq!(
             world.entities.entity_get_spawned_or_despawned_by(entity),
@@ -4237,7 +4482,7 @@ mod tests {
 
     #[test]
     fn new_world_has_disabling() {
-        let mut world = SubWorld::new();
+        let mut world = World::new();
         world.spawn(Foo);
         world.spawn((Foo, Disabled));
         assert_eq!(1, world.query::<&Foo>().iter(&world).count());
@@ -4252,7 +4497,7 @@ mod tests {
         #[derive(Component, PartialEq, Debug)]
         struct Foo(u32);
 
-        let mut world = SubWorld::new();
+        let mut world = World::new();
 
         let eid = world.spawn(Foo(35)).id();
 
@@ -4271,7 +4516,7 @@ mod tests {
         #[derive(Component, PartialEq, Debug)]
         struct Foo(u32);
 
-        let mut world = SubWorld::new();
+        let mut world = World::new();
 
         let eid = world.spawn(Foo(1)).id();
 

@@ -68,7 +68,7 @@ where
     type State = ExtractState<P>;
     type Item<'w, 's> = Extract<'w, 's, P>;
 
-    fn init_state(world: &mut SubWorld, system_meta: &mut SystemMeta) -> Self::State {
+    fn init_state(world: &mut World, system_meta: &mut SystemMeta) -> Self::State {
         let mut main_world = world.resource_mut::<MainWorld>();
         ExtractState {
             state: SystemState::new(&mut main_world),
@@ -85,11 +85,11 @@ where
         // SAFETY: Read-only access to world data registered in `init_state`.
         let result = unsafe { world.get_resource_by_id(state.main_world_state) };
         let Some(main_world) = result else {
-            system_meta.try_warn_param::<&SubWorld>();
+            system_meta.try_warn_param::<&World>();
             return false;
         };
         // SAFETY: Type is guaranteed by `SystemState`.
-        let main_world: &SubWorld = unsafe { main_world.deref() };
+        let main_world: &World = unsafe { main_world.deref() };
         // SAFETY: We provide the main world on which this system state was initialized on.
         unsafe {
             SystemState::<P>::validate_param(

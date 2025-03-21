@@ -10,7 +10,7 @@ use crate::{
     resource::Resource,
     world::{
         error::ResourceFetchError, unsafe_world_cell::UnsafeWorldCell, FilteredResources,
-        FilteredResourcesMut, SubWorld,
+        FilteredResourcesMut, World,
     },
 };
 use bevy_reflect::{FromReflect, FromType, PartialReflect, Reflect, TypePath, TypeRegistry};
@@ -47,13 +47,13 @@ pub struct ReflectResource(ReflectResourceFns);
 #[derive(Clone)]
 pub struct ReflectResourceFns {
     /// Function pointer implementing [`ReflectResource::insert()`].
-    pub insert: fn(&mut SubWorld, &dyn PartialReflect, &TypeRegistry),
+    pub insert: fn(&mut World, &dyn PartialReflect, &TypeRegistry),
     /// Function pointer implementing [`ReflectResource::apply()`].
-    pub apply: fn(&mut SubWorld, &dyn PartialReflect),
+    pub apply: fn(&mut World, &dyn PartialReflect),
     /// Function pointer implementing [`ReflectResource::apply_or_insert()`].
-    pub apply_or_insert: fn(&mut SubWorld, &dyn PartialReflect, &TypeRegistry),
+    pub apply_or_insert: fn(&mut World, &dyn PartialReflect, &TypeRegistry),
     /// Function pointer implementing [`ReflectResource::remove()`].
-    pub remove: fn(&mut SubWorld),
+    pub remove: fn(&mut World),
     /// Function pointer implementing [`ReflectResource::reflect()`].
     pub reflect:
         for<'w> fn(FilteredResources<'w, '_>) -> Result<&'w dyn Reflect, ResourceFetchError>,
@@ -67,9 +67,9 @@ pub struct ReflectResourceFns {
     /// The function may only be called with an [`UnsafeWorldCell`] that can be used to mutably access the relevant resource.
     pub reflect_unchecked_mut: unsafe fn(UnsafeWorldCell<'_>) -> Option<Mut<'_, dyn Reflect>>,
     /// Function pointer implementing [`ReflectResource::copy()`].
-    pub copy: fn(&SubWorld, &mut SubWorld, &TypeRegistry),
+    pub copy: fn(&World, &mut World, &TypeRegistry),
     /// Function pointer implementing [`ReflectResource::register_resource()`].
-    pub register_resource: fn(&mut SubWorld) -> ComponentId,
+    pub register_resource: fn(&mut World) -> ComponentId,
 }
 
 impl ReflectResourceFns {
@@ -87,7 +87,7 @@ impl ReflectResource {
     /// Insert a reflected [`Resource`] into the world like [`insert()`](World::insert_resource).
     pub fn insert(
         &self,
-        world: &mut SubWorld,
+        world: &mut World,
         resource: &dyn PartialReflect,
         registry: &TypeRegistry,
     ) {
@@ -99,14 +99,14 @@ impl ReflectResource {
     /// # Panics
     ///
     /// Panics if there is no [`Resource`] of the given type.
-    pub fn apply(&self, world: &mut SubWorld, resource: &dyn PartialReflect) {
+    pub fn apply(&self, world: &mut World, resource: &dyn PartialReflect) {
         (self.0.apply)(world, resource);
     }
 
     /// Uses reflection to set the value of this [`Resource`] type in the world to the given value or insert a new one if it does not exist.
     pub fn apply_or_insert(
         &self,
-        world: &mut SubWorld,
+        world: &mut World,
         resource: &dyn PartialReflect,
         registry: &TypeRegistry,
     ) {
@@ -114,7 +114,7 @@ impl ReflectResource {
     }
 
     /// Removes this [`Resource`] type from the world. Does nothing if it doesn't exist.
-    pub fn remove(&self, world: &mut SubWorld) {
+    pub fn remove(&self, world: &mut World) {
         (self.0.remove)(world);
     }
 
@@ -158,15 +158,15 @@ impl ReflectResource {
     /// Panics if there is no [`Resource`] of the given type.
     pub fn copy(
         &self,
-        source_world: &SubWorld,
-        destination_world: &mut SubWorld,
+        source_world: &World,
+        destination_world: &mut World,
         registry: &TypeRegistry,
     ) {
         (self.0.copy)(source_world, destination_world, registry);
     }
 
     /// Register the type of this [`Resource`] in [`World`], returning the [`ComponentId`]
-    pub fn register_resource(&self, world: &mut SubWorld) -> ComponentId {
+    pub fn register_resource(&self, world: &mut World) -> ComponentId {
         (self.0.register_resource)(world)
     }
 
@@ -248,7 +248,7 @@ impl<R: Resource + FromReflect + TypePath> FromType<R> for ReflectResource {
                 destination_world.insert_resource(destination_resource);
             },
 
-            register_resource: |world: &mut SubWorld| -> ComponentId {
+            register_resource: |world: &mut World| -> ComponentId {
                 world.register_resource::<R>()
             },
         })

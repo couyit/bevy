@@ -493,7 +493,7 @@ mod tests {
     #[test]
     #[should_panic(expected = "PanicOnDrop is being Dropped")]
     fn make_sure_zst_components_get_dropped() {
-        let mut world = SubWorld::new();
+        let mut world = World::new();
 
         world.spawn(PanicOnDrop);
     }

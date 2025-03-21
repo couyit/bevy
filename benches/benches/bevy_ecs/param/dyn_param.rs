@@ -5,7 +5,7 @@ use bevy_ecs::{
 use criterion::Criterion;
 
 pub fn dyn_param(criterion: &mut Criterion) {
-    let mut world = SubWorld::new();
+    let mut world = World::new();
     let mut group = criterion.benchmark_group("param/combinator_system");
 
     group.warm_up_time(core::time::Duration::from_millis(500));

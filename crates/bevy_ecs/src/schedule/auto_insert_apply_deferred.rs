@@ -3,7 +3,7 @@ use alloc::{boxed::Box, collections::BTreeSet, vec::Vec};
 use bevy_platform_support::collections::HashMap;
 
 use crate::system::IntoSystem;
-use crate::world::SubWorld;
+use crate::world::World;
 
 use super::{
     is_apply_deferred, ApplyDeferred, DiGraph, Direction, NodeId, ReportCycles, ScheduleBuildError,
@@ -73,7 +73,7 @@ impl ScheduleBuildPass for AutoInsertApplyDeferredPass {
 
     fn build(
         &mut self,
-        _world: &mut SubWorld,
+        _world: &mut World,
         graph: &mut ScheduleGraph,
         dependency_flattened: &mut DiGraph,
     ) -> Result<(), ScheduleBuildError> {

@@ -5,7 +5,7 @@ use bevy_ecs::{
     entity::Entity,
     prelude::{Added, Changed, EntityWorldMut, QueryState},
     query::QueryFilter,
-    world::SubWorld,
+    world::World,
 };
 use criterion::{criterion_group, Criterion};
 use rand::{prelude::SliceRandom, SeedableRng};
@@ -64,14 +64,14 @@ fn deterministic_rand() -> ChaCha8Rng {
     ChaCha8Rng::seed_from_u64(42)
 }
 
-fn setup<T: Component + Default>(entity_count: u32) -> SubWorld {
-    let mut world = SubWorld::default();
+fn setup<T: Component + Default>(entity_count: u32) -> World {
+    let mut world = World::default();
     world.spawn_batch((0..entity_count).map(|_| T::default()));
     black_box(world)
 }
 
 // create a cached query in setup to avoid extra costs in each iter
-fn generic_filter_query<F: QueryFilter>(world: &mut SubWorld) -> QueryState<Entity, F> {
+fn generic_filter_query<F: QueryFilter>(world: &mut World) -> QueryState<Entity, F> {
     world.query_filtered::<Entity, F>()
 }
 
@@ -273,7 +273,7 @@ fn insert_if_bit_enabled<const B: u16>(entity: &mut EntityWorldMut, i: u16) {
 }
 
 fn add_archetypes_entities<T: Component<Mutability = Mutable> + Default>(
-    world: &mut SubWorld,
+    world: &mut World,
     archetype_count: u16,
     entity_count: u32,
 ) {
@@ -316,7 +316,7 @@ fn multiple_archetype_none_changed_detection_generic<
         |bencher| {
             bencher.iter_batched_ref(
                 || {
-                    let mut world = SubWorld::new();
+                    let mut world = World::new();
                     add_archetypes_entities::<T>(&mut world, archetype_count, entity_count);
                     world.clear_trackers();
                     let mut query = world.query::<(

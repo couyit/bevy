@@ -4,7 +4,7 @@ use crate::{ron, DynamicScene};
 use bevy_asset::{io::Reader, AssetLoader, LoadContext};
 use bevy_ecs::{
     reflect::AppTypeRegistry,
-    world::{FromWorld, SubWorld},
+    world::{FromWorld, World},
 };
 use bevy_reflect::TypeRegistryArc;
 #[cfg(feature = "serialize")]
@@ -20,7 +20,7 @@ pub struct SceneLoader {
 }
 
 impl FromWorld for SceneLoader {
-    fn from_world(world: &mut SubWorld) -> Self {
+    fn from_world(world: &mut World) -> Self {
         let type_registry = world.resource::<AppTypeRegistry>();
         SceneLoader {
             type_registry: type_registry.0.clone(),

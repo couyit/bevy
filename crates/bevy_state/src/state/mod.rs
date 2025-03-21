@@ -49,7 +49,7 @@ mod tests {
 
     #[test]
     fn computed_state_with_a_single_source_is_correctly_derived() {
-        let mut world = SubWorld::new();
+        let mut world = World::new();
         EventRegistry::register_event::<StateTransitionEvent<SimpleState>>(&mut world);
         EventRegistry::register_event::<StateTransitionEvent<TestComputedState>>(&mut world);
         world.init_resource::<State<SimpleState>>();
@@ -105,7 +105,7 @@ mod tests {
 
     #[test]
     fn sub_state_exists_only_when_allowed_but_can_be_modified_freely() {
-        let mut world = SubWorld::new();
+        let mut world = World::new();
         EventRegistry::register_event::<StateTransitionEvent<SimpleState>>(&mut world);
         EventRegistry::register_event::<StateTransitionEvent<SubState>>(&mut world);
         world.init_resource::<State<SimpleState>>();
@@ -163,7 +163,7 @@ mod tests {
 
     #[test]
     fn substate_of_computed_states_works_appropriately() {
-        let mut world = SubWorld::new();
+        let mut world = World::new();
         EventRegistry::register_event::<StateTransitionEvent<SimpleState>>(&mut world);
         EventRegistry::register_event::<StateTransitionEvent<TestComputedState>>(&mut world);
         EventRegistry::register_event::<StateTransitionEvent<SubStateOfComputed>>(&mut world);
@@ -254,7 +254,7 @@ mod tests {
 
     #[test]
     fn complex_computed_state_gets_derived_correctly() {
-        let mut world = SubWorld::new();
+        let mut world = World::new();
         EventRegistry::register_event::<StateTransitionEvent<SimpleState>>(&mut world);
         EventRegistry::register_event::<StateTransitionEvent<OtherState>>(&mut world);
         EventRegistry::register_event::<StateTransitionEvent<ComplexComputedState>>(&mut world);
@@ -353,7 +353,7 @@ mod tests {
 
     #[test]
     fn computed_state_transitions_are_produced_correctly() {
-        let mut world = SubWorld::new();
+        let mut world = World::new();
         EventRegistry::register_event::<StateTransitionEvent<SimpleState>>(&mut world);
         EventRegistry::register_event::<StateTransitionEvent<SimpleState2>>(&mut world);
         EventRegistry::register_event::<StateTransitionEvent<TestNewcomputedState>>(&mut world);
@@ -501,7 +501,7 @@ mod tests {
 
     #[test]
     fn same_state_transition_should_emit_event_and_not_run_schedules() {
-        let mut world = SubWorld::new();
+        let mut world = World::new();
         setup_state_transitions_in_world(&mut world);
         EventRegistry::register_event::<StateTransitionEvent<SimpleState>>(&mut world);
         world.init_resource::<State<SimpleState>>();
@@ -551,7 +551,7 @@ mod tests {
 
     #[test]
     fn same_state_transition_should_propagate_to_sub_state() {
-        let mut world = SubWorld::new();
+        let mut world = World::new();
         EventRegistry::register_event::<StateTransitionEvent<SimpleState>>(&mut world);
         EventRegistry::register_event::<StateTransitionEvent<SubState>>(&mut world);
         world.insert_resource(State(SimpleState::B(true)));
@@ -582,7 +582,7 @@ mod tests {
 
     #[test]
     fn same_state_transition_should_propagate_to_computed_state() {
-        let mut world = SubWorld::new();
+        let mut world = World::new();
         EventRegistry::register_event::<StateTransitionEvent<SimpleState>>(&mut world);
         EventRegistry::register_event::<StateTransitionEvent<TestComputedState>>(&mut world);
         world.insert_resource(State(SimpleState::B(true)));
@@ -644,7 +644,7 @@ mod tests {
 
     #[test]
     fn check_transition_orders() {
-        let mut world = SubWorld::new();
+        let mut world = World::new();
         setup_state_transitions_in_world(&mut world);
         EventRegistry::register_event::<StateTransitionEvent<SimpleState>>(&mut world);
         EventRegistry::register_event::<StateTransitionEvent<SubState>>(&mut world);

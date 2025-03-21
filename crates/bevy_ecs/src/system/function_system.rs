@@ -8,7 +8,7 @@ use crate::{
         check_system_change_tick, ReadOnlySystemParam, System, SystemIn, SystemInput, SystemParam,
         SystemParamItem,
     },
-    world::{unsafe_world_cell::UnsafeWorldCell, DeferredWorld, SubWorld, SubWorldId},
+    world::{unsafe_world_cell::UnsafeWorldCell, DeferredWorld, World, WorldId},
 };
 
 use alloc::{borrow::Cow, vec, vec::Vec};
@@ -359,7 +359,7 @@ where
 pub struct SystemState<Param: SystemParam + 'static> {
     meta: SystemMeta,
     param_state: Param::State,
-    world_id: SubWorldId,
+    world_id: WorldId,
     archetype_generation: ArchetypeGeneration,
 }
 
@@ -424,7 +424,7 @@ impl<Param: SystemParam> SystemState<Param> {
     ///
     /// `new` does not cache any of the world's archetypes, so you must call [`SystemState::update_archetypes`]
     /// manually before calling `get_manual{_mut}`.
-    pub fn new(world: &mut SubWorld) -> Self {
+    pub fn new(world: &mut World) -> Self {
         let mut meta = SystemMeta::new::<Param>();
         meta.last_run = world.change_tick().relative_to(Tick::MAX);
         let param_state = Param::init_state(world, &mut meta);
@@ -437,10 +437,7 @@ impl<Param: SystemParam> SystemState<Param> {
     }
 
     /// Create a [`SystemState`] from a [`SystemParamBuilder`]
-    pub(crate) fn from_builder(
-        world: &mut SubWorld,
-        builder: impl SystemParamBuilder<Param>,
-    ) -> Self {
+    pub(crate) fn from_builder(world: &mut World, builder: impl SystemParamBuilder<Param>) -> Self {
         let mut meta = SystemMeta::new::<Param>();
         meta.last_run = world.change_tick().relative_to(Tick::MAX);
         let param_state = builder.build(world, &mut meta);
@@ -485,7 +482,7 @@ impl<Param: SystemParam> SystemState<Param> {
 
     /// Retrieve the [`SystemParam`] values. This can only be called when all parameters are read-only.
     #[inline]
-    pub fn get<'w, 's>(&'s mut self, world: &'w SubWorld) -> SystemParamItem<'w, 's, Param>
+    pub fn get<'w, 's>(&'s mut self, world: &'w World) -> SystemParamItem<'w, 's, Param>
     where
         Param: ReadOnlySystemParam,
     {
@@ -498,10 +495,7 @@ impl<Param: SystemParam> SystemState<Param> {
 
     /// Retrieve the mutable [`SystemParam`] values.
     #[inline]
-    pub fn get_mut<'w, 's>(
-        &'s mut self,
-        world: &'w mut SubWorld,
-    ) -> SystemParamItem<'w, 's, Param> {
+    pub fn get_mut<'w, 's>(&'s mut self, world: &'w mut World) -> SystemParamItem<'w, 's, Param> {
         self.validate_world(world.id());
         self.update_archetypes(world);
         // SAFETY: World is uniquely borrowed and matches the World this SystemState was created with.
@@ -512,7 +506,7 @@ impl<Param: SystemParam> SystemState<Param> {
     /// by a [`Commands`](`super::Commands`) parameter to the given [`World`].
     /// This function should be called manually after the values returned by [`SystemState::get`] and [`SystemState::get_mut`]
     /// are finished being used.
-    pub fn apply(&mut self, world: &mut SubWorld) {
+    pub fn apply(&mut self, world: &mut World) {
         Param::apply(&mut self.param_state, &self.meta, world);
     }
 
@@ -531,18 +525,18 @@ impl<Param: SystemParam> SystemState<Param> {
     /// Returns `true` if `world_id` matches the [`World`] that was used to call [`SystemState::new`].
     /// Otherwise, this returns false.
     #[inline]
-    pub fn matches_world(&self, world_id: SubWorldId) -> bool {
+    pub fn matches_world(&self, world_id: WorldId) -> bool {
         self.world_id == world_id
     }
 
     /// Asserts that the [`SystemState`] matches the provided world.
     #[inline]
     #[track_caller]
-    fn validate_world(&self, world_id: SubWorldId) {
+    fn validate_world(&self, world_id: WorldId) {
         #[inline(never)]
         #[track_caller]
         #[cold]
-        fn panic_mismatched(this: SubWorldId, other: SubWorldId) -> ! {
+        fn panic_mismatched(this: WorldId, other: WorldId) -> ! {
             panic!("Encountered a mismatched World. This SystemState was created from {this:?}, but a method was called using {other:?}.");
         }
 
@@ -558,7 +552,7 @@ impl<Param: SystemParam> SystemState<Param> {
     /// be called if the `world` has been structurally mutated (i.e. added/removed a component or resource). Users using
     /// [`SystemState::get`] or [`SystemState::get_mut`] do not need to call this as it will be automatically called for them.
     #[inline]
-    pub fn update_archetypes(&mut self, world: &SubWorld) {
+    pub fn update_archetypes(&mut self, world: &World) {
         self.update_archetypes_unsafe_world_cell(world.as_unsafe_world_cell_readonly());
     }
 
@@ -595,7 +589,7 @@ impl<Param: SystemParam> SystemState<Param> {
     ///
     /// Users should strongly prefer to use [`SystemState::get`] over this function.
     #[inline]
-    pub fn get_manual<'w, 's>(&'s mut self, world: &'w SubWorld) -> SystemParamItem<'w, 's, Param>
+    pub fn get_manual<'w, 's>(&'s mut self, world: &'w World) -> SystemParamItem<'w, 's, Param>
     where
         Param: ReadOnlySystemParam,
     {
@@ -616,7 +610,7 @@ impl<Param: SystemParam> SystemState<Param> {
     #[inline]
     pub fn get_manual_mut<'w, 's>(
         &'s mut self,
-        world: &'w mut SubWorld,
+        world: &'w mut World,
     ) -> SystemParamItem<'w, 's, Param> {
         self.validate_world(world.id());
         let change_tick = world.change_tick();
@@ -678,7 +672,7 @@ impl<Param: SystemParam> SystemState<Param> {
 }
 
 impl<Param: SystemParam> FromWorld for SystemState<Param> {
-    fn from_world(world: &mut SubWorld) -> Self {
+    fn from_world(world: &mut World) -> Self {
         Self::new(world)
     }
 }
@@ -714,7 +708,7 @@ struct FunctionSystemState<P: SystemParam> {
     /// The id of the [`World`] this system was initialized with. If the world
     /// passed to [`System::update_archetype_component_access`] does not match
     /// this id, a panic will occur.
-    world_id: SubWorldId,
+    world_id: WorldId,
 }
 
 impl<Marker, F> FunctionSystem<Marker, F>
@@ -841,7 +835,7 @@ where
     }
 
     #[inline]
-    fn apply_deferred(&mut self, world: &mut SubWorld) {
+    fn apply_deferred(&mut self, world: &mut World) {
         let param_state = &mut self.state.as_mut().expect(Self::ERROR_UNINITIALIZED).param;
         F::Param::apply(param_state, &self.system_meta, world);
     }
@@ -868,7 +862,7 @@ where
     }
 
     #[inline]
-    fn initialize(&mut self, world: &mut SubWorld) {
+    fn initialize(&mut self, world: &mut World) {
         if let Some(state) = &self.state {
             assert_eq!(
                 state.world_id,

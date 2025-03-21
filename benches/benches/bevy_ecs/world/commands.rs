@@ -3,7 +3,7 @@ use core::hint::black_box;
 use bevy_ecs::{
     component::Component,
     system::{Command, Commands},
-    world::{CommandQueue, SubWorld},
+    world::{CommandQueue, World},
 };
 use criterion::Criterion;
 
@@ -20,7 +20,7 @@ pub fn empty_commands(criterion: &mut Criterion) {
     group.measurement_time(core::time::Duration::from_secs(4));
 
     group.bench_function("0_entities", |bencher| {
-        let mut world = SubWorld::default();
+        let mut world = World::default();
         let mut command_queue = CommandQueue::default();
 
         bencher.iter(|| {
@@ -38,7 +38,7 @@ pub fn spawn_commands(criterion: &mut Criterion) {
 
     for entity_count in (1..5).map(|i| i * 2 * 1000) {
         group.bench_function(format!("{}_entities", entity_count), |bencher| {
-            let mut world = SubWorld::default();
+            let mut world = World::default();
             let mut command_queue = CommandQueue::default();
 
             bencher.iter(|| {
@@ -75,7 +75,7 @@ pub fn insert_commands(criterion: &mut Criterion) {
 
     let entity_count = 10_000;
     group.bench_function("insert", |bencher| {
-        let mut world = SubWorld::default();
+        let mut world = World::default();
         let mut command_queue = CommandQueue::default();
         let mut entities = Vec::new();
         for _ in 0..entity_count {
@@ -93,7 +93,7 @@ pub fn insert_commands(criterion: &mut Criterion) {
         });
     });
     group.bench_function("insert_or_spawn_batch", |bencher| {
-        let mut world = SubWorld::default();
+        let mut world = World::default();
         let mut command_queue = CommandQueue::default();
         let mut entities = Vec::new();
         for _ in 0..entity_count {
@@ -115,7 +115,7 @@ pub fn insert_commands(criterion: &mut Criterion) {
         });
     });
     group.bench_function("insert_batch", |bencher| {
-        let mut world = SubWorld::default();
+        let mut world = World::default();
         let mut command_queue = CommandQueue::default();
         let mut entities = Vec::new();
         for _ in 0..entity_count {
@@ -140,14 +140,14 @@ struct FakeCommandA;
 struct FakeCommandB(u64);
 
 impl Command for FakeCommandA {
-    fn apply(self, world: &mut SubWorld) {
+    fn apply(self, world: &mut World) {
         black_box(self);
         black_box(world);
     }
 }
 
 impl Command for FakeCommandB {
-    fn apply(self, world: &mut SubWorld) {
+    fn apply(self, world: &mut World) {
         black_box(self);
         black_box(world);
     }
@@ -160,7 +160,7 @@ pub fn fake_commands(criterion: &mut Criterion) {
 
     for command_count in (1..5).map(|i| i * 2 * 1000) {
         group.bench_function(format!("{}_commands", command_count), |bencher| {
-            let mut world = SubWorld::default();
+            let mut world = World::default();
             let mut command_queue = CommandQueue::default();
 
             bencher.iter(|| {
@@ -184,7 +184,7 @@ pub fn fake_commands(criterion: &mut Criterion) {
 struct SizedCommand<T: Default + Send + Sync + 'static>(T);
 
 impl<T: Default + Send + Sync + 'static> Command for SizedCommand<T> {
-    fn apply(self, world: &mut SubWorld) {
+    fn apply(self, world: &mut World) {
         black_box(self);
         black_box(world);
     }
@@ -205,7 +205,7 @@ pub fn sized_commands_impl<T: Default + Command>(criterion: &mut Criterion) {
 
     for command_count in (1..5).map(|i| i * 2 * 1000) {
         group.bench_function(format!("{}_commands", command_count), |bencher| {
-            let mut world = SubWorld::default();
+            let mut world = World::default();
             let mut command_queue = CommandQueue::default();
 
             bencher.iter(|| {

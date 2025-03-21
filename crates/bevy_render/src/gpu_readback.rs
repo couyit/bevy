@@ -20,7 +20,7 @@ use bevy_ecs::{
     change_detection::ResMut,
     entity::Entity,
     event::Event,
-    prelude::{Component, Resource, SubWorld},
+    prelude::{Component, Resource, World},
     system::{Query, Res},
 };
 use bevy_image::{Image, TextureFormatPixelInfo};
@@ -286,7 +286,7 @@ fn prepare_buffers(
     }
 }
 
-pub(crate) fn submit_readback_commands(world: &SubWorld, command_encoder: &mut CommandEncoder) {
+pub(crate) fn submit_readback_commands(world: &World, command_encoder: &mut CommandEncoder) {
     let readbacks = world.resource::<GpuReadbacks>();
     for readback in &readbacks.requested {
         match &readback.src {

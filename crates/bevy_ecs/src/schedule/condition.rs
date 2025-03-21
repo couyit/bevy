@@ -1269,7 +1269,7 @@ mod tests {
         component::Component,
         schedule::{IntoScheduleConfigs, Schedule},
         system::Local,
-        world::SubWorld,
+        world::World,
     };
     use bevy_ecs_macros::{Event, Resource};
 
@@ -1291,7 +1291,7 @@ mod tests {
 
     #[test]
     fn run_condition() {
-        let mut world = SubWorld::new();
+        let mut world = World::new();
         world.init_resource::<Counter>();
         let mut schedule = Schedule::default();
 
@@ -1318,7 +1318,7 @@ mod tests {
 
     #[test]
     fn run_condition_combinators() {
-        let mut world = SubWorld::new();
+        let mut world = World::new();
         world.init_resource::<Counter>();
         let mut schedule = Schedule::default();
 
@@ -1344,7 +1344,7 @@ mod tests {
 
     #[test]
     fn multiple_run_conditions() {
-        let mut world = SubWorld::new();
+        let mut world = World::new();
         world.init_resource::<Counter>();
         let mut schedule = Schedule::default();
 
@@ -1361,7 +1361,7 @@ mod tests {
 
     #[test]
     fn multiple_run_conditions_is_and_operation() {
-        let mut world = SubWorld::new();
+        let mut world = World::new();
         world.init_resource::<Counter>();
 
         let mut schedule = Schedule::default();

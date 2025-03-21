@@ -22,7 +22,7 @@ pub fn heavy_compute(c: &mut Criterion) {
     group.bench_function("base", |b| {
         ComputeTaskPool::get_or_init(TaskPool::default);
 
-        let mut world = SubWorld::default();
+        let mut world = World::default();
 
         world.spawn_batch((0..1000).map(|_| {
             (

@@ -55,7 +55,7 @@ struct Args {
 #[derive(Resource)]
 struct FontHandle(Handle<Font>);
 impl FromWorld for FontHandle {
-    fn from_world(world: &mut SubWorld) -> Self {
+    fn from_world(world: &mut World) -> Self {
         Self(world.load_asset("fonts/FiraSans-Bold.ttf"))
     }
 }

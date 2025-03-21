@@ -9,7 +9,7 @@ use bevy_ecs::{
     entity_disabling::DefaultQueryFilters,
     reflect::{AppTypeRegistry, ReflectComponent, ReflectResource},
     relationship::RelationshipHookMode,
-    world::SubWorld,
+    world::World,
 };
 use bevy_reflect::TypePath;
 
@@ -21,12 +21,12 @@ use bevy_reflect::TypePath;
 #[derive(Asset, TypePath, Debug)]
 pub struct Scene {
     /// The world of the scene, containing its entities and resources.
-    pub world: SubWorld,
+    pub world: World,
 }
 
 impl Scene {
     /// Creates a new scene with the given world.
-    pub fn new(world: SubWorld) -> Self {
+    pub fn new(world: World) -> Self {
         Self { world }
     }
 
@@ -35,7 +35,7 @@ impl Scene {
         dynamic_scene: &DynamicScene,
         type_registry: &AppTypeRegistry,
     ) -> Result<Scene, SceneSpawnError> {
-        let mut world = SubWorld::new();
+        let mut world = World::new();
         let mut entity_map = EntityHashMap::default();
         dynamic_scene.write_to_world_with(&mut world, &mut entity_map, type_registry)?;
 
@@ -47,7 +47,7 @@ impl Scene {
     /// This method will return a [`SceneSpawnError`] if a type either is not registered in the
     /// provided [`AppTypeRegistry`] or doesn't reflect the [`Component`](bevy_ecs::component::Component) trait.
     pub fn clone_with(&self, type_registry: &AppTypeRegistry) -> Result<Scene, SceneSpawnError> {
-        let mut new_world = SubWorld::new();
+        let mut new_world = World::new();
         let mut entity_map = EntityHashMap::default();
         self.write_to_world_with(&mut new_world, &mut entity_map, type_registry)?;
         Ok(Self { world: new_world })
@@ -59,7 +59,7 @@ impl Scene {
     /// provided [`AppTypeRegistry`] or doesn't reflect the [`Component`](bevy_ecs::component::Component) trait.
     pub fn write_to_world_with(
         &self,
-        world: &mut SubWorld,
+        world: &mut World,
         entity_map: &mut EntityHashMap<Entity>,
         type_registry: &AppTypeRegistry,
     ) -> Result<(), SceneSpawnError> {

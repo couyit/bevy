@@ -280,7 +280,7 @@ impl RelationshipSourceCollection for Entity {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::prelude::{Component, SubWorld};
+    use crate::prelude::{Component, World};
     use crate::relationship::RelationshipTarget;
 
     #[test]
@@ -293,7 +293,7 @@ mod tests {
         #[relationship_target(relationship = Rel, linked_spawn)]
         struct RelTarget(Vec<Entity>);
 
-        let mut world = SubWorld::new();
+        let mut world = World::new();
         let a = world.spawn_empty().id();
         let b = world.spawn_empty().id();
 
@@ -314,7 +314,7 @@ mod tests {
         #[relationship_target(relationship = Rel, linked_spawn)]
         struct RelTarget(SmallVec<[Entity; 4]>);
 
-        let mut world = SubWorld::new();
+        let mut world = World::new();
         let a = world.spawn_empty().id();
         let b = world.spawn_empty().id();
 
@@ -335,7 +335,7 @@ mod tests {
         #[relationship_target(relationship = Rel)]
         struct RelTarget(Entity);
 
-        let mut world = SubWorld::new();
+        let mut world = World::new();
         let a = world.spawn_empty().id();
         let b = world.spawn_empty().id();
 
@@ -356,7 +356,7 @@ mod tests {
         #[relationship_target(relationship = Above)]
         struct Below(Entity);
 
-        let mut world = SubWorld::new();
+        let mut world = World::new();
         let a = world.spawn_empty().id();
         let b = world.spawn_empty().id();
 

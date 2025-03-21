@@ -3,7 +3,7 @@ use core::hint::black_box;
 use bevy_ecs::{
     event::Event,
     observer::{Trigger, TriggerTargets},
-    world::SubWorld,
+    world::World,
 };
 
 use criterion::Criterion;
@@ -22,7 +22,7 @@ pub fn observe_simple(criterion: &mut Criterion) {
     group.measurement_time(core::time::Duration::from_secs(4));
 
     group.bench_function("trigger_simple", |bencher| {
-        let mut world = SubWorld::new();
+        let mut world = World::new();
         world.add_observer(empty_listener_base);
         bencher.iter(|| {
             for _ in 0..10000 {
@@ -32,7 +32,7 @@ pub fn observe_simple(criterion: &mut Criterion) {
     });
 
     group.bench_function("trigger_targets_simple/10000_entity", |bencher| {
-        let mut world = SubWorld::new();
+        let mut world = World::new();
         let mut entities = vec![];
         for _ in 0..10000 {
             entities.push(world.spawn_empty().observe(empty_listener_base).id());
@@ -50,6 +50,6 @@ fn empty_listener_base(trigger: Trigger<EventBase>) {
     black_box(trigger);
 }
 
-fn send_base_event(world: &mut SubWorld, entities: impl TriggerTargets) {
+fn send_base_event(world: &mut World, entities: impl TriggerTargets) {
     world.trigger_targets(EventBase, entities);
 }

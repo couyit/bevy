@@ -198,7 +198,7 @@ mod tests {
     use bevy_ecs::{
         prelude::Component,
         system::{Query, SystemState},
-        world::SubWorld,
+        world::World,
     };
 
     use super::{GhostNode, Node, UiChildren, UiRootNodes};
@@ -208,7 +208,7 @@ mod tests {
 
     #[test]
     fn iterate_ui_root_nodes() {
-        let world = &mut SubWorld::new();
+        let world = &mut World::new();
 
         // Normal root
         world
@@ -239,7 +239,7 @@ mod tests {
 
     #[test]
     fn iterate_ui_children() {
-        let world = &mut SubWorld::new();
+        let world = &mut World::new();
 
         let n1 = world.spawn((A(1), Node::default())).id();
         let n2 = world.spawn((A(2), GhostNode)).id();

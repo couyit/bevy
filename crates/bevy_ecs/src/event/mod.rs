@@ -228,7 +228,7 @@ mod tests {
     fn test_event_registry_can_add_and_remove_events_to_world() {
         use bevy_ecs::prelude::*;
 
-        let mut world = SubWorld::new();
+        let mut world = World::new();
         EventRegistry::register_event::<TestEvent>(&mut world);
 
         let has_events = world.get_resource::<Events<TestEvent>>().is_some();
@@ -426,7 +426,7 @@ mod tests {
         #[derive(Resource)]
         struct Counter(AtomicUsize);
 
-        let mut world = SubWorld::new();
+        let mut world = World::new();
         world.init_resource::<Events<TestEvent>>();
         for _ in 0..100 {
             world.send_event(TestEvent { i: 1 });
@@ -468,7 +468,7 @@ mod tests {
         #[derive(Resource)]
         struct Counter(AtomicUsize);
 
-        let mut world = SubWorld::new();
+        let mut world = World::new();
         world.init_resource::<Events<TestEvent>>();
         for _ in 0..100 {
             world.send_event(TestEvent { i: 1 });
@@ -511,7 +511,7 @@ mod tests {
     fn test_event_reader_iter_last() {
         use bevy_ecs::prelude::*;
 
-        let mut world = SubWorld::new();
+        let mut world = World::new();
         world.init_resource::<Events<TestEvent>>();
 
         let mut reader =
@@ -541,7 +541,7 @@ mod tests {
     fn test_event_mutator_iter_last() {
         use bevy_ecs::prelude::*;
 
-        let mut world = SubWorld::new();
+        let mut world = World::new();
         world.init_resource::<Events<TestEvent>>();
 
         let mut mutator =
@@ -571,7 +571,7 @@ mod tests {
     fn test_event_reader_iter_nth() {
         use bevy_ecs::prelude::*;
 
-        let mut world = SubWorld::new();
+        let mut world = World::new();
         world.init_resource::<Events<TestEvent>>();
 
         world.send_event(TestEvent { i: 0 });
@@ -597,7 +597,7 @@ mod tests {
     fn test_event_mutator_iter_nth() {
         use bevy_ecs::prelude::*;
 
-        let mut world = SubWorld::new();
+        let mut world = World::new();
         world.init_resource::<Events<TestEvent>>();
 
         world.send_event(TestEvent { i: 0 });

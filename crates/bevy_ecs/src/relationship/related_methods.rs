@@ -5,7 +5,7 @@ use crate::{
         Relationship, RelationshipHookMode, RelationshipSourceCollection, RelationshipTarget,
     },
     system::{Commands, EntityCommands},
-    world::{EntityWorldMut, SubWorld},
+    world::{EntityWorldMut, World},
 };
 use bevy_platform_support::prelude::{Box, Vec};
 use core::{marker::PhantomData, mem};
@@ -278,7 +278,7 @@ impl<'a> EntityCommands<'a> {
     pub fn add_related<R: Relationship>(&mut self, related: &[Entity]) -> &mut Self {
         let id = self.id();
         let related = related.to_vec();
-        self.commands().queue(move |world: &mut SubWorld| {
+        self.commands().queue(move |world: &mut World| {
             for related in related {
                 world.entity_mut(related).insert(R::from(id));
             }
@@ -298,7 +298,7 @@ impl<'a> EntityCommands<'a> {
         let id = self.id();
         let related: Box<[Entity]> = related.into();
 
-        self.commands().queue(move |world: &mut SubWorld| {
+        self.commands().queue(move |world: &mut World| {
             world.entity_mut(id).replace_related::<R>(&related);
         });
 
@@ -326,7 +326,7 @@ impl<'a> EntityCommands<'a> {
         let entities_to_relate: Box<[Entity]> = entities_to_relate.into();
         let newly_related_entities: Box<[Entity]> = newly_related_entities.into();
 
-        self.commands().queue(move |world: &mut SubWorld| {
+        self.commands().queue(move |world: &mut World| {
             world.entity_mut(id).replace_children_with_difference(
                 &entities_to_unrelate,
                 &entities_to_relate,
@@ -341,7 +341,7 @@ impl<'a> EntityCommands<'a> {
     /// This entity will not be despawned.
     pub fn despawn_related<S: RelationshipTarget>(&mut self) -> &mut Self {
         let id = self.id();
-        self.commands.queue(move |world: &mut SubWorld| {
+        self.commands.queue(move |world: &mut World| {
             world.entity_mut(id).despawn_related::<S>();
         });
         self
@@ -359,7 +359,7 @@ impl<'a> EntityCommands<'a> {
         bundle: impl Bundle + Clone,
     ) -> &mut Self {
         let id = self.id();
-        self.commands.queue(move |world: &mut SubWorld| {
+        self.commands.queue(move |world: &mut World| {
             world.entity_mut(id).insert_recursive::<S>(bundle);
         });
         self
@@ -374,7 +374,7 @@ impl<'a> EntityCommands<'a> {
     /// Any cycles will cause this method to loop infinitely.
     pub fn remove_recursive<S: RelationshipTarget, B: Bundle>(&mut self) -> &mut Self {
         let id = self.id();
-        self.commands.queue(move |world: &mut SubWorld| {
+        self.commands.queue(move |world: &mut World| {
             world.entity_mut(id).remove_recursive::<S, B>();
         });
         self
@@ -385,13 +385,13 @@ impl<'a> EntityCommands<'a> {
 /// a specific entity.
 pub struct RelatedSpawner<'w, R: Relationship> {
     target: Entity,
-    world: &'w mut SubWorld,
+    world: &'w mut World,
     _marker: PhantomData<R>,
 }
 
 impl<'w, R: Relationship> RelatedSpawner<'w, R> {
     /// Creates a new instance that will spawn entities targeting the `target` entity.
-    pub fn new(world: &'w mut SubWorld, target: Entity) -> Self {
+    pub fn new(world: &'w mut World, target: Entity) -> Self {
         Self {
             world,
             target,
@@ -473,7 +473,7 @@ mod tests {
 
     #[test]
     fn insert_and_remove_recursive() {
-        let mut world = SubWorld::new();
+        let mut world = World::new();
 
         let a = world.spawn_empty().id();
         let b = world.spawn(ChildOf { parent: a }).id();

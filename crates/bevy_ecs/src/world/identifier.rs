@@ -2,7 +2,7 @@ use crate::{
     component::Tick,
     storage::SparseSetIndex,
     system::{ExclusiveSystemParam, ReadOnlySystemParam, SystemMeta, SystemParam},
-    world::{FromWorld, SubWorld},
+    world::{FromWorld, World},
 };
 use bevy_platform_support::sync::atomic::{AtomicUsize, Ordering};
 
@@ -15,12 +15,12 @@ use super::unsafe_world_cell::UnsafeWorldCell;
 /// The trait [`FromWorld`] is implemented for this type, which returns the
 /// ID of the world passed to [`FromWorld::from_world`].
 // Note that this *is* used by external crates as well as for internal safety checks
-pub struct WorldId(usize);
+pub struct WorldsId(usize);
 
 /// The next [`WorldId`].
 static MAX_WORLD_ID: AtomicUsize = AtomicUsize::new(0);
 
-impl WorldId {
+impl WorldsId {
     /// Create a new, unique [`WorldId`]. Returns [`None`] if the supply of unique
     /// [`WorldId`]s has been exhausted
     ///
@@ -32,12 +32,12 @@ impl WorldId {
             .fetch_update(Ordering::Relaxed, Ordering::Relaxed, |val| {
                 val.checked_add(1)
             })
-            .map(WorldId)
+            .map(WorldsId)
             .ok()
     }
 }
 
-impl FromWorld for WorldId {
+impl FromWorld for WorldsId {
     #[inline]
     fn from_world(world: &mut World) -> Self {
         world.id()
@@ -45,15 +45,15 @@ impl FromWorld for WorldId {
 }
 
 // SAFETY: No world data is accessed.
-unsafe impl ReadOnlySystemParam for WorldId {}
+unsafe impl ReadOnlySystemParam for WorldsId {}
 
 // SAFETY: No world data is accessed.
-unsafe impl SystemParam for WorldId {
+unsafe impl SystemParam for WorldsId {
     type State = ();
 
-    type Item<'world, 'state> = WorldId;
+    type Item<'world, 'state> = WorldsId;
 
-    fn init_state(_: &mut SubWorld, _: &mut SystemMeta) -> Self::State {}
+    fn init_state(_: &mut World, _: &mut SystemMeta) -> Self::State {}
 
     #[inline]
     unsafe fn get_param<'world, 'state>(
@@ -66,11 +66,11 @@ unsafe impl SystemParam for WorldId {
     }
 }
 
-impl ExclusiveSystemParam for WorldId {
-    type State = WorldId;
-    type Item<'s> = WorldId;
+impl ExclusiveSystemParam for WorldsId {
+    type State = WorldsId;
+    type Item<'s> = WorldsId;
 
-    fn init(world: &mut SubWorld, _system_meta: &mut SystemMeta) -> Self::State {
+    fn init(world: &mut World, _system_meta: &mut SystemMeta) -> Self::State {
         world.id()
     }
 
@@ -79,7 +79,7 @@ impl ExclusiveSystemParam for WorldId {
     }
 }
 
-impl SparseSetIndex for WorldId {
+impl SparseSetIndex for WorldsId {
     #[inline]
     fn sparse_set_index(&self) -> usize {
         self.0
@@ -98,7 +98,7 @@ mod tests {
 
     #[test]
     fn world_ids_unique() {
-        let ids = core::iter::repeat_with(WorldId::new)
+        let ids = core::iter::repeat_with(WorldsId::new)
             .take(50)
             .map(Option::unwrap)
             .collect::<Vec<_>>();
@@ -112,7 +112,7 @@ mod tests {
 
     #[test]
     fn world_id_system_param() {
-        fn test_system(world_id: WorldId) -> WorldId {
+        fn test_system(world_id: WorldsId) -> WorldsId {
             world_id
         }
 
@@ -124,11 +124,11 @@ mod tests {
 
     #[test]
     fn world_id_exclusive_system_param() {
-        fn test_system(_world: &mut SubWorld, world_id: SubWorldId) -> SubWorldId {
+        fn test_system(_world: &mut World, world_id: SubWorldId) -> SubWorldId {
             world_id
         }
 
-        let mut world = SubWorld::default();
+        let mut world = World::default();
         let system_id = world.register_system(test_system);
         let world_id = world.run_system(system_id).unwrap();
         assert_eq!(world.id(), world_id);

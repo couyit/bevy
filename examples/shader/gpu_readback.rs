@@ -159,7 +159,7 @@ struct ComputePipeline {
 }
 
 impl FromWorld for ComputePipeline {
-    fn from_world(world: &mut SubWorld) -> Self {
+    fn from_world(world: &mut World) -> Self {
         let render_device = world.resource::<RenderDevice>();
         let layout = render_device.create_bind_group_layout(
             None,
@@ -198,7 +198,7 @@ impl render_graph::Node for ComputeNode {
         &self,
         _graph: &mut render_graph::RenderGraphContext,
         render_context: &mut RenderContext,
-        world: &SubWorld,
+        world: &World,
     ) -> Result<(), render_graph::NodeRunError> {
         let pipeline_cache = world.resource::<PipelineCache>();
         let pipeline = world.resource::<ComputePipeline>();

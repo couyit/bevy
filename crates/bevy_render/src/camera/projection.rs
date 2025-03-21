@@ -672,7 +672,7 @@ impl CameraProjection for OrthographicProjection {
 }
 
 impl FromWorld for OrthographicProjection {
-    fn from_world(_world: &mut SubWorld) -> Self {
+    fn from_world(_world: &mut World) -> Self {
         OrthographicProjection::default_3d()
     }
 }

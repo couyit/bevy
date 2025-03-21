@@ -466,7 +466,7 @@ where
 }
 
 impl<M: Material2d> FromWorld for Material2dPipeline<M> {
-    fn from_world(world: &mut SubWorld) -> Self {
+    fn from_world(world: &mut World) -> Self {
         let asset_server = world.resource::<AssetServer>();
         let render_device = world.resource::<RenderDevice>();
         let material2d_layout = M::bind_group_layout(render_device);

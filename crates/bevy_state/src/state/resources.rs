@@ -4,7 +4,7 @@ use bevy_ecs::{
     change_detection::DetectChangesMut,
     resource::Resource,
     system::ResMut,
-    world::{FromWorld, SubWorld},
+    world::{FromWorld, World},
 };
 
 use super::{freely_mutable_state::FreelyMutableState, states::States};
@@ -72,7 +72,7 @@ impl<S: States> State<S> {
 }
 
 impl<S: States + FromWorld> FromWorld for State<S> {
-    fn from_world(world: &mut SubWorld) -> Self {
+    fn from_world(world: &mut World) -> Self {
         Self(S::from_world(world))
     }
 }

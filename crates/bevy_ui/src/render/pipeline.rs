@@ -16,7 +16,7 @@ pub struct UiPipeline {
 }
 
 impl FromWorld for UiPipeline {
-    fn from_world(world: &mut SubWorld) -> Self {
+    fn from_world(world: &mut World) -> Self {
         let render_device = world.resource::<RenderDevice>();
 
         let view_layout = render_device.create_bind_group_layout(

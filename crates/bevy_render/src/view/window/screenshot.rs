@@ -443,7 +443,7 @@ pub struct ScreenshotToScreenPipeline {
 }
 
 impl FromWorld for ScreenshotToScreenPipeline {
-    fn from_world(render_world: &mut SubWorld) -> Self {
+    fn from_world(render_world: &mut World) -> Self {
         let device = render_world.resource::<RenderDevice>();
 
         let bind_group_layout = device.create_bind_group_layout(
@@ -493,7 +493,7 @@ impl SpecializedRenderPipeline for ScreenshotToScreenPipeline {
     }
 }
 
-pub(crate) fn submit_screenshot_commands(world: &SubWorld, encoder: &mut CommandEncoder) {
+pub(crate) fn submit_screenshot_commands(world: &World, encoder: &mut CommandEncoder) {
     let targets = world.resource::<RenderScreenshotTargets>();
     let prepared = world.resource::<RenderScreenshotsPrepared>();
     let pipelines = world.resource::<PipelineCache>();
@@ -622,7 +622,7 @@ fn render_screenshot(
     }
 }
 
-pub(crate) fn collect_screenshots(world: &mut SubWorld) {
+pub(crate) fn collect_screenshots(world: &mut World) {
     #[cfg(feature = "trace")]
     let _span = tracing::info_span!("collect_screenshots").entered();
 

@@ -36,7 +36,7 @@ pub fn schedule(c: &mut Criterion) {
     group.warm_up_time(core::time::Duration::from_millis(500));
     group.measurement_time(core::time::Duration::from_secs(4));
     group.bench_function("base", |b| {
-        let mut world = SubWorld::default();
+        let mut world = World::default();
 
         world.spawn_batch((0..10000).map(|_| (A(0.0), B(0.0))));
 

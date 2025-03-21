@@ -68,7 +68,7 @@ impl Component for ObserverState {
 
     fn on_add() -> Option<ComponentHook> {
         Some(|mut world, HookContext { entity, .. }| {
-            world.commands().queue(move |world: &mut SubWorld| {
+            world.commands().queue(move |world: &mut World| {
                 world.register_observer(entity);
             });
         })
@@ -84,7 +84,7 @@ impl Component for ObserverState {
                     .as_mut()
                     .descriptor,
             );
-            world.commands().queue(move |world: &mut SubWorld| {
+            world.commands().queue(move |world: &mut World| {
                 world.unregister_observer(entity, descriptor);
             });
         })
@@ -432,7 +432,7 @@ fn hook_on_add<E: Event, B: Bundle, S: ObserverSystem<E, B>>(
     mut world: DeferredWorld<'_>,
     HookContext { entity, .. }: HookContext,
 ) {
-    world.commands().queue(move |world: &mut SubWorld| {
+    world.commands().queue(move |world: &mut World| {
         let event_id = E::register_component_id(world);
         let mut components = Vec::new();
         B::component_ids(&mut world.components_registrator(), &mut |id| {
@@ -491,7 +491,7 @@ mod tests {
             Err("I failed!".into())
         }
 
-        let mut world = SubWorld::default();
+        let mut world = World::default();
         world.add_observer(system);
         Schedule::default().run(&mut world);
         world.trigger(TriggerEvent);
@@ -507,7 +507,7 @@ mod tests {
             Err("I failed!".into())
         }
 
-        let mut world = SubWorld::default();
+        let mut world = World::default();
         world.init_resource::<Ran>();
         let observer = Observer::new(system).with_error_handler(crate::error::ignore);
         world.spawn(observer);

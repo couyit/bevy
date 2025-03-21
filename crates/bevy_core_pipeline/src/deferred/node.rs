@@ -37,7 +37,7 @@ impl ViewNode for EarlyDeferredGBufferPrepassNode {
         graph: &mut RenderGraphContext,
         render_context: &mut RenderContext<'w>,
         view_query: QueryItem<'w, Self::ViewQuery>,
-        world: &'w SubWorld,
+        world: &'w World,
     ) -> Result<(), NodeRunError> {
         run_deferred_prepass(
             graph,
@@ -75,7 +75,7 @@ impl ViewNode for LateDeferredGBufferPrepassNode {
         graph: &mut RenderGraphContext,
         render_context: &mut RenderContext<'w>,
         view_query: QueryItem<'w, Self::ViewQuery>,
-        world: &'w SubWorld,
+        world: &'w World,
     ) -> Result<(), NodeRunError> {
         let (_, _, _, _, occlusion_culling, no_indirect_drawing) = view_query;
         if !occlusion_culling || no_indirect_drawing {
@@ -110,7 +110,7 @@ fn run_deferred_prepass<'w>(
         <LateDeferredGBufferPrepassNode as ViewNode>::ViewQuery,
     >,
     is_late: bool,
-    world: &'w SubWorld,
+    world: &'w World,
     label: &'static str,
 ) -> Result<(), NodeRunError> {
     let (Some(opaque_deferred_phases), Some(alpha_mask_deferred_phases)) = (

@@ -4,7 +4,7 @@ use crate::{
     change_detection::Mut,
     entity::Entity,
     system::{input::SystemInput, BoxedSystem, IntoSystem},
-    world::SubWorld,
+    world::World,
 };
 use alloc::boxed::Box;
 use bevy_ecs_macros::{Component, Resource};
@@ -142,7 +142,7 @@ impl<S> CachedSystemId<S> {
     }
 }
 
-impl SubWorld {
+impl World {
     /// Registers a system and returns a [`SystemId`] so it can later be called by [`World::run_system`].
     ///
     /// It's possible to register multiple copies of the same system by calling this function
@@ -537,7 +537,7 @@ mod tests {
             }
         }
 
-        let mut world = SubWorld::new();
+        let mut world = World::new();
         world.init_resource::<ChangeDetector>();
         world.init_resource::<Counter>();
         assert_eq!(*world.resource::<Counter>(), Counter(0));
@@ -562,7 +562,7 @@ mod tests {
             last_counter.0 .0 = counter.0;
         }
 
-        let mut world = SubWorld::new();
+        let mut world = World::new();
         world.insert_resource(Counter(1));
         assert_eq!(*world.resource::<Counter>(), Counter(1));
         let id = world.register_system(doubling);
@@ -585,7 +585,7 @@ mod tests {
             counter.0 += increment_by;
         }
 
-        let mut world = SubWorld::new();
+        let mut world = World::new();
 
         let id = world.register_system(increment_sys);
 
@@ -625,7 +625,7 @@ mod tests {
             NonCopy(counter.0)
         }
 
-        let mut world = SubWorld::new();
+        let mut world = World::new();
 
         let id = world.register_system(increment_sys);
 
@@ -644,8 +644,8 @@ mod tests {
 
     #[test]
     fn exclusive_system() {
-        let mut world = SubWorld::new();
-        let exclusive_system_id = world.register_system(|world: &mut SubWorld| {
+        let mut world = World::new();
+        let exclusive_system_id = world.register_system(|world: &mut World| {
             world.spawn_empty();
         });
         let entity_count = world.entities.len();
@@ -666,7 +666,7 @@ mod tests {
             }
         }
 
-        let mut world = SubWorld::new();
+        let mut world = World::new();
         world.insert_resource(Counter(0));
 
         let increment_two = world.register_system(|mut counter: ResMut<Counter>| {
@@ -696,7 +696,7 @@ mod tests {
             }
         }
 
-        let mut world = SubWorld::new();
+        let mut world = World::new();
         world.insert_resource(Counter(0));
 
         let increment_by =
@@ -719,7 +719,7 @@ mod tests {
             4
         }
 
-        let mut world = SubWorld::new();
+        let mut world = World::new();
         let old = world.register_system_cached(four);
         let new = world.register_system_cached(four);
         assert_eq!(old, new);
@@ -748,7 +748,7 @@ mod tests {
             counter.0 = 1;
         }
 
-        let mut world = SubWorld::new();
+        let mut world = World::new();
         world.insert_resource(Counter(0));
 
         world.commands().run_system_cached(sys);
@@ -767,7 +767,7 @@ mod tests {
             i * 2
         }
 
-        let mut world = SubWorld::new();
+        let mut world = World::new();
 
         let output = world.run_system_cached(four.pipe(double));
         assert!(matches!(output, Ok(8)));
@@ -796,7 +796,7 @@ mod tests {
             }
         }
 
-        let mut world = SubWorld::new();
+        let mut world = World::new();
         let foo1 = world.register_system_cached(Foo);
         let foo2 = world.register_system_cached(Foo);
         let bar1 = world.register_system_cached(Bar);
@@ -819,7 +819,7 @@ mod tests {
             counter.0 += *input;
         }
 
-        let mut world = SubWorld::new();
+        let mut world = World::new();
         world.insert_resource(Counter(0));
 
         let id = world.register_system(with_ref);
@@ -840,7 +840,7 @@ mod tests {
             }
         }
 
-        let mut world = SubWorld::new();
+        let mut world = World::new();
         world.insert_resource(Counter(0));
         let post_system = world.register_system(post);
 
@@ -861,7 +861,7 @@ mod tests {
         impl Resource for T {}
         fn system(_: Res<T>) {}
 
-        let mut world = SubWorld::new();
+        let mut world = World::new();
         let id = world.register_system(system.warn_param_missing());
         // This fails because `T` has not been added to the world yet.
         let result = world.run_system(id);
@@ -887,7 +887,7 @@ mod tests {
             }
         }
 
-        let mut world = SubWorld::new();
+        let mut world = World::new();
         let id = world.register_system(system);
         SYSTEM_ID.set(Some(id));
         world.run_system(id).unwrap();

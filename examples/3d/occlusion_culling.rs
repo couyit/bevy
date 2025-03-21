@@ -139,7 +139,7 @@ struct SavedIndirectParametersData {
 }
 
 impl FromWorld for SavedIndirectParameters {
-    fn from_world(world: &mut SubWorld) -> SavedIndirectParameters {
+    fn from_world(world: &mut World) -> SavedIndirectParameters {
         let render_adapter = world.resource::<RenderAdapter>();
         SavedIndirectParameters(Arc::new(Mutex::new(SavedIndirectParametersData {
             data: vec![],
@@ -420,7 +420,7 @@ impl render_graph::Node for ReadbackIndirectParametersNode {
         &self,
         _: &mut RenderGraphContext,
         render_context: &mut RenderContext<'w>,
-        world: &'w SubWorld,
+        world: &'w World,
     ) -> Result<(), NodeRunError> {
         // Extract the buffers that hold the GPU indirect draw parameters from
         // the world resources. We're going to read those buffers to determine

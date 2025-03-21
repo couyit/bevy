@@ -1048,7 +1048,7 @@ impl App {
     /// [`app.main().world()`].
     ///
     /// [`app.main().world()`]: SubApp::world
-    pub fn world(&self) -> &SubWorld {
+    pub fn world(&self) -> &World {
         self.main().world()
     }
 
@@ -1056,7 +1056,7 @@ impl App {
     /// [`app.main_mut().world_mut()`].
     ///
     /// [`app.main_mut().world_mut()`]: SubApp::world_mut
-    pub fn world_mut(&mut self) -> &mut SubWorld {
+    pub fn world_mut(&mut self) -> &mut World {
         self.main_mut().world_mut()
     }
 
@@ -1435,7 +1435,7 @@ mod tests {
         resource::Resource,
         schedule::{IntoScheduleConfigs, ScheduleLabel},
         system::{Commands, Query},
-        world::{FromWorld, SubWorld},
+        world::{FromWorld, World},
     };
 
     use crate::{App, AppExit, Plugin, SubApp, Update};
@@ -1756,7 +1756,7 @@ mod tests {
         #[derive(Resource)]
         struct TestResource;
         impl FromWorld for TestResource {
-            fn from_world(_world: &mut SubWorld) -> Self {
+            fn from_world(_world: &mut World) -> Self {
                 TestResource
             }
         }
@@ -1766,7 +1766,7 @@ mod tests {
             _marker: PhantomData<Mutex<()>>,
         }
         impl FromWorld for NonSendTestResource {
-            fn from_world(_world: &mut SubWorld) -> Self {
+            fn from_world(_world: &mut World) -> Self {
                 NonSendTestResource {
                     _marker: PhantomData,
                 }

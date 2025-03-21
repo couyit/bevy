@@ -1,7 +1,7 @@
 use crate::{
     entity::Entity,
     identifier::masks::{IdentifierMask, HIGH_MASK},
-    world::SubWorld,
+    world::World,
 };
 
 use super::{hash_map::EntityHashMap, VisitEntitiesMut};
@@ -204,7 +204,7 @@ impl<'m> SceneEntityMapper<'m> {
     }
 
     /// Creates a new [`SceneEntityMapper`], spawning a temporary base [`Entity`] in the provided [`World`]
-    pub fn new(map: &'m mut EntityHashMap<Entity>, world: &mut SubWorld) -> Self {
+    pub fn new(map: &'m mut EntityHashMap<Entity>, world: &mut World) -> Self {
         // We're going to be calling methods on `Entities` that require advance
         // flushing, such as `alloc` and `free`.
         world.flush_entities();
@@ -219,7 +219,7 @@ impl<'m> SceneEntityMapper<'m> {
     /// Reserves the allocated references to dead entities within the world. This frees the temporary base
     /// [`Entity`] while reserving extra generations. Because this makes the [`SceneEntityMapper`] unable to
     /// safely allocate any more references, this method takes ownership of `self` in order to render it unusable.
-    pub fn finish(self, world: &mut SubWorld) {
+    pub fn finish(self, world: &mut World) {
         // SAFETY: Entities data is kept in a valid state via `EntityMap::world_scope`
         let entities = unsafe { world.entities_mut() };
         assert!(entities.free(self.dead_start).is_some());
@@ -234,8 +234,8 @@ impl<'m> SceneEntityMapper<'m> {
     /// parameter `R`.
     pub fn world_scope<R>(
         entity_map: &'m mut EntityHashMap<Entity>,
-        world: &mut SubWorld,
-        f: impl FnOnce(&mut SubWorld, &mut Self) -> R,
+        world: &mut World,
+        f: impl FnOnce(&mut World, &mut Self) -> R,
     ) -> R {
         let mut mapper = Self::new(entity_map, world);
         let result = f(world, &mut mapper);
@@ -248,7 +248,7 @@ impl<'m> SceneEntityMapper<'m> {
 mod tests {
     use crate::{
         entity::{hash_map::EntityHashMap, Entity, EntityMapper, SceneEntityMapper},
-        world::SubWorld,
+        world::World,
     };
 
     #[test]
@@ -257,7 +257,7 @@ mod tests {
         const SECOND_IDX: u32 = 2;
 
         let mut map = EntityHashMap::default();
-        let mut world = SubWorld::new();
+        let mut world = World::new();
         let mut mapper = SceneEntityMapper::new(&mut map, &mut world);
 
         let mapped_ent = Entity::from_raw(FIRST_IDX);
@@ -284,7 +284,7 @@ mod tests {
     #[test]
     fn world_scope_reserves_generations() {
         let mut map = EntityHashMap::default();
-        let mut world = SubWorld::new();
+        let mut world = World::new();
 
         let dead_ref = SceneEntityMapper::world_scope(&mut map, &mut world, |_, mapper| {
             mapper.get_mapped(Entity::from_raw(0))
@@ -298,7 +298,7 @@ mod tests {
 
     #[test]
     fn entity_mapper_no_panic() {
-        let mut world = SubWorld::new();
+        let mut world = World::new();
         // "Dirty" the `Entities`, requiring a flush afterward.
         world.entities.reserve_entity();
         assert!(world.entities.needs_flush());

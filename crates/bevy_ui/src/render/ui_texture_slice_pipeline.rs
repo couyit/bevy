@@ -119,7 +119,7 @@ pub struct UiTextureSlicePipeline {
 }
 
 impl FromWorld for UiTextureSlicePipeline {
-    fn from_world(world: &mut SubWorld) -> Self {
+    fn from_world(world: &mut World) -> Self {
         let render_device = world.resource::<RenderDevice>();
 
         let view_layout = render_device.create_bind_group_layout(

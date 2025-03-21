@@ -875,7 +875,7 @@ mod test {
 
     #[test]
     fn visibility_propagation_change_detection() {
-        let mut world = SubWorld::new();
+        let mut world = World::new();
         let mut schedule = Schedule::default();
         schedule.add_systems(visibility_propagate_system);
 
@@ -951,7 +951,7 @@ mod test {
 
     #[test]
     fn visibility_propagation_with_invalid_parent() {
-        let mut world = SubWorld::new();
+        let mut world = World::new();
         let mut schedule = Schedule::default();
         schedule.add_systems(visibility_propagate_system);
 

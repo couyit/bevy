@@ -7,7 +7,7 @@ use bevy_ecs::{
     prelude::{Component, Entity},
     resource::Resource,
     system::{Commands, Query, Res, ResMut},
-    world::{FromWorld, SubWorld},
+    world::{FromWorld, World},
 };
 use bevy_render::{
     render_resource::{
@@ -36,7 +36,7 @@ pub struct BloomUpsamplingPipelineKeys {
 }
 
 impl FromWorld for BloomUpsamplingPipeline {
-    fn from_world(world: &mut SubWorld) -> Self {
+    fn from_world(world: &mut World) -> Self {
         let render_device = world.resource::<RenderDevice>();
 
         let bind_group_layout = render_device.create_bind_group_layout(

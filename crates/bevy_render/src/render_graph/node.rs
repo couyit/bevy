@@ -11,7 +11,7 @@ use bevy_ecs::{
     define_label,
     intern::Interned,
     query::{QueryItem, QueryState, ReadOnlyQueryData},
-    world::{FromWorld, SubWorld},
+    world::{FromWorld, World},
 };
 use core::fmt::Debug;
 use downcast_rs::{impl_downcast, Downcast};
@@ -86,7 +86,7 @@ pub trait Node: Downcast + Send + Sync + 'static {
     }
 
     /// Updates internal node state using the current render [`World`] prior to the run method.
-    fn update(&mut self, _world: &mut SubWorld) {}
+    fn update(&mut self, _world: &mut World) {}
 
     /// Runs the graph node logic, issues draw calls, updates the output slots and
     /// optionally queues up subgraphs for execution. The graph data, input and output values are
@@ -95,7 +95,7 @@ pub trait Node: Downcast + Send + Sync + 'static {
         &self,
         graph: &mut RenderGraphContext,
         render_context: &mut RenderContext<'w>,
-        world: &'w SubWorld,
+        world: &'w World,
     ) -> Result<(), NodeRunError>;
 }
 
@@ -316,7 +316,7 @@ impl Node for EmptyNode {
         &self,
         _graph: &mut RenderGraphContext,
         _render_context: &mut RenderContext,
-        _world: &SubWorld,
+        _world: &World,
     ) -> Result<(), NodeRunError> {
         Ok(())
     }
@@ -341,7 +341,7 @@ impl Node for RunGraphOnViewNode {
         &self,
         graph: &mut RenderGraphContext,
         _render_context: &mut RenderContext,
-        _world: &SubWorld,
+        _world: &World,
     ) -> Result<(), NodeRunError> {
         graph.run_sub_graph(self.sub_graph, vec![], Some(graph.view_entity()))?;
         Ok(())
@@ -357,7 +357,7 @@ pub trait ViewNode {
     type ViewQuery: ReadOnlyQueryData;
 
     /// Updates internal node state using the current render [`World`] prior to the run method.
-    fn update(&mut self, _world: &mut SubWorld) {}
+    fn update(&mut self, _world: &mut World) {}
 
     /// Runs the graph node logic, issues draw calls, updates the output slots and
     /// optionally queues up subgraphs for execution. The graph data, input and output values are
@@ -367,7 +367,7 @@ pub trait ViewNode {
         graph: &mut RenderGraphContext,
         render_context: &mut RenderContext<'w>,
         view_query: QueryItem<'w, Self::ViewQuery>,
-        world: &'w SubWorld,
+        world: &'w World,
     ) -> Result<(), NodeRunError>;
 }
 
@@ -381,7 +381,7 @@ pub struct ViewNodeRunner<N: ViewNode> {
 }
 
 impl<N: ViewNode> ViewNodeRunner<N> {
-    pub fn new(node: N, world: &mut SubWorld) -> Self {
+    pub fn new(node: N, world: &mut World) -> Self {
         Self {
             view_query: world.query_filtered(),
             node,
@@ -390,7 +390,7 @@ impl<N: ViewNode> ViewNodeRunner<N> {
 }
 
 impl<N: ViewNode + FromWorld> FromWorld for ViewNodeRunner<N> {
-    fn from_world(world: &mut SubWorld) -> Self {
+    fn from_world(world: &mut World) -> Self {
         Self::new(N::from_world(world), world)
     }
 }
@@ -399,7 +399,7 @@ impl<T> Node for ViewNodeRunner<T>
 where
     T: ViewNode + Send + Sync + 'static,
 {
-    fn update(&mut self, world: &mut SubWorld) {
+    fn update(&mut self, world: &mut World) {
         self.view_query.update_archetypes(world);
         self.node.update(world);
     }
@@ -408,7 +408,7 @@ where
         &self,
         graph: &mut RenderGraphContext,
         render_context: &mut RenderContext<'w>,
-        world: &'w SubWorld,
+        world: &'w World,
     ) -> Result<(), NodeRunError> {
         let Ok(view) = self.view_query.get_manual(world, graph.view_entity()) else {
             return Ok(());

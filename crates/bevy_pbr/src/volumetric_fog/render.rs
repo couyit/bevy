@@ -15,7 +15,7 @@ use bevy_ecs::{
     query::{Has, QueryItem, With},
     resource::Resource,
     system::{lifetimeless::Read, Commands, Local, Query, Res, ResMut},
-    world::{FromWorld, SubWorld},
+    world::{FromWorld, World},
 };
 use bevy_image::{BevyDefault, Image};
 use bevy_math::{vec4, Mat3A, Mat4, Vec3, Vec3A, Vec4, Vec4Swizzles as _};
@@ -215,7 +215,7 @@ pub struct ViewFogVolume {
 pub struct VolumetricFogUniformBuffer(pub DynamicUniformBuffer<VolumetricFogUniform>);
 
 impl FromWorld for VolumetricFogPipeline {
-    fn from_world(world: &mut SubWorld) -> Self {
+    fn from_world(world: &mut World) -> Self {
         let render_device = world.resource::<RenderDevice>();
         let mesh_view_layouts = world.resource::<MeshPipelineViewLayouts>();
 
@@ -348,7 +348,7 @@ impl ViewNode for VolumetricFogNode {
             msaa,
             view_environment_map_offset,
         ): QueryItem<'w, Self::ViewQuery>,
-        world: &'w SubWorld,
+        world: &'w World,
     ) -> Result<(), NodeRunError> {
         let pipeline_cache = world.resource::<PipelineCache>();
         let volumetric_lighting_pipeline = world.resource::<VolumetricFogPipeline>();

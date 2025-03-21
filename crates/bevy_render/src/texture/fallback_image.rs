@@ -142,7 +142,7 @@ fn fallback_image_new(
 }
 
 impl FromWorld for FallbackImage {
-    fn from_world(world: &mut bevy_ecs::prelude::SubWorld) -> Self {
+    fn from_world(world: &mut bevy_ecs::prelude::World) -> Self {
         let render_device = world.resource::<RenderDevice>();
         let render_queue = world.resource::<RenderQueue>();
         let default_sampler = world.resource::<DefaultImageSampler>();
@@ -206,7 +206,7 @@ impl FromWorld for FallbackImage {
 }
 
 impl FromWorld for FallbackImageZero {
-    fn from_world(world: &mut bevy_ecs::prelude::SubWorld) -> Self {
+    fn from_world(world: &mut bevy_ecs::prelude::World) -> Self {
         let render_device = world.resource::<RenderDevice>();
         let render_queue = world.resource::<RenderQueue>();
         let default_sampler = world.resource::<DefaultImageSampler>();
@@ -223,7 +223,7 @@ impl FromWorld for FallbackImageZero {
 }
 
 impl FromWorld for FallbackImageCubemap {
-    fn from_world(world: &mut bevy_ecs::prelude::SubWorld) -> Self {
+    fn from_world(world: &mut bevy_ecs::prelude::World) -> Self {
         let render_device = world.resource::<RenderDevice>();
         let render_queue = world.resource::<RenderQueue>();
         let default_sampler = world.resource::<DefaultImageSampler>();

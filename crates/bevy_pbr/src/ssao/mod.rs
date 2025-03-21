@@ -13,7 +13,7 @@ use bevy_ecs::{
     resource::Resource,
     schedule::IntoScheduleConfigs,
     system::{Commands, Query, Res, ResMut},
-    world::{FromWorld, SubWorld},
+    world::{FromWorld, World},
 };
 use bevy_reflect::{std_traits::ReflectDefault, Reflect};
 use bevy_render::{
@@ -220,7 +220,7 @@ impl ViewNode for SsaoNode {
         _graph: &mut RenderGraphContext,
         render_context: &mut RenderContext,
         (camera, pipeline_id, bind_groups, view_uniform_offset): QueryItem<Self::ViewQuery>,
-        world: &SubWorld,
+        world: &World,
     ) -> Result<(), NodeRunError> {
         let pipelines = world.resource::<SsaoPipelines>();
         let pipeline_cache = world.resource::<PipelineCache>();
@@ -324,7 +324,7 @@ struct SsaoPipelines {
 }
 
 impl FromWorld for SsaoPipelines {
-    fn from_world(world: &mut SubWorld) -> Self {
+    fn from_world(world: &mut World) -> Self {
         let render_device = world.resource::<RenderDevice>();
         let render_queue = world.resource::<RenderQueue>();
         let pipeline_cache = world.resource::<PipelineCache>();

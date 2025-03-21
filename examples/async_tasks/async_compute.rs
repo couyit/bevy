@@ -70,7 +70,7 @@ fn spawn_tasks(mut commands: Commands) {
 
                     // we use a raw command queue to pass a FnOnce(&mut World) back to be
                     // applied in a deferred manner.
-                    command_queue.push(move |world: &mut SubWorld| {
+                    command_queue.push(move |world: &mut World| {
                         let (box_mesh_handle, box_material_handle) = {
                             let mut system_state = SystemState::<(
                                 Res<BoxMeshHandle>,

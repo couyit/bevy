@@ -1,6 +1,6 @@
 use crate::component::ComponentId;
 use crate::storage::SparseSetIndex;
-use crate::world::SubWorld;
+use crate::world::World;
 use alloc::{format, string::String, vec, vec::Vec};
 use core::{fmt, fmt::Debug, marker::PhantomData};
 use derive_more::From;
@@ -959,7 +959,7 @@ impl AccessConflicts {
         }
     }
 
-    pub(crate) fn format_conflict_list(&self, world: &SubWorld) -> String {
+    pub(crate) fn format_conflict_list(&self, world: &World) -> String {
         match self {
             AccessConflicts::All => String::new(),
             AccessConflicts::Individual(indices) => indices

@@ -1,4 +1,4 @@
-use bevy_ecs::{system::Commands, world::SubWorld};
+use bevy_ecs::{system::Commands, world::World};
 use log::debug;
 
 use crate::state::{FreelyMutableState, NextState};
@@ -17,7 +17,7 @@ pub trait CommandsStatesExt {
 
 impl CommandsStatesExt for Commands<'_, '_> {
     fn set_state<S: FreelyMutableState>(&mut self, state: S) {
-        self.queue(move |w: &mut SubWorld| {
+        self.queue(move |w: &mut World| {
             let mut next = w.resource_mut::<NextState<S>>();
             if let NextState::Pending(prev) = &*next {
                 if *prev != state {

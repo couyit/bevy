@@ -334,7 +334,7 @@ pub enum RelationshipHookMode {
 
 #[cfg(test)]
 mod tests {
-    use crate::world::SubWorld;
+    use crate::world::World;
     use crate::{component::Component, entity::Entity};
     use alloc::vec::Vec;
 
@@ -348,7 +348,7 @@ mod tests {
         #[relationship_target(relationship = Likes)]
         struct LikedBy(Vec<Entity>);
 
-        let mut world = SubWorld::new();
+        let mut world = World::new();
         let a = world.spawn_empty().id();
         let b = world.spawn(Likes(a)).id();
         let c = world.spawn(Likes(a)).id();
@@ -365,7 +365,7 @@ mod tests {
         #[relationship_target(relationship = Rel)]
         struct RelTarget(Vec<Entity>);
 
-        let mut world = SubWorld::new();
+        let mut world = World::new();
         let a = world.spawn_empty().id();
         world.entity_mut(a).insert(Rel(a));
         assert!(!world.entity(a).contains::<Rel>());
@@ -382,7 +382,7 @@ mod tests {
         #[relationship_target(relationship = Rel)]
         struct RelTarget(Vec<Entity>);
 
-        let mut world = SubWorld::new();
+        let mut world = World::new();
         let a = world.spawn_empty().id();
         world.despawn(a);
         let b = world.spawn(Rel(a)).id();

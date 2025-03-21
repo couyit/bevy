@@ -153,13 +153,13 @@ impl AssetServer {
     /// Registers a new [`Asset`] type. [`Asset`] types must be registered before assets of that type can be loaded.
     pub fn register_asset<A: Asset>(&self, assets: &Assets<A>) {
         self.register_handle_provider(assets.get_handle_provider());
-        fn sender<A: Asset>(world: &mut SubWorld, id: UntypedAssetId) {
+        fn sender<A: Asset>(world: &mut World, id: UntypedAssetId) {
             world
                 .resource_mut::<Events<AssetEvent<A>>>()
                 .send(AssetEvent::LoadedWithDependencies { id: id.typed() });
         }
         fn failed_sender<A: Asset>(
-            world: &mut SubWorld,
+            world: &mut World,
             id: UntypedAssetId,
             path: AssetPath<'static>,
             error: AssetLoadError,
@@ -1527,7 +1527,7 @@ impl AssetServer {
 }
 
 /// A system that manages internal [`AssetServer`] events, such as finalizing asset loads.
-pub fn handle_internal_asset_events(world: &mut SubWorld) {
+pub fn handle_internal_asset_events(world: &mut World) {
     world.resource_scope(|world, server: Mut<AssetServer>| {
         let mut infos = server.data.infos.write();
         let var_name = vec![];

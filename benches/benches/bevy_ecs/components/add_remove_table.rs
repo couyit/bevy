@@ -5,11 +5,11 @@ struct A(f32);
 #[derive(Component)]
 struct B(f32);
 
-pub struct Benchmark(SubWorld, Vec<Entity>);
+pub struct Benchmark(World, Vec<Entity>);
 
 impl Benchmark {
     pub fn new() -> Self {
-        let mut world = SubWorld::default();
+        let mut world = World::default();
         let mut entities = Vec::with_capacity(10_000);
         for _ in 0..10_000 {
             entities.push(world.spawn(A(0.0)).id());

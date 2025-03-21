@@ -315,7 +315,7 @@ impl SpecializedRenderPipeline for TonemappingPipeline {
 }
 
 impl FromWorld for TonemappingPipeline {
-    fn from_world(render_world: &mut SubWorld) -> Self {
+    fn from_world(render_world: &mut World) -> Self {
         let mut entries = DynamicBindGroupLayoutEntries::new_with_indices(
             ShaderStages::FRAGMENT,
             (

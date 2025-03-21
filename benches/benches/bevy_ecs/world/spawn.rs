@@ -14,7 +14,7 @@ pub fn world_spawn(criterion: &mut Criterion) {
 
     for entity_count in (0..5).map(|i| 10_u32.pow(i)) {
         group.bench_function(format!("{}_entities", entity_count), |bencher| {
-            let mut world = SubWorld::default();
+            let mut world = World::default();
             bencher.iter(|| {
                 for _ in 0..entity_count {
                     world.spawn((A(Mat4::default()), B(Vec4::default())));

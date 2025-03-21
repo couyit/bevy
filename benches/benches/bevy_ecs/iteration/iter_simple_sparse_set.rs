@@ -15,11 +15,11 @@ struct Rotation(Vec3);
 #[component(storage = "SparseSet")]
 struct Velocity(Vec3);
 
-pub struct Benchmark<'w>(SubWorld, QueryState<(&'w Velocity, &'w mut Position)>);
+pub struct Benchmark<'w>(World, QueryState<(&'w Velocity, &'w mut Position)>);
 
 impl<'w> Benchmark<'w> {
     pub fn new() -> Self {
-        let mut world = SubWorld::new();
+        let mut world = World::new();
 
         world.spawn_batch(core::iter::repeat_n(
             (

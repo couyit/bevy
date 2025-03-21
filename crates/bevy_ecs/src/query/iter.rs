@@ -2592,7 +2592,7 @@ mod tests {
 
     use crate::component::Component;
     use crate::entity::Entity;
-    use crate::prelude::SubWorld;
+    use crate::prelude::World;
 
     #[derive(Component, Debug, PartialEq, PartialOrd, Clone, Copy)]
     struct A(f32);
@@ -2602,7 +2602,7 @@ mod tests {
 
     #[test]
     fn query_iter_sorts() {
-        let mut world = SubWorld::new();
+        let mut world = World::new();
         for i in 0..100 {
             world.spawn(A(i as f32));
             world.spawn((A(i as f32), Sparse(i)));
@@ -2677,7 +2677,7 @@ mod tests {
     #[test]
     #[should_panic]
     fn query_iter_sort_after_next() {
-        let mut world = SubWorld::new();
+        let mut world = World::new();
         world.spawn((A(0.),));
         world.spawn((A(1.1),));
         world.spawn((A(2.22),));
@@ -2707,7 +2707,7 @@ mod tests {
     #[test]
     #[should_panic]
     fn query_iter_sort_after_next_dense() {
-        let mut world = SubWorld::new();
+        let mut world = World::new();
         world.spawn((Sparse(11),));
         world.spawn((Sparse(22),));
         world.spawn((Sparse(33),));
@@ -2736,7 +2736,7 @@ mod tests {
 
     #[test]
     fn empty_query_iter_sort_after_next_does_not_panic() {
-        let mut world = SubWorld::new();
+        let mut world = World::new();
         {
             let mut query = world.query::<(&A, &Sparse)>();
             let mut iter = query.iter(&world);
@@ -2761,7 +2761,7 @@ mod tests {
 
     #[test]
     fn query_iter_cursor_state_non_empty_after_next() {
-        let mut world = SubWorld::new();
+        let mut world = World::new();
         world.spawn((A(0.), Sparse(11)));
         world.spawn((A(1.1), Sparse(22)));
         world.spawn((A(2.22), Sparse(33)));
@@ -2795,7 +2795,7 @@ mod tests {
 
     #[test]
     fn query_iter_many_sorts() {
-        let mut world = SubWorld::new();
+        let mut world = World::new();
 
         let entity_list: &Vec<_> = &world
             .spawn_batch([A(0.), A(1.), A(2.), A(3.), A(4.)])
@@ -2870,7 +2870,7 @@ mod tests {
 
     #[test]
     fn query_iter_many_sort_doesnt_panic_after_next() {
-        let mut world = SubWorld::new();
+        let mut world = World::new();
 
         let entity_list: &Vec<_> = &world
             .spawn_batch([A(0.), A(1.), A(2.), A(3.), A(4.)])
@@ -2898,7 +2898,7 @@ mod tests {
         #[derive(Component, Ord, PartialOrd, Eq, PartialEq)]
         struct C(usize);
 
-        let mut world = SubWorld::new();
+        let mut world = World::new();
         let id = world.spawn(C(10)).id();
         let mut query_state = world.query::<&mut C>();
 

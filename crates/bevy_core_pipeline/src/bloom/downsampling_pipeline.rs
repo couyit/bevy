@@ -4,7 +4,7 @@ use bevy_ecs::{
     prelude::{Component, Entity},
     resource::Resource,
     system::{Commands, Query, Res, ResMut},
-    world::{FromWorld, SubWorld},
+    world::{FromWorld, World},
 };
 use bevy_math::{Vec2, Vec4};
 use bevy_render::{
@@ -47,7 +47,7 @@ pub struct BloomUniforms {
 }
 
 impl FromWorld for BloomDownsamplingPipeline {
-    fn from_world(world: &mut SubWorld) -> Self {
+    fn from_world(world: &mut World) -> Self {
         let render_device = world.resource::<RenderDevice>();
 
         // Bind group layout

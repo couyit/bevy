@@ -539,7 +539,7 @@ impl Observers {
     }
 }
 
-impl SubWorld {
+impl World {
     /// Spawns a "global" [`Observer`] which will watch for the given event.
     /// Returns its [`Entity`] as a [`EntityWorldMut`].
     ///
@@ -900,7 +900,7 @@ mod tests {
 
     #[test]
     fn observer_order_spawn_despawn() {
-        let mut world = SubWorld::new();
+        let mut world = World::new();
         world.init_resource::<Order>();
 
         world.add_observer(|_: Trigger<OnAdd, A>, mut res: ResMut<Order>| res.observed("add"));
@@ -922,7 +922,7 @@ mod tests {
 
     #[test]
     fn observer_order_insert_remove() {
-        let mut world = SubWorld::new();
+        let mut world = World::new();
         world.init_resource::<Order>();
 
         world.add_observer(|_: Trigger<OnAdd, A>, mut res: ResMut<Order>| res.observed("add"));
@@ -946,7 +946,7 @@ mod tests {
 
     #[test]
     fn observer_order_insert_remove_sparse() {
-        let mut world = SubWorld::new();
+        let mut world = World::new();
         world.init_resource::<Order>();
 
         world.add_observer(|_: Trigger<OnAdd, S>, mut res: ResMut<Order>| res.observed("add"));
@@ -970,7 +970,7 @@ mod tests {
 
     #[test]
     fn observer_order_replace() {
-        let mut world = SubWorld::new();
+        let mut world = World::new();
         world.init_resource::<Order>();
 
         let entity = world.spawn(A).id();
@@ -996,7 +996,7 @@ mod tests {
 
     #[test]
     fn observer_order_recursive() {
-        let mut world = SubWorld::new();
+        let mut world = World::new();
         world.init_resource::<Order>();
         world.add_observer(
             |obs: Trigger<OnAdd, A>, mut res: ResMut<Order>, mut commands: Commands| {
@@ -1033,7 +1033,7 @@ mod tests {
 
     #[test]
     fn observer_trigger_ref() {
-        let mut world = SubWorld::new();
+        let mut world = World::new();
 
         world.add_observer(|mut trigger: Trigger<EventWithData>| trigger.event_mut().counter += 1);
         world.add_observer(|mut trigger: Trigger<EventWithData>| trigger.event_mut().counter += 2);
@@ -1049,7 +1049,7 @@ mod tests {
 
     #[test]
     fn observer_trigger_targets_ref() {
-        let mut world = SubWorld::new();
+        let mut world = World::new();
 
         world.add_observer(|mut trigger: Trigger<EventWithData, A>| {
             trigger.event_mut().counter += 1;
@@ -1072,7 +1072,7 @@ mod tests {
 
     #[test]
     fn observer_multiple_listeners() {
-        let mut world = SubWorld::new();
+        let mut world = World::new();
         world.init_resource::<Order>();
 
         world.add_observer(|_: Trigger<OnAdd, A>, mut res: ResMut<Order>| res.observed("add_1"));
@@ -1086,7 +1086,7 @@ mod tests {
 
     #[test]
     fn observer_multiple_events() {
-        let mut world = SubWorld::new();
+        let mut world = World::new();
         world.init_resource::<Order>();
         let on_remove = OnRemove::register_component_id(&mut world);
         world.spawn(
@@ -1109,7 +1109,7 @@ mod tests {
 
     #[test]
     fn observer_multiple_components() {
-        let mut world = SubWorld::new();
+        let mut world = World::new();
         world.init_resource::<Order>();
         world.register_component::<A>();
         world.register_component::<B>();
@@ -1126,7 +1126,7 @@ mod tests {
 
     #[test]
     fn observer_despawn() {
-        let mut world = SubWorld::new();
+        let mut world = World::new();
 
         let system: fn(Trigger<OnAdd, A>) = |_| {
             panic!("Observer triggered after being despawned.");
@@ -1139,7 +1139,7 @@ mod tests {
     // Regression test for https://github.com/bevyengine/bevy/issues/14961
     #[test]
     fn observer_despawn_archetype_flags() {
-        let mut world = SubWorld::new();
+        let mut world = World::new();
         world.init_resource::<Order>();
 
         let entity = world.spawn((A, B)).flush();
@@ -1162,7 +1162,7 @@ mod tests {
 
     #[test]
     fn observer_multiple_matches() {
-        let mut world = SubWorld::new();
+        let mut world = World::new();
         world.init_resource::<Order>();
 
         world.add_observer(|_: Trigger<OnAdd, (A, B)>, mut res: ResMut<Order>| {
@@ -1175,7 +1175,7 @@ mod tests {
 
     #[test]
     fn observer_no_target() {
-        let mut world = SubWorld::new();
+        let mut world = World::new();
         world.init_resource::<Order>();
 
         let system: fn(Trigger<EventA>) = |_| {
@@ -1197,7 +1197,7 @@ mod tests {
 
     #[test]
     fn observer_entity_routing() {
-        let mut world = SubWorld::new();
+        let mut world = World::new();
         world.init_resource::<Order>();
 
         let system: fn(Trigger<EventA>) = |_| {
@@ -1227,7 +1227,7 @@ mod tests {
         #[derive(Resource, Default)]
         struct R(i32);
 
-        let mut world = SubWorld::new();
+        let mut world = World::new();
         let component_a = world.register_component::<A>();
         let component_b = world.register_component::<B>();
         world.init_resource::<R>();
@@ -1337,7 +1337,7 @@ mod tests {
 
     #[test]
     fn observer_dynamic_component() {
-        let mut world = SubWorld::new();
+        let mut world = World::new();
         world.init_resource::<Order>();
 
         let component_id = world.register_component::<A>();
@@ -1360,7 +1360,7 @@ mod tests {
 
     #[test]
     fn observer_dynamic_trigger() {
-        let mut world = SubWorld::new();
+        let mut world = World::new();
         world.init_resource::<Order>();
         let event_a = OnRemove::register_component_id(&mut world);
 
@@ -1373,7 +1373,7 @@ mod tests {
             ..Default::default()
         });
 
-        world.commands().queue(move |world: &mut SubWorld| {
+        world.commands().queue(move |world: &mut World| {
             // SAFETY: we registered `event_a` above and it matches the type of EventA
             unsafe { world.trigger_targets_dynamic(event_a, EventA, ()) };
         });
@@ -1383,7 +1383,7 @@ mod tests {
 
     #[test]
     fn observer_propagating() {
-        let mut world = SubWorld::new();
+        let mut world = World::new();
         world.init_resource::<Order>();
 
         let parent = world
@@ -1410,7 +1410,7 @@ mod tests {
 
     #[test]
     fn observer_propagating_redundant_dispatch_same_entity() {
-        let mut world = SubWorld::new();
+        let mut world = World::new();
         world.init_resource::<Order>();
 
         let parent = world
@@ -1440,7 +1440,7 @@ mod tests {
 
     #[test]
     fn observer_propagating_redundant_dispatch_parent_child() {
-        let mut world = SubWorld::new();
+        let mut world = World::new();
         world.init_resource::<Order>();
 
         let parent = world
@@ -1470,7 +1470,7 @@ mod tests {
 
     #[test]
     fn observer_propagating_halt() {
-        let mut world = SubWorld::new();
+        let mut world = World::new();
         world.init_resource::<Order>();
 
         let parent = world
@@ -1500,7 +1500,7 @@ mod tests {
 
     #[test]
     fn observer_propagating_join() {
-        let mut world = SubWorld::new();
+        let mut world = World::new();
         world.init_resource::<Order>();
 
         let parent = world
@@ -1537,7 +1537,7 @@ mod tests {
 
     #[test]
     fn observer_propagating_no_next() {
-        let mut world = SubWorld::new();
+        let mut world = World::new();
         world.init_resource::<Order>();
 
         let entity = world
@@ -1557,7 +1557,7 @@ mod tests {
 
     #[test]
     fn observer_propagating_parallel_propagation() {
-        let mut world = SubWorld::new();
+        let mut world = World::new();
         world.init_resource::<Order>();
 
         let parent_a = world
@@ -1604,7 +1604,7 @@ mod tests {
 
     #[test]
     fn observer_propagating_world() {
-        let mut world = SubWorld::new();
+        let mut world = World::new();
         world.init_resource::<Order>();
 
         world.add_observer(|_: Trigger<EventPropagating>, mut res: ResMut<Order>| {
@@ -1625,7 +1625,7 @@ mod tests {
 
     #[test]
     fn observer_propagating_world_skipping() {
-        let mut world = SubWorld::new();
+        let mut world = World::new();
         world.init_resource::<Order>();
 
         world.add_observer(
@@ -1652,7 +1652,7 @@ mod tests {
     // Fails prior to https://github.com/bevyengine/bevy/pull/15398
     #[test]
     fn observer_on_remove_during_despawn_spawn_empty() {
-        let mut world = SubWorld::new();
+        let mut world = World::new();
 
         // Observe the removal of A - this will run during despawn
         world.add_observer(|_: Trigger<OnRemove, A>, mut cmd: Commands| {
@@ -1679,7 +1679,7 @@ mod tests {
         #[derive(Resource)]
         struct ResB;
 
-        let mut world = SubWorld::new();
+        let mut world = World::new();
         // This fails because `ResA` is not present in the world
         world.add_observer(|_: Trigger<EventA>, _: Res<ResA>, mut commands: Commands| {
             commands.insert_resource(ResB);
@@ -1692,7 +1692,7 @@ mod tests {
         #[derive(Resource)]
         struct ResA;
 
-        let mut world = SubWorld::new();
+        let mut world = World::new();
         world.add_observer(
             |_: Trigger<EventA>, mut params: ParamSet<(Query<Entity>, Commands)>| {
                 params.p1().insert_resource(ResA);
@@ -1714,7 +1714,7 @@ mod tests {
         struct EventA;
 
         let caller = MaybeLocation::caller();
-        let mut world = SubWorld::new();
+        let mut world = World::new();
         world.add_observer(move |trigger: Trigger<EventA>| {
             assert_eq!(trigger.caller(), caller);
         });
@@ -1728,7 +1728,7 @@ mod tests {
         struct Component;
 
         let caller = MaybeLocation::caller();
-        let mut world = SubWorld::new();
+        let mut world = World::new();
         world.add_observer(move |trigger: Trigger<OnAdd, Component>| {
             assert_eq!(trigger.caller(), caller);
         });
@@ -1744,7 +1744,7 @@ mod tests {
         #[derive(Resource, Default)]
         struct Counter(HashMap<ComponentId, usize>);
 
-        let mut world = SubWorld::new();
+        let mut world = World::new();
         world.init_resource::<Counter>();
         let a_id = world.register_component::<A>();
         let b_id = world.register_component::<B>();

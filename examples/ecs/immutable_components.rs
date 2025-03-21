@@ -28,7 +28,7 @@ pub struct MyMutableComponent(bool);
 #[component(immutable)]
 pub struct MyImmutableComponent(bool);
 
-fn demo_1(world: &mut SubWorld) {
+fn demo_1(world: &mut World) {
     // Immutable components can be inserted just like mutable components.
     let mut entity = world.spawn((MyMutableComponent(false), MyImmutableComponent(false)));
 
@@ -101,7 +101,7 @@ fn on_replace_name(mut world: DeferredWorld<'_>, HookContext { entity, .. }: Hoo
     index.name_to_entity.remove(&name);
 }
 
-fn demo_2(world: &mut SubWorld) {
+fn demo_2(world: &mut World) {
     // Setup our name index
     world.init_resource::<NameIndex>();
 
@@ -133,7 +133,7 @@ fn demo_2(world: &mut SubWorld) {
     unsafe_code,
     reason = "Unsafe code is needed to work with dynamic components"
 )]
-fn demo_3(world: &mut SubWorld) {
+fn demo_3(world: &mut World) {
     // This is a list of dynamic components we will create.
     // The first item is the name of the component, and the second is the size
     // in bytes.

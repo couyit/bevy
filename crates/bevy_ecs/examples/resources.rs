@@ -13,7 +13,7 @@ use std::ops::Deref;
 
 fn main() {
     // Create a world
-    let mut world = SubWorld::new();
+    let mut world = World::new();
 
     // Add the counter resource
     world.insert_resource(Counter { value: 0 });

@@ -23,7 +23,7 @@ use crate::{
     system::IntoObserverSystem,
     world::{
         error::EntityComponentError, unsafe_world_cell::UnsafeEntityCell, DeferredWorld, Mut, Ref,
-        SubWorld, ON_DESPAWN, ON_REMOVE, ON_REPLACE,
+        World, ON_DESPAWN, ON_REMOVE, ON_REPLACE,
     },
 };
 use alloc::vec::Vec;
@@ -990,7 +990,7 @@ unsafe impl TrustedEntityBorrow for EntityMut<'_> {}
 /// entities at once.  Unlike `EntityMut`, this type allows adding and
 /// removing components, and despawning the entity.
 pub struct EntityWorldMut<'w> {
-    world: &'w mut SubWorld,
+    world: &'w mut World,
     entity: Entity,
     location: EntityLocation,
 }
@@ -1050,7 +1050,7 @@ impl<'w> EntityWorldMut<'w> {
     ///  The above is trivially satisfied if `location` was sourced from `world.entities().get(entity)`.
     #[inline]
     pub(crate) unsafe fn new(
-        world: &'w mut SubWorld,
+        world: &'w mut World,
         entity: Entity,
         location: EntityLocation,
     ) -> Self {
@@ -2407,7 +2407,7 @@ impl<'w> EntityWorldMut<'w> {
 
     /// Gets read-only access to the world that the current entity belongs to.
     #[inline]
-    pub fn world(&self) -> &SubWorld {
+    pub fn world(&self) -> &World {
         self.world
     }
 
@@ -2420,13 +2420,13 @@ impl<'w> EntityWorldMut<'w> {
     /// If the caller _does_ do something that could change the location, `self.update_location()`
     /// must be called before using any other methods on this [`EntityWorldMut`].
     #[inline]
-    pub unsafe fn world_mut(&mut self) -> &mut SubWorld {
+    pub unsafe fn world_mut(&mut self) -> &mut World {
         self.world
     }
 
     /// Returns this entity's [`World`], consuming itself.
     #[inline]
-    pub fn into_world_mut(self) -> &'w mut SubWorld {
+    pub fn into_world_mut(self) -> &'w mut World {
         self.world
     }
 
@@ -2454,7 +2454,7 @@ impl<'w> EntityWorldMut<'w> {
     /// });
     /// # assert_eq!(new_r.0, 1);
     /// ```
-    pub fn world_scope<U>(&mut self, f: impl FnOnce(&mut SubWorld) -> U) -> U {
+    pub fn world_scope<U>(&mut self, f: impl FnOnce(&mut World) -> U) -> U {
         struct Guard<'w, 'a> {
             entity_mut: &'a mut EntityWorldMut<'w>,
         }
@@ -4611,7 +4611,7 @@ mod tests {
 
     #[test]
     fn entity_ref_get_by_id() {
-        let mut world = SubWorld::new();
+        let mut world = World::new();
         let entity = world.spawn(TestComponent(42)).id();
         let component_id = world
             .components()
@@ -4628,7 +4628,7 @@ mod tests {
 
     #[test]
     fn entity_mut_get_by_id() {
-        let mut world = SubWorld::new();
+        let mut world = World::new();
         let entity = world.spawn(TestComponent(42)).id();
         let component_id = world
             .components()
@@ -4657,7 +4657,7 @@ mod tests {
     fn entity_ref_get_by_id_invalid_component_id() {
         let invalid_component_id = ComponentId::new(usize::MAX);
 
-        let mut world = SubWorld::new();
+        let mut world = World::new();
         let entity = world.spawn_empty().id();
         let entity = world.entity(entity);
         assert!(entity.get_by_id(invalid_component_id).is_err());
@@ -4667,7 +4667,7 @@ mod tests {
     fn entity_mut_get_by_id_invalid_component_id() {
         let invalid_component_id = ComponentId::new(usize::MAX);
 
-        let mut world = SubWorld::new();
+        let mut world = World::new();
         let mut entity = world.spawn_empty();
         assert!(entity.get_by_id(invalid_component_id).is_err());
         assert!(entity.get_mut_by_id(invalid_component_id).is_err());
@@ -4676,7 +4676,7 @@ mod tests {
     // regression test for https://github.com/bevyengine/bevy/pull/7387
     #[test]
     fn entity_mut_world_scope_panic() {
-        let mut world = SubWorld::new();
+        let mut world = World::new();
 
         let mut entity = world.spawn_empty();
         let old_location = entity.location();
@@ -4707,7 +4707,7 @@ mod tests {
         #[component(storage = "SparseSet")]
         struct Sparse;
 
-        let mut world = SubWorld::new();
+        let mut world = World::new();
         let e1 = world.spawn((Dense(0), Sparse)).id();
         let e2 = world.spawn((Dense(1), Sparse)).id();
 
@@ -4725,7 +4725,7 @@ mod tests {
         #[component(storage = "SparseSet")]
         struct Sparse;
 
-        let mut world = SubWorld::new();
+        let mut world = World::new();
         let e1 = world.spawn((Dense(0), Sparse)).id();
         let e2 = world.spawn((Dense(1), Sparse)).id();
 
@@ -4739,7 +4739,7 @@ mod tests {
         #[derive(Component)]
         struct Marker<const N: usize>;
 
-        let mut world = SubWorld::new();
+        let mut world = World::new();
         let ent = world.spawn((Marker::<1>, Marker::<2>, Marker::<3>)).id();
 
         world.entity_mut(ent).retain::<()>();
@@ -4752,7 +4752,7 @@ mod tests {
         #[derive(Component)]
         struct Marker<const N: usize>;
 
-        let mut world = SubWorld::new();
+        let mut world = World::new();
         let ent = world.spawn((Marker::<1>, Marker::<2>, Marker::<3>)).id();
 
         world.entity_mut(ent).retain::<(Marker<2>, Marker<4>)>();
@@ -4780,7 +4780,7 @@ mod tests {
         #[component(storage = "SparseSet")]
         struct Sparse;
 
-        let mut world = SubWorld::new();
+        let mut world = World::new();
         let e1 = world.spawn(Dense(0)).id();
         let e2 = world.spawn(Dense(1)).id();
 
@@ -4801,7 +4801,7 @@ mod tests {
         #[component(storage = "SparseSet")]
         struct Sparse;
 
-        let mut world = SubWorld::new();
+        let mut world = World::new();
         let e1 = world.spawn(Dense(0)).id();
         let e2 = world.spawn(Dense(1)).id();
 
@@ -4827,7 +4827,7 @@ mod tests {
         #[component(storage = "SparseSet")]
         struct Sparse;
 
-        let mut world = SubWorld::new();
+        let mut world = World::new();
         let e1 = world.spawn(Dense(0)).id();
         let e2 = world.spawn(Dense(1)).id();
 
@@ -4851,7 +4851,7 @@ mod tests {
         #[component(storage = "SparseSet")]
         struct Sparse;
 
-        let mut world = SubWorld::new();
+        let mut world = World::new();
         let e1 = world.spawn(Dense(0)).id();
         let e2 = world.spawn(Dense(1)).id();
 
@@ -4875,7 +4875,7 @@ mod tests {
         #[component(storage = "SparseSet")]
         struct Sparse;
 
-        let mut world = SubWorld::new();
+        let mut world = World::new();
         let e1 = world.spawn(Dense(0)).id();
         let e2 = world.spawn(Dense(1)).id();
 
@@ -4891,7 +4891,7 @@ mod tests {
 
     #[test]
     fn entity_mut_insert_by_id() {
-        let mut world = SubWorld::new();
+        let mut world = World::new();
         let test_component_id = world.register_component::<TestComponent>();
 
         let mut entity = world.spawn_empty();
@@ -4919,7 +4919,7 @@ mod tests {
 
     #[test]
     fn entity_mut_insert_bundle_by_id() {
-        let mut world = SubWorld::new();
+        let mut world = World::new();
         let test_component_id = world.register_component::<TestComponent>();
         let test_component_2_id = world.register_component::<TestComponent2>();
 
@@ -4946,7 +4946,7 @@ mod tests {
         );
 
         // Compare with `World` generated using static type equivalents
-        let mut static_world = SubWorld::new();
+        let mut static_world = World::new();
 
         static_world.spawn((test_component_value, test_component_2_value));
         let static_components: Vec<_> = static_world
@@ -4959,7 +4959,7 @@ mod tests {
 
     #[test]
     fn entity_mut_remove_by_id() {
-        let mut world = SubWorld::new();
+        let mut world = World::new();
         let test_component_id = world.register_component::<TestComponent>();
 
         let mut entity = world.spawn(TestComponent(42));
@@ -4976,7 +4976,7 @@ mod tests {
     /// Tests that components can be accessed through an `EntityRefExcept`.
     #[test]
     fn entity_ref_except() {
-        let mut world = SubWorld::new();
+        let mut world = World::new();
         world.register_component::<TestComponent>();
         world.register_component::<TestComponent2>();
 
@@ -5004,7 +5004,7 @@ mod tests {
     #[test]
     #[should_panic]
     fn entity_ref_except_conflicts_with_self() {
-        let mut world = SubWorld::new();
+        let mut world = World::new();
         world.spawn(TestComponent(0)).insert(TestComponent2(0));
 
         // This should panic, because we have a mutable borrow on
@@ -5020,7 +5020,7 @@ mod tests {
     #[test]
     #[should_panic]
     fn entity_ref_except_conflicts_with_other() {
-        let mut world = SubWorld::new();
+        let mut world = World::new();
         world.spawn(TestComponent(0)).insert(TestComponent2(0));
 
         // This should panic, because we have a mutable borrow on
@@ -5035,7 +5035,7 @@ mod tests {
     // coexist with a query for that component C.
     #[test]
     fn entity_ref_except_doesnt_conflict() {
-        let mut world = SubWorld::new();
+        let mut world = World::new();
         world.spawn(TestComponent(0)).insert(TestComponent2(0));
 
         world.run_system_once(system).unwrap();
@@ -5054,7 +5054,7 @@ mod tests {
     /// `EntityMutExcept`.
     #[test]
     fn entity_mut_except() {
-        let mut world = SubWorld::new();
+        let mut world = World::new();
         world.spawn(TestComponent(0)).insert(TestComponent2(0));
 
         let mut query = world.query::<EntityMutExcept<TestComponent>>();
@@ -5080,7 +5080,7 @@ mod tests {
     #[test]
     #[should_panic]
     fn entity_mut_except_conflicts_with_self() {
-        let mut world = SubWorld::new();
+        let mut world = World::new();
         world.spawn(TestComponent(0)).insert(TestComponent2(0));
 
         // This should panic, because we have a mutable borrow on
@@ -5096,7 +5096,7 @@ mod tests {
     #[test]
     #[should_panic]
     fn entity_mut_except_conflicts_with_other() {
-        let mut world = SubWorld::new();
+        let mut world = World::new();
         world.spawn(TestComponent(0)).insert(TestComponent2(0));
 
         // This should panic, because we have a mutable borrow on
@@ -5117,7 +5117,7 @@ mod tests {
     // coexist with a query for that component C.
     #[test]
     fn entity_mut_except_doesnt_conflict() {
-        let mut world = SubWorld::new();
+        let mut world = World::new();
         world.spawn(TestComponent(0)).insert(TestComponent2(0));
 
         world.run_system_once(system).unwrap();
@@ -5239,7 +5239,7 @@ mod tests {
 
     #[test]
     fn filtered_entity_ref_normal() {
-        let mut world = SubWorld::new();
+        let mut world = World::new();
         let a_id = world.register_component::<A>();
 
         let e: FilteredEntityRef = world.spawn(A).into();
@@ -5253,7 +5253,7 @@ mod tests {
 
     #[test]
     fn filtered_entity_ref_missing() {
-        let mut world = SubWorld::new();
+        let mut world = World::new();
         let a_id = world.register_component::<A>();
 
         let e: FilteredEntityRef = world.spawn(()).into();
@@ -5267,7 +5267,7 @@ mod tests {
 
     #[test]
     fn filtered_entity_mut_normal() {
-        let mut world = SubWorld::new();
+        let mut world = World::new();
         let a_id = world.register_component::<A>();
 
         let mut e: FilteredEntityMut = world.spawn(A).into();
@@ -5283,7 +5283,7 @@ mod tests {
 
     #[test]
     fn filtered_entity_mut_missing() {
-        let mut world = SubWorld::new();
+        let mut world = World::new();
         let a_id = world.register_component::<A>();
 
         let mut e: FilteredEntityMut = world.spawn(()).into();
@@ -5305,7 +5305,7 @@ mod tests {
 
     #[test]
     fn get_components() {
-        let mut world = SubWorld::default();
+        let mut world = World::default();
         let e1 = world.spawn((X(7), Y(10))).id();
         let e2 = world.spawn(X(8)).id();
         let e3 = world.spawn_empty().id();
@@ -5320,7 +5320,7 @@ mod tests {
 
     #[test]
     fn get_by_id_array() {
-        let mut world = SubWorld::default();
+        let mut world = World::default();
         let e1 = world.spawn((X(7), Y(10))).id();
         let e2 = world.spawn(X(8)).id();
         let e3 = world.spawn_empty().id();
@@ -5362,7 +5362,7 @@ mod tests {
 
     #[test]
     fn get_by_id_vec() {
-        let mut world = SubWorld::default();
+        let mut world = World::default();
         let e1 = world.spawn((X(7), Y(10))).id();
         let e2 = world.spawn(X(8)).id();
         let e3 = world.spawn_empty().id();
@@ -5416,7 +5416,7 @@ mod tests {
 
     #[test]
     fn get_mut_by_id_array() {
-        let mut world = SubWorld::default();
+        let mut world = World::default();
         let e1 = world.spawn((X(7), Y(10))).id();
         let e2 = world.spawn(X(8)).id();
         let e3 = world.spawn_empty().id();
@@ -5479,7 +5479,7 @@ mod tests {
 
     #[test]
     fn get_mut_by_id_vec() {
-        let mut world = SubWorld::default();
+        let mut world = World::default();
         let e1 = world.spawn((X(7), Y(10))).id();
         let e2 = world.spawn(X(8)).id();
         let e3 = world.spawn_empty().id();
@@ -5554,7 +5554,7 @@ mod tests {
 
     #[test]
     fn get_mut_by_id_unchecked() {
-        let mut world = SubWorld::default();
+        let mut world = World::default();
         let e1 = world.spawn((X(7), Y(10))).id();
         let x_id = world.register_component::<X>();
         let y_id = world.register_component::<Y>();
@@ -5580,7 +5580,7 @@ mod tests {
 
     #[test]
     fn adding_observer_updates_location() {
-        let mut world = SubWorld::new();
+        let mut world = World::new();
         let entity = world
             .spawn_empty()
             .observe(|trigger: Trigger<TestEvent>, mut commands: Commands| {
@@ -5601,7 +5601,7 @@ mod tests {
     #[test]
     #[should_panic]
     fn location_on_despawned_entity_panics() {
-        let mut world = SubWorld::new();
+        let mut world = World::new();
         world.add_observer(
             |trigger: Trigger<OnAdd, TestComponent>, mut commands: Commands| {
                 commands.entity(trigger.target()).despawn();
@@ -5616,13 +5616,13 @@ mod tests {
     #[derive(Resource)]
     struct TestFlush(usize);
 
-    fn count_flush(world: &mut SubWorld) {
+    fn count_flush(world: &mut World) {
         world.resource_mut::<TestFlush>().0 += 1;
     }
 
     #[test]
     fn archetype_modifications_trigger_flush() {
-        let mut world = SubWorld::new();
+        let mut world = World::new();
         world.insert_resource(TestFlush(0));
         world.add_observer(|_: Trigger<OnAdd, TestComponent>, mut commands: Commands| {
             commands.queue(count_flush);
@@ -5718,7 +5718,7 @@ mod tests {
 
     fn ord_b_hook_on_add(mut world: DeferredWorld, _: HookContext) {
         world.resource_mut::<TestVec>().0.push("OrdB hook on_add");
-        world.commands().queue(|world: &mut SubWorld| {
+        world.commands().queue(|world: &mut World| {
             world
                 .resource_mut::<TestVec>()
                 .0
@@ -5765,7 +5765,7 @@ mod tests {
 
     #[test]
     fn command_ordering_is_correct() {
-        let mut world = SubWorld::new();
+        let mut world = World::new();
         world.insert_resource(TestVec(Vec::new()));
         world.add_observer(ord_a_observer_on_add);
         world.add_observer(ord_a_observer_on_insert);
@@ -5813,7 +5813,7 @@ mod tests {
         #[derive(Component, Clone, PartialEq, Debug, Default)]
         struct D;
 
-        let mut world = SubWorld::new();
+        let mut world = World::new();
         let entity_a = world.spawn((A, B, C(5))).id();
         let entity_b = world.spawn((A, C(4))).id();
 
@@ -5846,7 +5846,7 @@ mod tests {
         #[derive(Component, Clone, PartialEq, Debug, Default)]
         struct D;
 
-        let mut world = SubWorld::new();
+        let mut world = World::new();
         let entity_a = world.spawn(A).id();
         let entity_b = world.spawn_empty().id();
 
@@ -5873,7 +5873,7 @@ mod tests {
 
     #[test]
     fn update_despawned_by_after_observers() {
-        let mut world = SubWorld::new();
+        let mut world = World::new();
 
         #[derive(Component)]
         #[component(on_remove = get_tracked)]
@@ -5890,7 +5890,7 @@ mod tests {
         }
 
         #[track_caller]
-        fn caller_spawn(world: &mut SubWorld) -> (Entity, MaybeLocation) {
+        fn caller_spawn(world: &mut World) -> (Entity, MaybeLocation) {
             let caller = MaybeLocation::caller();
             (world.spawn(C).id(), caller)
         }
@@ -5905,7 +5905,7 @@ mod tests {
         );
 
         #[track_caller]
-        fn caller_despawn(world: &mut SubWorld, entity: Entity) -> MaybeLocation {
+        fn caller_despawn(world: &mut World, entity: Entity) -> MaybeLocation {
             world.despawn(entity);
             MaybeLocation::caller()
         }
@@ -5936,7 +5936,7 @@ mod tests {
         static REPLACE_COUNT: AtomicU8 = AtomicU8::new(0);
         static INSERT_COUNT: AtomicU8 = AtomicU8::new(0);
 
-        let mut world = SubWorld::default();
+        let mut world = World::default();
 
         world.register_component::<Foo>();
         world
@@ -6006,7 +6006,7 @@ mod tests {
 
     #[test]
     fn bundle_remove_only_triggers_for_present_components() {
-        let mut world = SubWorld::default();
+        let mut world = World::default();
 
         #[derive(Component)]
         struct A;

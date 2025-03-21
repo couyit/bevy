@@ -32,7 +32,7 @@ impl ViewNode for OitResolveNode {
         (camera, view_target, view_uniform, oit_resolve_pipeline_id, depth): QueryItem<
             Self::ViewQuery,
         >,
-        world: &SubWorld,
+        world: &World,
     ) -> Result<(), NodeRunError> {
         let Some(resolve_pipeline) = world.get_resource::<OitResolvePipeline>() else {
             return Ok(());

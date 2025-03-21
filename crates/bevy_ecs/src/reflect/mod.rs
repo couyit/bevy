@@ -5,7 +5,7 @@ use core::{
     ops::{Deref, DerefMut},
 };
 
-use crate::{resource::Resource, world::SubWorld};
+use crate::{resource::Resource, world::World};
 use bevy_reflect::{
     std_traits::ReflectDefault, PartialReflect, Reflect, ReflectFromReflect, TypePath,
     TypeRegistry, TypeRegistryArc,
@@ -92,7 +92,7 @@ impl DerefMut for AppFunctionRegistry {
 /// If none of the strategies succeed, this method will panic.
 pub fn from_reflect_with_fallback<T: Reflect + TypePath>(
     reflected: &dyn PartialReflect,
-    world: &mut SubWorld,
+    world: &mut World,
     registry: &TypeRegistry,
 ) -> T {
     fn different_type_error<T: TypePath>(reflected: &str) -> ! {

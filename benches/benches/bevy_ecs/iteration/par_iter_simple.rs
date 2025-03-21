@@ -16,7 +16,7 @@ struct Velocity(Vec3);
 
 #[derive(Component, Copy, Clone, Default)]
 struct Data<const X: u16>(f32);
-pub struct Benchmark<'w>(SubWorld, QueryState<(&'w Velocity, &'w mut Position)>);
+pub struct Benchmark<'w>(World, QueryState<(&'w Velocity, &'w mut Position)>);
 
 fn insert_if_bit_enabled<const B: u16>(entity: &mut EntityWorldMut, i: u16) {
     if i & (1 << B) != 0 {
@@ -28,7 +28,7 @@ impl<'w> Benchmark<'w> {
     pub fn new(fragment: u16) -> Self {
         ComputeTaskPool::get_or_init(TaskPool::default);
 
-        let mut world = SubWorld::new();
+        let mut world = World::new();
 
         let iter = world.spawn_batch(core::iter::repeat_n(
             (

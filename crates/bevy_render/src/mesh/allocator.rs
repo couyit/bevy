@@ -14,7 +14,7 @@ use bevy_ecs::{
     resource::Resource,
     schedule::IntoScheduleConfigs as _,
     system::{Res, ResMut},
-    world::{FromWorld, SubWorld},
+    world::{FromWorld, World},
 };
 use bevy_platform_support::collections::{hash_map::Entry, HashMap, HashSet};
 use bevy_utils::default;
@@ -328,7 +328,7 @@ impl Plugin for MeshAllocatorPlugin {
 }
 
 impl FromWorld for MeshAllocator {
-    fn from_world(world: &mut SubWorld) -> Self {
+    fn from_world(world: &mut World) -> Self {
         // Note whether we're on WebGL 2. In this case, we must give every
         // vertex array its own slab.
         let render_adapter = world.resource::<RenderAdapter>();

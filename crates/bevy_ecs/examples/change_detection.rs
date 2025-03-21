@@ -18,7 +18,7 @@ use std::ops::Deref;
 
 fn main() {
     // Create a new empty World to hold our Entities, Components and Resources
-    let mut world = SubWorld::new();
+    let mut world = World::new();
 
     // Add the counter resource to remember how many entities where spawned
     world.insert_resource(EntityCounter { value: 0 });

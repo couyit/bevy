@@ -1,6 +1,6 @@
 use crate::{
     component::Tick,
-    prelude::SubWorld,
+    prelude::World,
     system::{ExclusiveSystemParam, ReadOnlySystemParam, SystemMeta, SystemParam},
     world::unsafe_world_cell::UnsafeWorldCell,
 };
@@ -57,7 +57,7 @@ unsafe impl SystemParam for SystemName<'_> {
     type State = Cow<'static, str>;
     type Item<'w, 's> = SystemName<'s>;
 
-    fn init_state(_world: &mut SubWorld, system_meta: &mut SystemMeta) -> Self::State {
+    fn init_state(_world: &mut World, system_meta: &mut SystemMeta) -> Self::State {
         system_meta.name.clone()
     }
 
@@ -79,7 +79,7 @@ impl ExclusiveSystemParam for SystemName<'_> {
     type State = Cow<'static, str>;
     type Item<'s> = SystemName<'s>;
 
-    fn init(_world: &mut SubWorld, system_meta: &mut SystemMeta) -> Self::State {
+    fn init(_world: &mut World, system_meta: &mut SystemMeta) -> Self::State {
         system_meta.name.clone()
     }
 
@@ -92,7 +92,7 @@ impl ExclusiveSystemParam for SystemName<'_> {
 mod tests {
     use crate::{
         system::{IntoSystem, RunSystemOnce, SystemName},
-        world::SubWorld,
+        world::World,
     };
     use alloc::{borrow::ToOwned, string::String};
 
@@ -102,7 +102,7 @@ mod tests {
             name.name().to_owned()
         }
 
-        let mut world = SubWorld::default();
+        let mut world = World::default();
         let id = world.register_system(testing);
         let name = world.run_system(id).unwrap();
         assert!(name.ends_with("testing"));
@@ -110,11 +110,11 @@ mod tests {
 
     #[test]
     fn test_system_name_exclusive_param() {
-        fn testing(_world: &mut SubWorld, name: SystemName) -> String {
+        fn testing(_world: &mut World, name: SystemName) -> String {
             name.name().to_owned()
         }
 
-        let mut world = SubWorld::default();
+        let mut world = World::default();
         let id = world.register_system(testing);
         let name = world.run_system(id).unwrap();
         assert!(name.ends_with("testing"));
@@ -122,7 +122,7 @@ mod tests {
 
     #[test]
     fn test_closure_system_name_regular_param() {
-        let mut world = SubWorld::default();
+        let mut world = World::default();
         let system =
             IntoSystem::into_system(|name: SystemName| name.name().to_owned()).with_name("testing");
         let name = world.run_system_once(system).unwrap();
@@ -131,9 +131,9 @@ mod tests {
 
     #[test]
     fn test_exclusive_closure_system_name_regular_param() {
-        let mut world = SubWorld::default();
+        let mut world = World::default();
         let system =
-            IntoSystem::into_system(|_world: &mut SubWorld, name: SystemName| name.name().to_owned())
+            IntoSystem::into_system(|_world: &mut World, name: SystemName| name.name().to_owned())
                 .with_name("testing");
         let name = world.run_system_once(system).unwrap();
         assert_eq!(name, "testing");

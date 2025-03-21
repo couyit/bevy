@@ -2,15 +2,15 @@ use bevy_ecs::{
     component::Component,
     prelude::EntityWorldMut,
     schedule::{ExecutorKind, Schedule},
-    world::SubWorld,
+    world::World,
 };
 use criterion::{BenchmarkId, Criterion};
 
 #[derive(Component)]
 struct A<const N: u16>(f32);
 
-fn setup(system_count: usize) -> (SubWorld, Schedule) {
-    let mut world = SubWorld::new();
+fn setup(system_count: usize) -> (World, Schedule) {
+    let mut world = World::new();
     fn empty() {}
     let mut schedule = Schedule::default();
     schedule.set_executor_kind(ExecutorKind::SingleThreaded);
@@ -27,7 +27,7 @@ fn insert_if_bit_enabled<const B: u16>(entity: &mut EntityWorldMut, i: u16) {
     }
 }
 /// create `count` entities with distinct archetypes
-fn add_archetypes(world: &mut SubWorld, count: u16) {
+fn add_archetypes(world: &mut World, count: u16) {
     for i in 0..count {
         let mut e = world.spawn_empty();
         insert_if_bit_enabled::<0>(&mut e, i);

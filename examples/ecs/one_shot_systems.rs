@@ -44,7 +44,7 @@ fn setup_with_commands(mut commands: Commands) {
     commands.spawn((Callback(system_id), A));
 }
 
-fn setup_with_world(world: &mut SubWorld) {
+fn setup_with_world(world: &mut World) {
     // We can run it once manually
     world.run_system_once(system_b).unwrap();
     // Or with a Callback

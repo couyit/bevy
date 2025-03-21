@@ -29,7 +29,7 @@ macro_rules! create_entities {
 struct Data<const X: usize>(f32);
 
 pub struct Benchmark<'w>(
-    SubWorld,
+    World,
     QueryState<(
         &'w mut Data<0>,
         &'w mut Data<1>,
@@ -47,7 +47,7 @@ pub struct Benchmark<'w>(
 
 impl<'w> Benchmark<'w> {
     pub fn new() -> Self {
-        let mut world = SubWorld::new();
+        let mut world = World::new();
 
         create_entities!(world; A, B, C, D, E, F, G, H, I, J, K, L, M, N, O, P, Q, R, S, T, U, V, W, X, Y, Z);
 

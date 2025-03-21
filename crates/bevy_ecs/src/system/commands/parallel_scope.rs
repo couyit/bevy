@@ -2,7 +2,7 @@ use bevy_utils::Parallel;
 
 use crate::{
     entity::Entities,
-    prelude::SubWorld,
+    prelude::World,
     system::{Deferred, SystemBuffer, SystemMeta, SystemParam},
 };
 
@@ -52,7 +52,7 @@ pub struct ParallelCommands<'w, 's> {
 
 impl SystemBuffer for ParallelCommandQueue {
     #[inline]
-    fn apply(&mut self, _system_meta: &SystemMeta, world: &mut SubWorld) {
+    fn apply(&mut self, _system_meta: &SystemMeta, world: &mut World) {
         #[cfg(feature = "trace")]
         let _system_span = _system_meta.commands_span.enter();
         for cq in self.thread_queues.iter_mut() {

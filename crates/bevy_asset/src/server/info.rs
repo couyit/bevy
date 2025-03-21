@@ -10,7 +10,7 @@ use alloc::{
     sync::{Arc, Weak},
     vec::Vec,
 };
-use bevy_ecs::world::SubWorld;
+use bevy_ecs::world::World;
 use bevy_platform_support::collections::{hash_map::Entry, HashMap, HashSet};
 use bevy_tasks::Task;
 use bevy_utils::TypeIdMap;
@@ -82,9 +82,9 @@ pub(crate) struct AssetInfos {
     /// This should only be set when watching for changes to avoid unnecessary work.
     pub(crate) living_labeled_assets: HashMap<AssetPath<'static>, HashSet<Box<str>>>,
     pub(crate) handle_providers: TypeIdMap<AssetHandleProvider>,
-    pub(crate) dependency_loaded_event_sender: TypeIdMap<fn(&mut SubWorld, UntypedAssetId)>,
+    pub(crate) dependency_loaded_event_sender: TypeIdMap<fn(&mut World, UntypedAssetId)>,
     pub(crate) dependency_failed_event_sender:
-        TypeIdMap<fn(&mut SubWorld, UntypedAssetId, AssetPath<'static>, AssetLoadError)>,
+        TypeIdMap<fn(&mut World, UntypedAssetId, AssetPath<'static>, AssetLoadError)>,
     pub(crate) pending_tasks: HashMap<UntypedAssetId, Task<()>>,
 }
 
@@ -388,7 +388,7 @@ impl AssetInfos {
         &mut self,
         loaded_asset_id: UntypedAssetId,
         loaded_asset: ErasedLoadedAsset,
-        world: &mut SubWorld,
+        world: &mut World,
         sender: &Sender<InternalAssetEvent>,
     ) {
         // Check whether the handle has been dropped since the asset was loaded.

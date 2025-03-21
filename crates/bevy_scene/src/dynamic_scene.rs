@@ -4,7 +4,7 @@ use bevy_ecs::reflect::{ReflectMapEntities, ReflectResource};
 use bevy_ecs::{
     entity::{hash_map::EntityHashMap, Entity, SceneEntityMapper},
     reflect::{AppTypeRegistry, ReflectComponent},
-    world::SubWorld,
+    world::World,
 };
 use bevy_reflect::{PartialReflect, TypePath, TypeRegistry};
 
@@ -49,7 +49,7 @@ impl DynamicScene {
     }
 
     /// Create a new dynamic scene from a given world.
-    pub fn from_world(world: &SubWorld) -> Self {
+    pub fn from_world(world: &World) -> Self {
         DynamicSceneBuilder::from_world(world)
             .extract_entities(world.iter_entities().map(|entity| entity.id()))
             .extract_resources()
@@ -63,7 +63,7 @@ impl DynamicScene {
     /// [`Component`](bevy_ecs::component::Component) or [`Resource`](bevy_ecs::prelude::Resource) trait.
     pub fn write_to_world_with(
         &self,
-        world: &mut SubWorld,
+        world: &mut World,
         entity_map: &mut EntityHashMap<Entity>,
         type_registry: &AppTypeRegistry,
     ) -> Result<(), SceneSpawnError> {
@@ -177,7 +177,7 @@ impl DynamicScene {
     /// [`Component`](bevy_ecs::component::Component) trait.
     pub fn write_to_world(
         &self,
-        world: &mut SubWorld,
+        world: &mut World,
         entity_map: &mut EntityHashMap<Entity>,
     ) -> Result<(), SceneSpawnError> {
         let registry = world.resource::<AppTypeRegistry>().clone();
@@ -221,7 +221,7 @@ mod tests {
         hierarchy::ChildOf,
         reflect::{AppTypeRegistry, ReflectComponent, ReflectMapEntities, ReflectResource},
         resource::Resource,
-        world::SubWorld,
+        world::World,
     };
     use bevy_reflect::Reflect;
 
@@ -240,7 +240,7 @@ mod tests {
         let type_registry = AppTypeRegistry::default();
         type_registry.write().register::<TestResource>();
 
-        let mut source_world = SubWorld::new();
+        let mut source_world = World::new();
         source_world.insert_resource(type_registry.clone());
 
         let original_entity_a = source_world.spawn_empty().id();
@@ -259,7 +259,7 @@ mod tests {
             .build();
 
         let mut entity_map = EntityHashMap::default();
-        let mut destination_world = SubWorld::new();
+        let mut destination_world = World::new();
         destination_world.insert_resource(type_registry);
 
         scene
@@ -279,7 +279,7 @@ mod tests {
         // Testing that scene reloading applies EntityMap correctly to MapEntities components.
 
         // First, we create a simple world with a parent and a child relationship
-        let mut world = SubWorld::new();
+        let mut world = World::new();
         world.init_resource::<AppTypeRegistry>();
         world
             .resource_mut::<AppTypeRegistry>()
@@ -372,12 +372,12 @@ mod tests {
             reg_write.register::<B>();
         }
 
-        let mut scene_world = SubWorld::new();
+        let mut scene_world = World::new();
         scene_world.insert_resource(reg.clone());
         scene_world.spawn((B(Entity::PLACEHOLDER), A));
         let scene = DynamicScene::from_world(&scene_world);
 
-        let mut dst_world = SubWorld::new();
+        let mut dst_world = World::new();
         dst_world
             .register_component_hooks::<A>()
             .on_add(|mut world, _| {

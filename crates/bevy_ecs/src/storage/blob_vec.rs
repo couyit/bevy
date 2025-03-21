@@ -498,7 +498,7 @@ const fn padding_needed_for(layout: &Layout, align: usize) -> usize {
 #[cfg(test)]
 mod tests {
     use super::BlobVec;
-    use crate::{component::Component, ptr::OwningPtr, world::SubWorld};
+    use crate::{component::Component, ptr::OwningPtr, world::World};
     use alloc::{
         rc::Rc,
         string::{String, ToString},
@@ -694,7 +694,7 @@ mod tests {
         #[repr(align(32))]
         struct Zst;
 
-        let mut world = SubWorld::default();
+        let mut world = World::default();
         world.spawn(Zst);
         world.spawn(Zst);
         world.spawn(Zst);

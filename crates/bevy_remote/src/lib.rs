@@ -372,7 +372,7 @@ use bevy_ecs::{
     resource::Resource,
     schedule::{IntoScheduleConfigs, ScheduleLabel, SystemSet},
     system::{Commands, In, IntoSystem, ResMut, System, SystemId},
-    world::SubWorld,
+    world::World,
 };
 use bevy_platform_support::collections::HashMap;
 use bevy_utils::prelude::default;
@@ -931,7 +931,7 @@ fn setup_mailbox_channel(mut commands: Commands) {
 ///
 /// This needs exclusive access to the [`World`] because clients can manipulate
 /// anything in the ECS.
-fn process_remote_requests(world: &mut SubWorld) {
+fn process_remote_requests(world: &mut World) {
     if !world.contains_resource::<BrpReceiver>() {
         return;
     }
@@ -976,7 +976,7 @@ fn process_remote_requests(world: &mut SubWorld) {
 
 /// A system that checks all ongoing watching requests for changes that should be sent
 /// and handles it if so.
-fn process_ongoing_watching_requests(world: &mut SubWorld) {
+fn process_ongoing_watching_requests(world: &mut World) {
     world.resource_scope::<RemoteWatchingRequests, ()>(|world, requests| {
         for (message, system_id) in requests.0.iter() {
             let handler_result = process_single_ongoing_watching_request(world, message, system_id);
@@ -995,7 +995,7 @@ fn process_ongoing_watching_requests(world: &mut SubWorld) {
 }
 
 fn process_single_ongoing_watching_request(
-    world: &mut SubWorld,
+    world: &mut World,
     message: &BrpMessage,
     system_id: &RemoteWatchingMethodSystemId,
 ) -> BrpResult<Option<Value>> {

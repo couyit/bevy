@@ -2649,7 +2649,7 @@ mod tests {
 
     #[test]
     fn get_many_uniqueness() {
-        let mut world = SubWorld::new();
+        let mut world = World::new();
 
         let entities: Vec<Entity> = (0..10).map(|_| world.spawn_empty().id()).collect();
 

@@ -13,7 +13,7 @@ use bevy_ecs::{
     resource::Resource,
     schedule::IntoScheduleConfigs,
     system::{Commands, Query, Res, ResMut},
-    world::{FromWorld, World},
+    world::{FromWorld, Worlds},
 };
 use bevy_image::BevyDefault as _;
 use bevy_math::vec2;
@@ -172,7 +172,7 @@ impl ViewNode for TemporalAntiAliasNode {
         (camera, view_target, taa_history_textures, prepass_textures, taa_pipeline_id, msaa): QueryItem<
             Self::ViewQuery,
         >,
-        world: &World,
+        world: &Worlds,
     ) -> Result<(), NodeRunError> {
         if *msaa != Msaa::Off {
             warn!("Temporal anti-aliasing requires MSAA to be disabled");
@@ -246,7 +246,7 @@ struct TaaPipeline {
 }
 
 impl FromWorld for TaaPipeline {
-    fn from_world(world: &mut World) -> Self {
+    fn from_world(world: &mut Worlds) -> Self {
         let render_device = world.resource::<RenderDevice>();
 
         let nearest_sampler = render_device.create_sampler(&SamplerDescriptor {

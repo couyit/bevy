@@ -7,7 +7,7 @@ use bevy_ecs::{
     query::With,
     resource::Resource,
     system::{Commands, Query, Res, ResMut},
-    world::{FromWorld, SubWorld},
+    world::{FromWorld, World},
 };
 use bevy_math::{Mat4, Vec3};
 use bevy_render::{
@@ -38,7 +38,7 @@ pub(crate) struct RenderSkyBindGroupLayouts {
 }
 
 impl FromWorld for AtmosphereBindGroupLayouts {
-    fn from_world(world: &mut SubWorld) -> Self {
+    fn from_world(world: &mut World) -> Self {
         let render_device = world.resource::<RenderDevice>();
         let transmittance_lut = render_device.create_bind_group_layout(
             "transmittance_lut_bind_group_layout",
@@ -140,7 +140,7 @@ impl FromWorld for AtmosphereBindGroupLayouts {
 }
 
 impl FromWorld for RenderSkyBindGroupLayouts {
-    fn from_world(world: &mut SubWorld) -> Self {
+    fn from_world(world: &mut World) -> Self {
         let render_device = world.resource::<RenderDevice>();
         let render_sky = render_device.create_bind_group_layout(
             "render_sky_bind_group_layout",
@@ -216,7 +216,7 @@ pub struct AtmosphereSamplers {
 }
 
 impl FromWorld for AtmosphereSamplers {
-    fn from_world(world: &mut SubWorld) -> Self {
+    fn from_world(world: &mut World) -> Self {
         let render_device = world.resource::<RenderDevice>();
 
         let base_sampler = SamplerDescriptor {
@@ -265,7 +265,7 @@ pub(crate) struct AtmosphereLutPipelines {
 }
 
 impl FromWorld for AtmosphereLutPipelines {
-    fn from_world(world: &mut SubWorld) -> Self {
+    fn from_world(world: &mut World) -> Self {
         let pipeline_cache = world.resource::<PipelineCache>();
         let layouts = world.resource::<AtmosphereBindGroupLayouts>();
 

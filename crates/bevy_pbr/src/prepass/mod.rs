@@ -311,7 +311,7 @@ pub struct PrepassPipeline<M: Material> {
 }
 
 impl<M: Material> FromWorld for PrepassPipeline<M> {
-    fn from_world(world: &mut SubWorld) -> Self {
+    fn from_world(world: &mut World) -> Self {
         let render_device = world.resource::<RenderDevice>();
         let render_adapter = world.resource::<RenderAdapter>();
         let asset_server = world.resource::<AssetServer>();

@@ -48,7 +48,7 @@ use bevy_ecs::{
     resource::Resource,
     schedule::IntoScheduleConfigs as _,
     system::{lifetimeless::Read, Commands, Query, Res, ResMut},
-    world::{FromWorld, World},
+    world::{FromWorld, Worlds},
 };
 use bevy_image::{BevyDefault, Image};
 use bevy_math::{vec4, Vec4};
@@ -384,7 +384,7 @@ impl Plugin for SmaaPlugin {
 }
 
 impl FromWorld for SmaaPipelines {
-    fn from_world(world: &mut World) -> Self {
+    fn from_world(world: &mut Worlds) -> Self {
         let render_device = world.resource::<RenderDevice>();
 
         // Create the postprocess bind group layout (all passes, bind group 0).
@@ -843,7 +843,7 @@ impl ViewNode for SmaaNode {
             smaa_textures,
             view_smaa_bind_groups,
         ): QueryItem<'w, Self::ViewQuery>,
-        world: &'w World,
+        world: &'w Worlds,
     ) -> Result<(), NodeRunError> {
         let pipeline_cache = world.resource::<PipelineCache>();
         let smaa_pipelines = world.resource::<SmaaPipelines>();

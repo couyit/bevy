@@ -43,7 +43,7 @@ pub struct BlitPipeline {
 }
 
 impl FromWorld for BlitPipeline {
-    fn from_world(render_world: &mut SubWorld) -> Self {
+    fn from_world(render_world: &mut World) -> Self {
         let render_device = render_world.resource::<RenderDevice>();
 
         let texture_bind_group = render_device.create_bind_group_layout(

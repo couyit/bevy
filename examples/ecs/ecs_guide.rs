@@ -241,7 +241,7 @@ fn new_player_system(
 // "exclusive system".
 // WARNING: These will block all parallel execution of other systems until they finish, so they
 // should generally be avoided if you want to maximize parallelism.
-fn exclusive_player_system(world: &mut SubWorld) {
+fn exclusive_player_system(world: &mut World) {
     // this does the same thing as "new_player_system"
     let total_players = world.resource_mut::<GameState>().total_players;
     let should_add_player = {

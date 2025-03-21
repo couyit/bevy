@@ -834,7 +834,7 @@ mod tests {
         (app, gate_opener)
     }
 
-    pub fn run_app_until(app: &mut App, mut predicate: impl FnMut(&mut SubWorld) -> Option<()>) {
+    pub fn run_app_until(app: &mut App, mut predicate: impl FnMut(&mut World) -> Option<()>) {
         for _ in 0..LARGE_ITERATION_COUNT {
             app.update();
             if predicate(app.world_mut()).is_some() {
@@ -847,7 +847,7 @@ mod tests {
 
     const LARGE_ITERATION_COUNT: usize = 10000;
 
-    fn get<A: Asset>(world: &SubWorld, id: AssetId<A>) -> Option<&A> {
+    fn get<A: Asset>(world: &World, id: AssetId<A>) -> Option<&A> {
         world.resource::<Assets<A>>().get(id)
     }
 

@@ -17,7 +17,7 @@ use bevy_ecs::{
     entity::{hash_map::EntityHashMap, Entity},
     hierarchy::ChildSpawner,
     name::Name,
-    world::SubWorld,
+    world::World,
 };
 use bevy_image::{
     CompressedImageFormats, Image, ImageLoaderSettings, ImageSampler, ImageSamplerDescriptor,
@@ -854,7 +854,7 @@ async fn load_gltf<'a, 'b, 'c>(
     let mut active_camera_found = false;
     for scene in gltf.scenes() {
         let mut err = None;
-        let mut world = SubWorld::default();
+        let mut world = World::default();
         let mut node_index_to_entity_map = <HashMap<_, _>>::default();
         let mut entity_to_skin_index_map = EntityHashMap::default();
         let mut scene_load_context = load_context.begin_labeled_asset();
@@ -1770,7 +1770,7 @@ mod test {
         },
         AssetApp, AssetPlugin, AssetServer, Assets, Handle, LoadState,
     };
-    use bevy_ecs::{resource::Resource, world::SubWorld};
+    use bevy_ecs::{resource::Resource, world::World};
     use bevy_log::LogPlugin;
     use bevy_render::mesh::{skinning::SkinnedMeshInverseBindposes, MeshPlugin};
     use bevy_scene::ScenePlugin;
@@ -1799,7 +1799,7 @@ mod test {
 
     const LARGE_ITERATION_COUNT: usize = 10000;
 
-    fn run_app_until(app: &mut App, mut predicate: impl FnMut(&mut SubWorld) -> Option<()>) {
+    fn run_app_until(app: &mut App, mut predicate: impl FnMut(&mut World) -> Option<()>) {
         for _ in 0..LARGE_ITERATION_COUNT {
             app.update();
             if predicate(app.world_mut()).is_some() {

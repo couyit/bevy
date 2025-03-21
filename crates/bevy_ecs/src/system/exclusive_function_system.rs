@@ -7,7 +7,7 @@ use crate::{
         check_system_change_tick, ExclusiveSystemParam, ExclusiveSystemParamItem, IntoSystem,
         System, SystemIn, SystemInput, SystemMeta,
     },
-    world::{unsafe_world_cell::UnsafeWorldCell, SubWorld},
+    world::{unsafe_world_cell::UnsafeWorldCell, World},
 };
 
 use alloc::{borrow::Cow, vec, vec::Vec};
@@ -120,7 +120,7 @@ where
     fn run_without_applying_deferred(
         &mut self,
         input: SystemIn<'_, Self>,
-        world: &mut SubWorld,
+        world: &mut World,
     ) -> Self::Out {
         world.last_change_tick_scope(self.system_meta.last_run, |world| {
             #[cfg(feature = "trace")]
@@ -140,7 +140,7 @@ where
     }
 
     #[inline]
-    fn apply_deferred(&mut self, _world: &mut SubWorld) {
+    fn apply_deferred(&mut self, _world: &mut World) {
         // "pure" exclusive systems do not have any buffers to apply.
         // Systems made by piping a normal system with an exclusive system
         // might have buffers to apply, but this is handled by `PipeSystem`.
@@ -160,7 +160,7 @@ where
     }
 
     #[inline]
-    fn initialize(&mut self, world: &mut SubWorld) {
+    fn initialize(&mut self, world: &mut World) {
         self.system_meta.last_run = world.change_tick().relative_to(Tick::MAX);
         self.param_state = Some(F::Param::init(world, &mut self.system_meta));
     }
@@ -211,7 +211,7 @@ pub trait ExclusiveSystemParamFunction<Marker>: Send + Sync + 'static {
     /// Executes this system once. See [`System::run`].
     fn run(
         &mut self,
-        world: &mut SubWorld,
+        world: &mut World,
         input: <Self::In as SystemInput>::Inner<'_>,
         param_value: ExclusiveSystemParamItem<Self::Param>,
     ) -> Self::Out;
@@ -314,7 +314,7 @@ mod tests {
         where
             T: IntoSystem<In, Out, Marker> + Copy,
         {
-            fn reference_system(_world: &mut SubWorld) {}
+            fn reference_system(_world: &mut World) {}
 
             use core::any::TypeId;
 
@@ -339,7 +339,7 @@ mod tests {
             );
         }
 
-        fn exclusive_function_system(_world: &mut SubWorld) {}
+        fn exclusive_function_system(_world: &mut World) {}
 
         test(exclusive_function_system);
     }

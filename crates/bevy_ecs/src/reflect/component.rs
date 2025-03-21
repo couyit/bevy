@@ -66,7 +66,7 @@ use crate::{
     relationship::RelationshipHookMode,
     world::{
         unsafe_world_cell::UnsafeEntityCell, EntityMut, EntityWorldMut, FilteredEntityMut,
-        FilteredEntityRef, SubWorld,
+        FilteredEntityRef, World,
     },
 };
 use bevy_reflect::{FromReflect, FromType, PartialReflect, Reflect, TypePath, TypeRegistry};
@@ -131,9 +131,9 @@ pub struct ReflectComponentFns {
     /// The function may only be called with an [`UnsafeEntityCell`] that can be used to mutably access the relevant component on the given entity.
     pub reflect_unchecked_mut: unsafe fn(UnsafeEntityCell<'_>) -> Option<Mut<'_, dyn Reflect>>,
     /// Function pointer implementing [`ReflectComponent::copy()`].
-    pub copy: fn(&SubWorld, &mut SubWorld, Entity, Entity, &TypeRegistry),
+    pub copy: fn(&World, &mut World, Entity, Entity, &TypeRegistry),
     /// Function pointer implementing [`ReflectComponent::register_component()`].
-    pub register_component: fn(&mut SubWorld) -> ComponentId,
+    pub register_component: fn(&mut World) -> ComponentId,
 }
 
 impl ReflectComponentFns {
@@ -236,8 +236,8 @@ impl ReflectComponent {
     /// Panics if there is no [`Component`] of the given type or either entity does not exist.
     pub fn copy(
         &self,
-        source_world: &SubWorld,
-        destination_world: &mut SubWorld,
+        source_world: &World,
+        destination_world: &mut World,
         source_entity: Entity,
         destination_entity: Entity,
         registry: &TypeRegistry,
@@ -252,7 +252,7 @@ impl ReflectComponent {
     }
 
     /// Register the type of this [`Component`] in [`World`], returning its [`ComponentId`].
-    pub fn register_component(&self, world: &mut SubWorld) -> ComponentId {
+    pub fn register_component(&self, world: &mut World) -> ComponentId {
         (self.0.register_component)(world)
     }
 
@@ -392,7 +392,7 @@ impl<C: Component + Reflect + TypePath> FromType<C> for ReflectComponent {
                 let c = unsafe { entity.get_mut_assume_mutable::<C>() };
                 c.map(|c| c.map_unchanged(|value| value as &mut dyn Reflect))
             },
-            register_component: |world: &mut SubWorld| -> ComponentId {
+            register_component: |world: &mut World| -> ComponentId {
                 world.register_component::<C>()
             },
             visit_entities: |reflect: &dyn Reflect, func: &mut dyn FnMut(Entity)| {

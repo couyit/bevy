@@ -203,7 +203,7 @@ struct CustomPipeline {
 }
 
 impl FromWorld for CustomPipeline {
-    fn from_world(world: &mut SubWorld) -> Self {
+    fn from_world(world: &mut World) -> Self {
         let mesh_pipeline = world.resource::<MeshPipeline>();
 
         CustomPipeline {
