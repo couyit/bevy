@@ -25,11 +25,13 @@ use crate::{
     entity::{Entity, EntityLocation},
     observer::Observers,
     storage::{ImmutableSparseSet, SparseArray, SparseSet, SparseSetIndex, TableId, TableRow},
+    world::ComponentWorld,
 };
 use alloc::{boxed::Box, vec::Vec};
 use bevy_platform_support::collections::HashMap;
 use core::{
     hash::Hash,
+    marker::PhantomData,
     ops::{Index, IndexMut, RangeFrom},
 };
 
@@ -792,13 +794,14 @@ pub type ComponentIndex = HashMap<ComponentId, HashMap<ArchetypeId, ArchetypeRec
 ///
 /// [`World`]: crate::world::World
 /// [module level documentation]: crate::archetype
-pub struct Archetypes {
+pub struct Archetypes<W: ComponentWorld> {
     pub(crate) archetypes: Vec<Archetype>,
     archetype_component_count: usize,
     /// find the archetype id by the archetype's components
     by_components: HashMap<ArchetypeComponents, ArchetypeId>,
     /// find all the archetypes that contain a component
     pub(crate) by_component: ComponentIndex,
+    marker: PhantomData<W>,
 }
 
 /// Metadata about how a component is stored in an [`Archetype`].
@@ -812,13 +815,14 @@ pub struct ArchetypeRecord {
     pub(crate) column: Option<usize>,
 }
 
-impl Archetypes {
+impl<W: ComponentWorld> Archetypes<W> {
     pub(crate) fn new() -> Self {
         let mut archetypes = Archetypes {
             archetypes: Vec::new(),
             by_components: Default::default(),
             by_component: Default::default(),
             archetype_component_count: 0,
+            marker: PhantomData,
         };
         // SAFETY: Empty archetype has no components
         unsafe {
@@ -1017,7 +1021,7 @@ impl Archetypes {
     }
 }
 
-impl Index<RangeFrom<ArchetypeGeneration>> for Archetypes {
+impl<W: ComponentWorld> Index<RangeFrom<ArchetypeGeneration>> for Archetypes<W> {
     type Output = [Archetype];
 
     #[inline]
@@ -1025,7 +1029,7 @@ impl Index<RangeFrom<ArchetypeGeneration>> for Archetypes {
         &self.archetypes[index.start.0.index()..]
     }
 }
-impl Index<ArchetypeId> for Archetypes {
+impl<W: ComponentWorld> Index<ArchetypeId> for Archetypes<W> {
     type Output = Archetype;
 
     #[inline]
@@ -1034,7 +1038,7 @@ impl Index<ArchetypeId> for Archetypes {
     }
 }
 
-impl IndexMut<ArchetypeId> for Archetypes {
+impl<W: ComponentWorld> IndexMut<ArchetypeId> for Archetypes<W> {
     #[inline]
     fn index_mut(&mut self, index: ArchetypeId) -> &mut Self::Output {
         &mut self.archetypes[index.index()]

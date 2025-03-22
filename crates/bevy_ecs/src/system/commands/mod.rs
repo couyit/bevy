@@ -227,7 +227,7 @@ impl<'w, 's, W: WorldLabel> Commands<'w, 's, W> {
     /// It is not required to call this constructor when using `Commands` as a [system parameter].
     ///
     /// [system parameter]: crate::system::SystemParam
-    pub fn new(queue: &'s mut CommandQueue, world: &'w World) -> Self {
+    pub fn new(queue: &'s mut CommandQueue, world: &'w World<W>) -> Self {
         Self::new_from_entities(queue, &world.entities)
     }
 
@@ -236,7 +236,7 @@ impl<'w, 's, W: WorldLabel> Commands<'w, 's, W> {
     /// It is not required to call this constructor when using `Commands` as a [system parameter].
     ///
     /// [system parameter]: crate::system::SystemParam
-    pub fn new_from_entities(queue: &'s mut CommandQueue, entities: &'w Entities) -> Self {
+    pub fn new_from_entities(queue: &'s mut CommandQueue, entities: &'w Entities<W>) -> Self {
         Self {
             queue: InternalQueue::CommandQueue(Deferred(queue)),
             entities,
@@ -253,7 +253,7 @@ impl<'w, 's, W: WorldLabel> Commands<'w, 's, W> {
     /// * Caller ensures that `queue` must outlive 'w
     pub(crate) unsafe fn new_raw_from_entities(
         queue: RawCommandQueue,
-        entities: &'w Entities,
+        entities: &'w Entities<W>,
     ) -> Self {
         Self {
             queue: InternalQueue::RawCommandQueue(queue),
@@ -591,7 +591,7 @@ impl<'w, 's, W: WorldLabel> Commands<'w, 's, W> {
     /// # bevy_ecs::system::assert_is_system(add_three_to_counter_system);
     /// # bevy_ecs::system::assert_is_system(add_twenty_five_to_counter_system);
     /// ```
-    pub fn queue<C: Command<T> + HandleError<T>, T>(&mut self, command: C) {
+    pub fn queue<C: Command<W, T> + HandleError<W, T>, T>(&mut self, command: C) {
         self.queue_internal(command.handle_error());
     }
 

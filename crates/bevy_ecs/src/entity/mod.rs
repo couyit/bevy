@@ -73,7 +73,7 @@ use crate::{
         Identifier,
     },
     storage::{SparseSetIndex, TableId, TableRow},
-    world::WorldLabel,
+    world::{ComponentWorld, WorldLabel},
 };
 use alloc::vec::Vec;
 use bevy_platform_support::sync::atomic::Ordering;
@@ -527,7 +527,7 @@ unsafe impl EntitySetIterator for ReserveEntitiesIterator<'_> {}
 ///
 /// [`World`]: crate::world::World
 #[derive(Debug)]
-pub struct Entities<W: WorldLabel = ()> {
+pub struct Entities<W: ComponentWorld> {
     meta: Vec<EntityMeta>,
 
     /// The `pending` and `free_cursor` fields describe three sets of Entity IDs

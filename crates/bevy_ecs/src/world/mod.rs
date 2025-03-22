@@ -74,7 +74,7 @@ use crate::{
 use alloc::{boxed::Box, vec::Vec};
 use bevy_platform_support::sync::atomic::{AtomicU32, Ordering};
 use bevy_ptr::{OwningPtr, Ptr, UnsafeCellDeref};
-use core::{any::TypeId, fmt};
+use core::{any::TypeId, fmt, mem::transmute};
 use log::warn;
 use unsafe_world_cell::{UnsafeEntityCell, UnsafeWorldCell};
 
@@ -84,7 +84,7 @@ pub struct WorldId(usize);
 pub struct Worlds {
     id: WorldsId,
     pub(crate) indices: TypeIdMap<WorldId>,
-    pub(crate) worlds: Vec<World<()>>,
+    pub(crate) worlds: Vec<World<InvalidWorld>>,
 
     pub(crate) change_tick: AtomicU32,
     pub(crate) last_change_tick: Tick,
@@ -122,34 +122,49 @@ pub trait ComponentWorld: WorldLabel {}
 
 pub struct MainWorld;
 pub struct ResourceWorld;
+pub struct InvalidWorld;
+pub struct InvalidComponentWorld;
 
-impl WorldLabel for () {}
 impl WorldLabel for MainWorld {}
 impl ComponentWorld for MainWorld {}
 impl WorldLabel for ResourceWorld {}
+impl WorldLabel for InvalidWorld {}
+impl WorldLabel for InvalidComponentWorld {}
+impl ComponentWorld for InvalidComponentWorld {}
 
 impl Worlds {
     pub fn new() -> Self {
         Self::default()
     }
 
-    pub fn create_world<T: WorldLabel>(&mut self) -> WorldId {
+    pub fn create_world<T: ComponentWorld>(&mut self) -> WorldId {
         let id = WorldId(self.worlds.len());
 
         self.indices.insert(TypeId::of::<T>(), id);
-        self.worlds.push(World::new(id));
+        self.worlds.push(World::<T>::new(id).as_invalid_world());
+
+        id
+    }
+
+    pub fn create_resource_world(&mut self) -> WorldId {
+        let &mut id = self
+            .indices
+            .entry(TypeId::of::<ResourceWorld>())
+            .or_insert(WorldId(self.worlds.len()));
+        self.worlds
+            .push(World::<ResourceWorld>::new(id).as_invalid_world());
 
         id
     }
 
     pub fn get_world<T: WorldLabel>(&self) -> &World<T> {
         let id = self.indices.get(&TypeId::of::<T>()).unwrap();
-        &self.worlds[id.0]
+        self.worlds[id.0].as_world()
     }
 
     pub fn get_world_mut<T: WorldLabel>(&mut self) -> &mut World<T> {
         let id = self.indices.get(&TypeId::of::<T>()).unwrap();
-        &mut self.worlds[id.0]
+        self.worlds[id.0].as_world_mut()
     }
 
     pub fn get_main_world(&self) -> &World<MainWorld> {
@@ -230,6 +245,16 @@ impl<W: WorldLabel> Drop for World<W> {
     }
 }
 
+impl World<InvalidWorld> {
+    pub(crate) fn as_world<W: WorldLabel>(&self) -> &World<W> {
+        unsafe { &*(self as *const World<InvalidWorld> as *const World<W>) }
+    }
+
+    pub(crate) fn as_world_mut<W: WorldLabel>(&mut self) -> &mut World<W> {
+        unsafe { &mut *(self as *mut World<InvalidWorld> as *mut World<W>) }
+    }
+}
+
 impl<W: WorldLabel> World<W> {
     fn new_for_storage(id: WorldId, storage: Storage<W>) -> Self {
         let mut world = Self {
@@ -270,9 +295,6 @@ impl<W: WorldLabel> World<W> {
 
         let on_despawn = OnDespawn::register_component_id(self);
         assert_eq!(ON_DESPAWN, on_despawn);
-
-        // This sets up `Disabled` as a disabling component, via the FromWorld impl
-        self.init_resource::<DefaultQueryFilters>();
     }
 
     /// Creates a new [`UnsafeWorldCell`] view with complete read+write access.
@@ -285,6 +307,10 @@ impl<W: WorldLabel> World<W> {
     #[inline]
     pub fn as_unsafe_world_cell_readonly(&self) -> UnsafeWorldCell<'_> {
         UnsafeWorldCell::new_readonly(self)
+    }
+
+    pub(crate) fn as_invalid_world(self) -> World<InvalidWorld> {
+        unsafe { transmute(self) }
     }
 
     /// Retrieves this [`World`]'s unique ID
@@ -321,35 +347,6 @@ impl<W: WorldLabel> World<W> {
     /// happens automatically during system initialization.
     pub fn register_component<T: Component>(&mut self) -> ComponentId {
         self.components_registrator().register_component::<T>()
-    }
-
-    /// Registers a component type as "disabling",
-    /// using [default query filters](DefaultQueryFilters) to exclude entities with the component from queries.
-    pub fn register_disabling_component<C: Component>(&mut self) {
-        let component_id = self.register_component::<C>();
-        let mut dqf = self.resource_mut::<DefaultQueryFilters>();
-        dqf.register_disabling_component(component_id);
-    }
-
-    /// Returns a mutable reference to the [`ComponentHooks`] for a [`Component`] type.
-    ///
-    /// Will panic if `T` exists in any archetypes.
-    pub fn register_component_hooks<T: Component>(&mut self) -> &mut ComponentHooks {
-        let index = self.register_component::<T>();
-        assert!(!self.archetypes().archetypes.iter().any(|a| a.contains(index)), "Components hooks cannot be modified if the component already exists in an archetype, use register_component if {} may already be in use", core::any::type_name::<T>());
-        // SAFETY: We just created this component
-        unsafe { self.components.get_hooks_mut(index).debug_checked_unwrap() }
-    }
-
-    /// Returns a mutable reference to the [`ComponentHooks`] for a [`Component`] with the given id if it exists.
-    ///
-    /// Will panic if `id` exists in any archetypes.
-    pub fn register_component_hooks_by_id(
-        &mut self,
-        id: ComponentId,
-    ) -> Option<&mut ComponentHooks> {
-        assert!(!self.archetypes().archetypes.iter().any(|a| a.contains(id)), "Components hooks cannot be modified if the component already exists in an archetype, use register_component if the component with id {:?} may already be in use", id);
-        self.components.get_hooks_mut(id)
     }
 
     /// Registers the given component `R` as a [required component] for `T`.
@@ -563,11 +560,6 @@ impl<W: WorldLabel> World<W> {
         constructor: fn() -> R,
     ) -> Result<(), RequiredComponentsError> {
         let requiree = self.register_component::<T>();
-
-        // TODO: Remove this panic and update archetype edges accordingly when required components are added
-        if self.archetypes().component_index().contains_key(&requiree) {
-            return Err(RequiredComponentsError::ArchetypeExists(requiree));
-        }
 
         let required = self.register_component::<R>();
 
@@ -799,46 +791,6 @@ impl<W: WorldLabel> World<W> {
         guard.world.last_change_tick = last_change_tick;
 
         f(guard.world)
-    }
-
-    /// Iterates all component change ticks and clamps any older than [`MAX_CHANGE_AGE`](crate::change_detection::MAX_CHANGE_AGE).
-    /// This prevents overflow and thus prevents false positives.
-    ///
-    /// **Note:** Does nothing if the [`World`] counter has not been incremented at least [`CHECK_TICK_THRESHOLD`]
-    /// times since the previous pass.
-    // TODO: benchmark and optimize
-    pub fn check_change_ticks(&mut self) {
-        let change_tick = self.change_tick();
-        if change_tick.relative_to(self.last_check_tick).get() < CHECK_TICK_THRESHOLD {
-            return;
-        }
-
-        #[cfg(feature = "trace")]
-        let _span = tracing::info_span!("check component ticks").entered();
-
-        match self.storage {
-            Storage::Components {
-                ref mut sparse_sets,
-                ref mut tables,
-                ..
-            } => {
-                tables.check_change_ticks(change_tick);
-                sparse_sets.check_change_ticks(change_tick);
-            }
-            Storage::Resources {
-                ref mut resources,
-                ref mut non_send_resources,
-            } => {
-                resources.check_change_ticks(change_tick);
-                non_send_resources.check_change_ticks(change_tick);
-            }
-        }
-
-        if let Some(mut schedules) = self.get_resource_mut::<Schedules>() {
-            schedules.check_change_ticks(change_tick);
-        }
-
-        self.last_check_tick = change_tick;
     }
 
     pub fn clear(&mut self) {
@@ -1096,7 +1048,7 @@ impl<W: ComponentWorld> World<W> {
         #[inline(never)]
         #[cold]
         #[track_caller]
-        fn panic_no_entity<W: WorldLabel>(world: &World<W>, entity: Entity) -> ! {
+        fn panic_no_entity<W: ComponentWorld>(world: &World<W>, entity: Entity) -> ! {
             panic!(
                 "Entity {entity} {}",
                 world.entities().entity_does_not_exist_error_details(entity)
@@ -2623,17 +2575,73 @@ impl<W: ComponentWorld> World<W> {
         // SAFETY: We just initialized the bundle so its id should definitely be valid.
         unsafe { self.bundles().get(id).debug_checked_unwrap() }
     }
+
+    /// Returns a mutable reference to the [`ComponentHooks`] for a [`Component`] type.
+    ///
+    /// Will panic if `T` exists in any archetypes.
+    pub fn register_component_hooks<T: Component>(&mut self) -> &mut ComponentHooks {
+        let index = self.register_component::<T>();
+        assert!(!self.archetypes().archetypes.iter().any(|a| a.contains(index)), "Components hooks cannot be modified if the component already exists in an archetype, use register_component if {} may already be in use", core::any::type_name::<T>());
+        // SAFETY: We just created this component
+        unsafe { self.components.get_hooks_mut(index).debug_checked_unwrap() }
+    }
+
+    /// Returns a mutable reference to the [`ComponentHooks`] for a [`Component`] with the given id if it exists.
+    ///
+    /// Will panic if `id` exists in any archetypes.
+    pub fn register_component_hooks_by_id(
+        &mut self,
+        id: ComponentId,
+    ) -> Option<&mut ComponentHooks> {
+        assert!(!self.archetypes().archetypes.iter().any(|a| a.contains(id)), "Components hooks cannot be modified if the component already exists in an archetype, use register_component if the component with id {:?} may already be in use", id);
+        self.components.get_hooks_mut(id)
+    }
+
+    /// Iterates all component change ticks and clamps any older than [`MAX_CHANGE_AGE`](crate::change_detection::MAX_CHANGE_AGE).
+    /// This prevents overflow and thus prevents false positives.
+    ///
+    /// **Note:** Does nothing if the [`World`] counter has not been incremented at least [`CHECK_TICK_THRESHOLD`]
+    /// times since the previous pass.
+    // TODO: benchmark and optimize
+    pub fn check_change_ticks(&mut self) {
+        let change_tick = self.change_tick();
+        if change_tick.relative_to(self.last_check_tick).get() < CHECK_TICK_THRESHOLD {
+            return;
+        }
+
+        #[cfg(feature = "trace")]
+        let _span = tracing::info_span!("check component ticks").entered();
+
+        match self.storage {
+            Storage::Components {
+                ref mut sparse_sets,
+                ref mut tables,
+                ..
+            } => {
+                tables.check_change_ticks(change_tick);
+                sparse_sets.check_change_ticks(change_tick);
+            }
+            Storage::Resources { .. } => unreachable!(),
+        }
+
+        self.last_check_tick = change_tick;
+    }
 }
 
 impl World<ResourceWorld> {
-    fn new_for_resources(id: WorldId) -> Self {
-        Self::new_for_storage(
+    fn new(id: WorldId) -> Self {
+        let mut world = Self::new_for_storage(
             id,
             Storage::Resources {
                 resources: Default::default(),
                 non_send_resources: Default::default(),
             },
-        )
+        );
+
+        // This sets up `Disabled` as a disabling component, via the FromWorld impl
+        world.init_resource::<DefaultQueryFilters>();
+
+        world
     }
 
     #[inline]
@@ -3710,6 +3718,14 @@ impl World<ResourceWorld> {
         Some(())
     }
 
+    /// Registers a component type as "disabling",
+    /// using [default query filters](DefaultQueryFilters) to exclude entities with the component from queries.
+    pub fn register_disabling_component<C: Component>(&mut self) {
+        let component_id = self.register_component::<C>();
+        let mut dqf = self.resource_mut::<DefaultQueryFilters>();
+        dqf.register_disabling_component(component_id);
+    }
+
     /// Sends an [`Event`].
     /// This method returns the [ID](`EventId`) of the sent `event`,
     /// or [`None`] if the `event` could not be sent.
@@ -3742,6 +3758,39 @@ impl World<ResourceWorld> {
             return None;
         };
         Some(events_resource.send_batch(events))
+    }
+
+    /// Iterates all component change ticks and clamps any older than [`MAX_CHANGE_AGE`](crate::change_detection::MAX_CHANGE_AGE).
+    /// This prevents overflow and thus prevents false positives.
+    ///
+    /// **Note:** Does nothing if the [`World`] counter has not been incremented at least [`CHECK_TICK_THRESHOLD`]
+    /// times since the previous pass.
+    // TODO: benchmark and optimize
+    pub fn check_change_ticks(&mut self) {
+        let change_tick = self.change_tick();
+        if change_tick.relative_to(self.last_check_tick).get() < CHECK_TICK_THRESHOLD {
+            return;
+        }
+
+        #[cfg(feature = "trace")]
+        let _span = tracing::info_span!("check component ticks").entered();
+
+        match self.storage {
+            Storage::Components { .. } => unreachable!(),
+            Storage::Resources {
+                ref mut resources,
+                ref mut non_send_resources,
+            } => {
+                resources.check_change_ticks(change_tick);
+                non_send_resources.check_change_ticks(change_tick);
+            }
+        }
+
+        if let Some(mut schedules) = self.get_resource_mut::<Schedules>() {
+            schedules.check_change_ticks(change_tick);
+        }
+
+        self.last_check_tick = change_tick;
     }
 }
 
