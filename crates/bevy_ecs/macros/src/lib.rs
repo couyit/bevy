@@ -343,6 +343,31 @@ pub fn derive_system_param(input: TokenStream) -> TokenStream {
         }
     }
 
+    if !generics.type_params().any(|ty| {
+        if ty.ident == "W" {
+            ty.bounds.iter().any(|bound| {
+                if let syn::TypeParamBound::Trait(trait_bound) = bound {
+                    trait_bound
+                        .path
+                        .segments
+                        .last()
+                        .is_some_and(|segment| segment.ident == "WorldLabel")
+                } else {
+                    false
+                }
+            })
+        } else {
+            false
+        }
+    }) {
+        return syn::Error::new_spanned(
+            generics,
+            "SystemParam needs W: WorldLabel generics parameter.",
+        )
+        .into_compile_error()
+        .into();
+    }
+
     let (_impl_generics, ty_generics, where_clause) = generics.split_for_impl();
 
     let lifetimeless_generics: Vec<_> = generics
@@ -465,7 +490,7 @@ pub fn derive_system_param(input: TokenStream) -> TokenStream {
     });
     let (builder_struct, builder_impl) = builder.unzip();
 
-    TokenStream::from(quote! {
+    let a = TokenStream::from(quote! {
         // We define the FetchState struct in an anonymous scope to avoid polluting the user namespace.
         // The struct can still be accessed via SystemParam::State, e.g. EventReaderState can be accessed via
         // <EventReader<'static, 'static, T> as SystemParam>::State
@@ -484,24 +509,25 @@ pub fn derive_system_param(input: TokenStream) -> TokenStream {
             {
                 type State = #state_struct_name<#punctuated_generic_idents>;
                 type Item<'w, 's> = #struct_name #ty_generics;
+                type World = W;
 
-                fn init_state(world: &mut #path::world::World, system_meta: &mut #path::system::SystemMeta) -> Self::State {
+                fn init_state(world: #path::world::unsafe_world_cell::UnsafeWorldCell, system_meta: &mut #path::system::SystemMeta) -> Self::State {
                     #state_struct_name {
-                        state: <#fields_alias::<'_, '_, #punctuated_generic_idents> as #path::system::SystemParam>::init_state(world, system_meta),
+                        state: #fields_alias::<'_, '_, #punctuated_generic_idents>::init_state(world, system_meta),
                     }
                 }
 
                 unsafe fn new_archetype(state: &mut Self::State, archetype: &#path::archetype::Archetype, system_meta: &mut #path::system::SystemMeta) {
                     // SAFETY: The caller ensures that `archetype` is from the World the state was initialized from in `init_state`.
-                    unsafe { <#fields_alias::<'_, '_, #punctuated_generic_idents> as #path::system::SystemParam>::new_archetype(&mut state.state, archetype, system_meta) }
+                    unsafe { #fields_alias::<'_, '_, #punctuated_generic_idents>::new_archetype(&mut state.state, archetype, system_meta) }
                 }
 
-                fn apply(state: &mut Self::State, system_meta: &#path::system::SystemMeta, world: &mut #path::world::World) {
-                    <#fields_alias::<'_, '_, #punctuated_generic_idents> as #path::system::SystemParam>::apply(&mut state.state, system_meta, world);
+                fn apply(state: &mut Self::State, system_meta: &#path::system::SystemMeta, world: #path::world::unsafe_world_cell::UnsafeWorldCell) {
+                    #fields_alias::<'_, '_, #punctuated_generic_idents>::apply(&mut state.state, system_meta, world);
                 }
 
                 fn queue(state: &mut Self::State, system_meta: &#path::system::SystemMeta, world: #path::world::DeferredWorld) {
-                    <#fields_alias::<'_, '_, #punctuated_generic_idents> as #path::system::SystemParam>::queue(&mut state.state, system_meta, world);
+                    #fields_alias::<'_, '_, #punctuated_generic_idents>::queue(&mut state.state, system_meta, world);
                 }
 
                 #[inline]
@@ -510,7 +536,7 @@ pub fn derive_system_param(input: TokenStream) -> TokenStream {
                     system_meta: &#path::system::SystemMeta,
                     world: #path::world::unsafe_world_cell::UnsafeWorldCell<'w>,
                 ) -> bool {
-                    <(#(#tuple_types,)*) as #path::system::SystemParam>::validate_param(&state.state, system_meta, world)
+                    <(#(#tuple_types,)*)>::validate_param(&state.state, system_meta, world)
                 }
 
                 #[inline]
@@ -520,9 +546,7 @@ pub fn derive_system_param(input: TokenStream) -> TokenStream {
                     world: #path::world::unsafe_world_cell::UnsafeWorldCell<'w>,
                     change_tick: #path::component::Tick,
                 ) -> Self::Item<'w, 's> {
-                    let (#(#tuple_patterns,)*) = <
-                        (#(#tuple_types,)*) as #path::system::SystemParam
-                    >::get_param(&mut state.state, system_meta, world, change_tick);
+                    let (#(#tuple_patterns,)*) = <(#(#tuple_types,)*)>::get_param(&mut state.state, system_meta, world, change_tick);
                     #struct_name {
                         #(#fields: #field_locals,)*
                     }
@@ -536,7 +560,11 @@ pub fn derive_system_param(input: TokenStream) -> TokenStream {
         };
 
         #builder_struct
-    })
+    });
+
+    dbg!(a.to_string());
+
+    a
 }
 
 /// Implement `QueryData` to use a struct as a data parameter in a query

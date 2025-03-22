@@ -7,6 +7,8 @@ use bevy_ecs::{
     world::World,
 };
 
+use crate::world::ResourceWorld;
+
 #[doc(hidden)]
 struct RegisteredEvent {
     component_id: ComponentId,
@@ -45,7 +47,7 @@ impl EventRegistry {
     ///
     /// If no instance of the [`EventRegistry`] exists in the world, this will add one - otherwise it will use
     /// the existing instance.
-    pub fn register_event<T: Event>(world: &mut World) {
+    pub fn register_event<T: Event>(world: &mut World<ResourceWorld>) {
         // By initializing the resource here, we can be sure that it is present,
         // and receive the correct, up-to-date `ComponentId` even if it was previously removed.
         let component_id = world.init_resource::<Events<T>>();
@@ -63,7 +65,7 @@ impl EventRegistry {
     }
 
     /// Updates all of the registered events in the World.
-    pub fn run_updates(&mut self, world: &mut World, last_change_tick: Tick) {
+    pub fn run_updates(&mut self, world: &mut World<ResourceWorld>, last_change_tick: Tick) {
         for registered_event in &mut self.event_updates {
             // Bypass the type ID -> Component ID lookup with the cached component ID.
             if let Some(events) = world.get_resource_mut_by_id(registered_event.component_id) {
@@ -82,7 +84,7 @@ impl EventRegistry {
     }
 
     /// Removes an event from the world and it's associated [`EventRegistry`].
-    pub fn deregister_events<T: Event>(world: &mut World) {
+    pub fn deregister_events<T: Event>(world: &mut World<ResourceWorld>) {
         let component_id = world.init_resource::<Events<T>>();
         let mut registry = world.get_resource_or_init::<Self>();
         registry

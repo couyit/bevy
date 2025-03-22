@@ -539,7 +539,7 @@ impl Observers {
     }
 }
 
-impl World {
+impl<W: WorldLabel> World<W> {
     /// Spawns a "global" [`Observer`] which will watch for the given event.
     /// Returns its [`Entity`] as a [`EntityWorldMut`].
     ///

@@ -14,7 +14,7 @@ use crate::{
     system::{Query, Single, SystemMeta},
     world::{
         unsafe_world_cell::UnsafeWorldCell, DeferredWorld, FilteredResources, FilteredResourcesMut,
-        FromWorld, World,
+        FromWorld, World, WorldLabel,
     },
 };
 use alloc::{borrow::ToOwned, boxed::Box, vec::Vec};
@@ -196,7 +196,7 @@ pub unsafe trait SystemParam: Sized {
 
     /// Registers any [`World`] access used by this [`SystemParam`]
     /// and creates a new instance of this param's [`State`](SystemParam::State).
-    fn init_state(world: &mut World, system_meta: &mut SystemMeta) -> Self::State;
+    fn init_state(world: UnsafeWorldCell, system_meta: &mut SystemMeta) -> Self::State;
 
     /// For the specified [`Archetype`], registers the components accessed by this [`SystemParam`] (if applicable).a
     ///
@@ -223,7 +223,7 @@ pub unsafe trait SystemParam: Sized {
         unused_variables,
         reason = "The parameters here are intentionally unused by the default implementation; however, putting underscores here will result in the underscores being copied by rust-analyzer's tab completion."
     )]
-    fn apply(state: &mut Self::State, system_meta: &SystemMeta, world: &mut World) {}
+    fn apply(state: &mut Self::State, system_meta: &SystemMeta, world: UnsafeWorldCell) {}
 
     /// Queues any deferred mutations to be applied at the next [`ApplyDeferred`](crate::prelude::ApplyDeferred).
     #[inline]

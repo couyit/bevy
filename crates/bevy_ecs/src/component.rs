@@ -2893,7 +2893,7 @@ pub fn enforce_no_required_components_recursion(
 /// It will panic if set as handler for any other component.
 ///
 pub fn component_clone_via_clone<C: Clone + Component>(
-    _commands: &mut Commands,
+    _commands: &mut TypeErasedCommands,
     source: &SourceComponent,
     ctx: &mut ComponentCloneCtx,
 ) {
@@ -2921,7 +2921,7 @@ pub fn component_clone_via_clone<C: Clone + Component>(
 /// [`PartialReflect::reflect_clone`]: bevy_reflect::PartialReflect::reflect_clone
 #[cfg(feature = "bevy_reflect")]
 pub fn component_clone_via_reflect(
-    commands: &mut Commands,
+    commands: &mut TypeErasedCommands,
     source: &SourceComponent,
     ctx: &mut ComponentCloneCtx,
 ) {

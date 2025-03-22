@@ -118,12 +118,14 @@ impl Default for Worlds {
 }
 
 pub trait WorldLabel: Send + Sync + 'static {}
+pub trait ComponentWorld: WorldLabel {}
 
 pub struct MainWorld;
 pub struct ResourceWorld;
 
 impl WorldLabel for () {}
 impl WorldLabel for MainWorld {}
+impl ComponentWorld for MainWorld {}
 impl WorldLabel for ResourceWorld {}
 
 impl Worlds {
@@ -229,29 +231,6 @@ impl<W: WorldLabel> Drop for World<W> {
 }
 
 impl<W: WorldLabel> World<W> {
-    fn new(id: WorldId) -> Self {
-        Self::new_for_storage(
-            id,
-            Storage::Components {
-                entities: Entities::<W>::new(),
-                archetypes: Archetypes::new(),
-                bundles: Default::default(),
-                sparse_sets: Default::default(),
-                tables: Default::default(),
-            },
-        )
-    }
-
-    fn new_for_resources(id: WorldId) -> Self {
-        Self::new_for_storage(
-            id,
-            Storage::Resources {
-                resources: Default::default(),
-                non_send_resources: Default::default(),
-            },
-        )
-    }
-
     fn new_for_storage(id: WorldId, storage: Storage<W>) -> Self {
         let mut world = Self {
             id,
@@ -296,12 +275,6 @@ impl<W: WorldLabel> World<W> {
         self.init_resource::<DefaultQueryFilters>();
     }
 
-    /// Retrieves this [`World`]'s unique ID
-    #[inline]
-    pub fn id(&self) -> WorldId {
-        self.id
-    }
-
     /// Creates a new [`UnsafeWorldCell`] view with complete read+write access.
     #[inline]
     pub fn as_unsafe_world_cell(&mut self) -> UnsafeWorldCell<'_> {
@@ -314,101 +287,10 @@ impl<W: WorldLabel> World<W> {
         UnsafeWorldCell::new_readonly(self)
     }
 
-    pub fn component_storage(&self) -> (&Entities<W>, &Archetypes, &Bundles, &SparseSets, &Tables) {
-        match self.storage {
-            Storage::Components {
-                ref entities,
-                ref archetypes,
-                ref bundles,
-                ref sparse_sets,
-                ref tables,
-            } => (entities, archetypes, bundles, sparse_sets, tables),
-            Storage::Resources { .. } => panic!("Storage is not for Components"),
-        }
-    }
-
-    pub(crate) fn component_storage_mut(
-        &mut self,
-    ) -> (
-        &mut Entities<W>,
-        &mut Archetypes,
-        &mut Bundles,
-        &mut SparseSets,
-        &mut Tables,
-    ) {
-        match self.storage {
-            Storage::Components {
-                ref mut entities,
-                ref mut archetypes,
-                ref mut bundles,
-                ref mut sparse_sets,
-                ref mut tables,
-            } => (entities, archetypes, bundles, sparse_sets, tables),
-            Storage::Resources { .. } => panic!("Storage is not for Components"),
-        }
-    }
-
-    pub fn resource_storage(&self) -> (&Resources<true>, &Resources<false>) {
-        match self.storage {
-            Storage::Components { .. } => panic!("Storage is not for Resources"),
-            Storage::Resources {
-                ref resources,
-                ref non_send_resources,
-            } => (resources, non_send_resources),
-        }
-    }
-
-    pub(crate) fn resource_storage_mut(&mut self) -> (&Resources<true>, &Resources<false>) {
-        match self.storage {
-            Storage::Components { .. } => panic!("Storage is not for Resources"),
-            Storage::Resources {
-                ref mut resources,
-                ref mut non_send_resources,
-            } => (resources, non_send_resources),
-        }
-    }
-
-    /// Retrieves this world's [`Entities`] collection.
+    /// Retrieves this [`World`]'s unique ID
     #[inline]
-    pub fn entities(&self) -> &Entities<W> {
-        match self.storage {
-            Storage::Components { ref entities, .. } => entities,
-            Storage::Resources { .. } => panic!("Storage is not for Components"),
-        }
-    }
-
-    /// Retrieves this world's [`Entities`] collection mutably.
-    ///
-    /// # Safety
-    /// Mutable reference must not be used to put the [`Entities`] data
-    /// in an invalid state for this [`World`]
-    #[inline]
-    pub(crate) fn entities_mut(&mut self) -> &mut Entities<W> {
-        match self.storage {
-            Storage::Components {
-                ref mut entities, ..
-            } => entities,
-            Storage::Resources { .. } => panic!("Storage is not for Components"),
-        }
-    }
-
-    /// Retrieves this world's [`Archetypes`] collection.
-    #[inline]
-    pub fn archetypes(&self) -> &Archetypes {
-        match self.storage {
-            Storage::Components { ref archetypes, .. } => archetypes,
-            Storage::Resources { .. } => panic!("Storage is not for Components"),
-        }
-    }
-
-    #[inline]
-    pub(crate) fn archetypes_mut(&mut self) -> &mut Archetypes {
-        match self.storage {
-            Storage::Components {
-                ref mut archetypes, ..
-            } => archetypes,
-            Storage::Resources { .. } => panic!("Storage is not for Components"),
-        }
+    pub fn id(&self) -> WorldId {
+        self.id
     }
 
     /// Retrieves this world's [`Components`] collection.
@@ -432,117 +314,6 @@ impl<W: WorldLabel> World<W> {
         // SAFETY: These are from the same world.
         unsafe { ComponentsRegistrator::new(&mut self.components, &mut self.component_ids) }
     }
-
-    /// Retrieves this world's [`Bundles`] collection.
-    #[inline]
-    pub fn bundles(&self) -> &Bundles {
-        match self.storage {
-            Storage::Components { ref bundles, .. } => bundles,
-            Storage::Resources { .. } => panic!("Storage is not for Components"),
-        }
-    }
-
-    #[inline]
-    pub fn bundles_mut(&mut self) -> &mut Bundles {
-        match self.storage {
-            Storage::Components {
-                ref mut bundles, ..
-            } => bundles,
-            Storage::Resources { .. } => panic!("Storage is not for Components"),
-        }
-    }
-
-    #[inline]
-    pub fn sparse_sets(&self) -> &SparseSets {
-        match self.storage {
-            Storage::Components {
-                ref sparse_sets, ..
-            } => sparse_sets,
-            Storage::Resources { .. } => panic!("Storage is not for Components"),
-        }
-    }
-
-    #[inline]
-    pub(crate) fn sparse_sets_mut(&mut self) -> &mut SparseSets {
-        match self.storage {
-            Storage::Components {
-                ref mut sparse_sets,
-                ..
-            } => sparse_sets,
-            Storage::Resources { .. } => panic!("Storage is not for Components"),
-        }
-    }
-
-    #[inline]
-    pub fn tables(&self) -> &Tables {
-        match self.storage {
-            Storage::Components { ref tables, .. } => tables,
-            Storage::Resources { .. } => panic!("Storage is not for Components"),
-        }
-    }
-
-    #[inline]
-    pub(crate) fn tables_mut(&mut self) -> &mut Tables {
-        match self.storage {
-            Storage::Components { ref mut tables, .. } => tables,
-            Storage::Resources { .. } => panic!("Storage is not for Components"),
-        }
-    }
-
-    #[inline]
-    pub fn resources(&self) -> &Resources<true> {
-        match self.storage {
-            Storage::Components { .. } => panic!("Storage is not for Resources"),
-            Storage::Resources { ref resources, .. } => resources,
-        }
-    }
-
-    #[inline]
-    pub(crate) fn resources_mut(&mut self) -> &mut Resources<true> {
-        match self.storage {
-            Storage::Components { .. } => panic!("Storage is not for Resources"),
-            Storage::Resources {
-                ref mut resources, ..
-            } => resources,
-        }
-    }
-
-    #[inline]
-    pub fn non_send_resources(&self) -> &Resources<false> {
-        match self.storage {
-            Storage::Components { .. } => panic!("Storage is not for Resources"),
-            Storage::Resources {
-                ref non_send_resources,
-                ..
-            } => non_send_resources,
-        }
-    }
-
-    #[inline]
-    pub(crate) fn non_send_resources_mut(&mut self) -> &mut Resources<false> {
-        match self.storage {
-            Storage::Components { .. } => panic!("Storage is not for Resources"),
-            Storage::Resources {
-                ref mut non_send_resources,
-                ..
-            } => non_send_resources,
-        }
-    }
-
-    /// Retrieves this world's [`RemovedComponentEvents`] collection
-    #[inline]
-    pub fn removed_components(&self) -> &RemovedComponentEvents {
-        &self.removed_components
-    }
-
-    /// Creates a new [`Commands`] instance that writes to the world's command queue
-    /// Use [`World::flush`] to apply all queued commands
-    #[inline]
-    pub fn commands(&mut self) -> Commands<W> {
-        // SAFETY: command_queue is stored on world and always valid while the world exists
-        unsafe { Commands::new_raw_from_entities(self.command_queue.clone(), self.entities()) }
-    }
-
     /// Registers a new [`Component`] type and returns the [`ComponentId`] created for it.
     ///
     /// # Usage Notes
@@ -865,6 +636,361 @@ impl<W: WorldLabel> World<W> {
     #[inline]
     pub fn component_id<T: Component>(&self) -> Option<ComponentId> {
         self.components.component_id::<T>()
+    }
+
+    /// Increments the world's current change tick and returns the old value.
+    ///
+    /// If you need to call this method, but do not have `&mut` access to the world,
+    /// consider using [`as_unsafe_world_cell_readonly`](Self::as_unsafe_world_cell_readonly)
+    /// to obtain an [`UnsafeWorldCell`] and calling [`increment_change_tick`](UnsafeWorldCell::increment_change_tick) on that.
+    /// Note that this *can* be done in safe code, despite the name of the type.
+    #[inline]
+    pub fn increment_change_tick(&mut self) -> Tick {
+        let change_tick = self.change_tick.get_mut();
+        let prev_tick = *change_tick;
+        *change_tick = change_tick.wrapping_add(1);
+        Tick::new(prev_tick)
+    }
+
+    /// Reads the current change tick of this world.
+    ///
+    /// If you have exclusive (`&mut`) access to the world, consider using [`change_tick()`](Self::change_tick),
+    /// which is more efficient since it does not require atomic synchronization.
+    #[inline]
+    pub fn read_change_tick(&self) -> Tick {
+        let tick = self.change_tick.load(Ordering::Acquire);
+        Tick::new(tick)
+    }
+
+    /// Reads the current change tick of this world.
+    ///
+    /// This does the same thing as [`read_change_tick()`](Self::read_change_tick), only this method
+    /// is more efficient since it does not require atomic synchronization.
+    #[inline]
+    pub fn change_tick(&mut self) -> Tick {
+        let tick = *self.change_tick.get_mut();
+        Tick::new(tick)
+    }
+
+    /// When called from within an exclusive system (a [`System`] that takes `&mut World` as its first
+    /// parameter), this method returns the [`Tick`] indicating the last time the exclusive system was run.
+    ///
+    /// Otherwise, this returns the `Tick` indicating the last time that [`World::clear_trackers`] was called.
+    ///
+    /// [`System`]: crate::system::System
+    #[inline]
+    pub fn last_change_tick(&self) -> Tick {
+        self.last_change_tick
+    }
+
+    /// Returns the id of the last ECS event that was fired.
+    /// Used internally to ensure observers don't trigger multiple times for the same event.
+    #[inline]
+    pub(crate) fn last_trigger_id(&self) -> u32 {
+        self.last_trigger_id
+    }
+
+    /// Sets [`World::last_change_tick()`] to the specified value during a scope.
+    /// When the scope terminates, it will return to its old value.
+    ///
+    /// This is useful if you need a region of code to be able to react to earlier changes made in the same system.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// # use bevy_ecs::prelude::*;
+    /// // This function runs an update loop repeatedly, allowing each iteration of the loop
+    /// // to react to changes made in the previous loop iteration.
+    /// fn update_loop(
+    ///     world: &mut World,
+    ///     mut update_fn: impl FnMut(&mut World) -> std::ops::ControlFlow<()>,
+    /// ) {
+    ///     let mut last_change_tick = world.last_change_tick();
+    ///
+    ///     // Repeatedly run the update function until it requests a break.
+    ///     loop {
+    ///         let control_flow = world.last_change_tick_scope(last_change_tick, |world| {
+    ///             // Increment the change tick so we can detect changes from the previous update.
+    ///             last_change_tick = world.change_tick();
+    ///             world.increment_change_tick();
+    ///
+    ///             // Update once.
+    ///             update_fn(world)
+    ///         });
+    ///
+    ///         // End the loop when the closure returns `ControlFlow::Break`.
+    ///         if control_flow.is_break() {
+    ///             break;
+    ///         }
+    ///     }
+    /// }
+    /// #
+    /// # #[derive(Resource)] struct Count(u32);
+    /// # let mut world = World::new();
+    /// # world.insert_resource(Count(0));
+    /// # let saved_last_tick = world.last_change_tick();
+    /// # let mut num_updates = 0;
+    /// # update_loop(&mut world, |world| {
+    /// #     let mut c = world.resource_mut::<Count>();
+    /// #     match c.0 {
+    /// #         0 => {
+    /// #             assert_eq!(num_updates, 0);
+    /// #             assert!(c.is_added());
+    /// #             c.0 = 1;
+    /// #         }
+    /// #         1 => {
+    /// #             assert_eq!(num_updates, 1);
+    /// #             assert!(!c.is_added());
+    /// #             assert!(c.is_changed());
+    /// #             c.0 = 2;
+    /// #         }
+    /// #         2 if c.is_changed() => {
+    /// #             assert_eq!(num_updates, 2);
+    /// #             assert!(!c.is_added());
+    /// #         }
+    /// #         2 => {
+    /// #             assert_eq!(num_updates, 3);
+    /// #             assert!(!c.is_changed());
+    /// #             world.remove_resource::<Count>();
+    /// #             world.insert_resource(Count(3));
+    /// #         }
+    /// #         3 if c.is_changed() => {
+    /// #             assert_eq!(num_updates, 4);
+    /// #             assert!(c.is_added());
+    /// #         }
+    /// #         3 => {
+    /// #             assert_eq!(num_updates, 5);
+    /// #             assert!(!c.is_added());
+    /// #             c.0 = 4;
+    /// #             return std::ops::ControlFlow::Break(());
+    /// #         }
+    /// #         _ => unreachable!(),
+    /// #     }
+    /// #     num_updates += 1;
+    /// #     std::ops::ControlFlow::Continue(())
+    /// # });
+    /// # assert_eq!(num_updates, 5);
+    /// # assert_eq!(world.resource::<Count>().0, 4);
+    /// # assert_eq!(world.last_change_tick(), saved_last_tick);
+    /// ```
+    pub fn last_change_tick_scope<T>(
+        &mut self,
+        last_change_tick: Tick,
+        f: impl FnOnce(&mut World<W>) -> T,
+    ) -> T {
+        struct LastTickGuard<'a, W: WorldLabel> {
+            world: &'a mut World<W>,
+            last_tick: Tick,
+        }
+
+        // By setting the change tick in the drop impl, we ensure that
+        // the change tick gets reset even if a panic occurs during the scope.
+        impl<W: WorldLabel> Drop for LastTickGuard<'_, W> {
+            fn drop(&mut self) {
+                self.world.last_change_tick = self.last_tick;
+            }
+        }
+
+        let guard = LastTickGuard {
+            last_tick: self.last_change_tick,
+            world: self,
+        };
+
+        guard.world.last_change_tick = last_change_tick;
+
+        f(guard.world)
+    }
+
+    /// Iterates all component change ticks and clamps any older than [`MAX_CHANGE_AGE`](crate::change_detection::MAX_CHANGE_AGE).
+    /// This prevents overflow and thus prevents false positives.
+    ///
+    /// **Note:** Does nothing if the [`World`] counter has not been incremented at least [`CHECK_TICK_THRESHOLD`]
+    /// times since the previous pass.
+    // TODO: benchmark and optimize
+    pub fn check_change_ticks(&mut self) {
+        let change_tick = self.change_tick();
+        if change_tick.relative_to(self.last_check_tick).get() < CHECK_TICK_THRESHOLD {
+            return;
+        }
+
+        #[cfg(feature = "trace")]
+        let _span = tracing::info_span!("check component ticks").entered();
+
+        match self.storage {
+            Storage::Components {
+                ref mut sparse_sets,
+                ref mut tables,
+                ..
+            } => {
+                tables.check_change_ticks(change_tick);
+                sparse_sets.check_change_ticks(change_tick);
+            }
+            Storage::Resources {
+                ref mut resources,
+                ref mut non_send_resources,
+            } => {
+                resources.check_change_ticks(change_tick);
+                non_send_resources.check_change_ticks(change_tick);
+            }
+        }
+
+        if let Some(mut schedules) = self.get_resource_mut::<Schedules>() {
+            schedules.check_change_ticks(change_tick);
+        }
+
+        self.last_check_tick = change_tick;
+    }
+
+    pub fn clear(&mut self) {
+        match self.storage {
+            Storage::Components {
+                ref mut entities,
+                ref mut archetypes,
+                ref mut sparse_sets,
+                ref mut tables,
+                ..
+            } => {
+                tables.clear();
+                sparse_sets.clear_entities();
+                archetypes.clear_entities();
+                entities.clear();
+            }
+            Storage::Resources {
+                ref mut resources,
+                ref mut non_send_resources,
+            } => {
+                resources.clear();
+                non_send_resources.clear();
+            }
+        }
+    }
+}
+
+impl<W: ComponentWorld> World<W> {
+    fn new(id: WorldId) -> Self {
+        Self::new_for_storage(
+            id,
+            Storage::Components {
+                entities: Entities::<W>::new(),
+                archetypes: Archetypes::new(),
+                bundles: Default::default(),
+                sparse_sets: Default::default(),
+                tables: Default::default(),
+            },
+        )
+    }
+
+    /// Retrieves this world's [`Entities`] collection.
+    #[inline]
+    pub fn entities(&self) -> &Entities<W> {
+        match self.storage {
+            Storage::Components { ref entities, .. } => entities,
+            Storage::Resources { .. } => panic!("Storage is not for Components"),
+        }
+    }
+
+    /// Retrieves this world's [`Entities`] collection mutably.
+    ///
+    /// # Safety
+    /// Mutable reference must not be used to put the [`Entities`] data
+    /// in an invalid state for this [`World`]
+    #[inline]
+    pub(crate) fn entities_mut(&mut self) -> &mut Entities<W> {
+        match self.storage {
+            Storage::Components {
+                ref mut entities, ..
+            } => entities,
+            Storage::Resources { .. } => panic!("Storage is not for Components"),
+        }
+    }
+
+    /// Retrieves this world's [`Archetypes`] collection.
+    #[inline]
+    pub fn archetypes(&self) -> &Archetypes {
+        match self.storage {
+            Storage::Components { ref archetypes, .. } => archetypes,
+            Storage::Resources { .. } => panic!("Storage is not for Components"),
+        }
+    }
+
+    #[inline]
+    pub(crate) fn archetypes_mut(&mut self) -> &mut Archetypes {
+        match self.storage {
+            Storage::Components {
+                ref mut archetypes, ..
+            } => archetypes,
+            Storage::Resources { .. } => panic!("Storage is not for Components"),
+        }
+    }
+
+    /// Retrieves this world's [`Bundles`] collection.
+    #[inline]
+    pub fn bundles(&self) -> &Bundles {
+        match self.storage {
+            Storage::Components { ref bundles, .. } => bundles,
+            Storage::Resources { .. } => panic!("Storage is not for Components"),
+        }
+    }
+
+    #[inline]
+    pub fn bundles_mut(&mut self) -> &mut Bundles {
+        match self.storage {
+            Storage::Components {
+                ref mut bundles, ..
+            } => bundles,
+            Storage::Resources { .. } => panic!("Storage is not for Components"),
+        }
+    }
+
+    #[inline]
+    pub fn sparse_sets(&self) -> &SparseSets {
+        match self.storage {
+            Storage::Components {
+                ref sparse_sets, ..
+            } => sparse_sets,
+            Storage::Resources { .. } => panic!("Storage is not for Components"),
+        }
+    }
+
+    #[inline]
+    pub(crate) fn sparse_sets_mut(&mut self) -> &mut SparseSets {
+        match self.storage {
+            Storage::Components {
+                ref mut sparse_sets,
+                ..
+            } => sparse_sets,
+            Storage::Resources { .. } => panic!("Storage is not for Components"),
+        }
+    }
+
+    #[inline]
+    pub fn tables(&self) -> &Tables {
+        match self.storage {
+            Storage::Components { ref tables, .. } => tables,
+            Storage::Resources { .. } => panic!("Storage is not for Components"),
+        }
+    }
+
+    #[inline]
+    pub(crate) fn tables_mut(&mut self) -> &mut Tables {
+        match self.storage {
+            Storage::Components { ref mut tables, .. } => tables,
+            Storage::Resources { .. } => panic!("Storage is not for Components"),
+        }
+    }
+
+    /// Retrieves this world's [`RemovedComponentEvents`] collection
+    #[inline]
+    pub fn removed_components(&self) -> &RemovedComponentEvents {
+        &self.removed_components
+    }
+
+    /// Creates a new [`Commands`] instance that writes to the world's command queue
+    /// Use [`World::flush`] to apply all queued commands
+    #[inline]
+    pub fn commands(&mut self) -> Commands<W> {
+        // SAFETY: command_queue is stored on world and always valid while the world exists
+        unsafe { Commands::new_raw_from_entities(self.command_queue.clone(), self.entities()) }
     }
 
     /// Returns [`EntityRef`]s that expose read-only operations for the given
@@ -2453,233 +2579,6 @@ impl<W: WorldLabel> World<W> {
         self.flush_commands();
     }
 
-    /// Increments the world's current change tick and returns the old value.
-    ///
-    /// If you need to call this method, but do not have `&mut` access to the world,
-    /// consider using [`as_unsafe_world_cell_readonly`](Self::as_unsafe_world_cell_readonly)
-    /// to obtain an [`UnsafeWorldCell`] and calling [`increment_change_tick`](UnsafeWorldCell::increment_change_tick) on that.
-    /// Note that this *can* be done in safe code, despite the name of the type.
-    #[inline]
-    pub fn increment_change_tick(&mut self) -> Tick {
-        let change_tick = self.change_tick.get_mut();
-        let prev_tick = *change_tick;
-        *change_tick = change_tick.wrapping_add(1);
-        Tick::new(prev_tick)
-    }
-
-    /// Reads the current change tick of this world.
-    ///
-    /// If you have exclusive (`&mut`) access to the world, consider using [`change_tick()`](Self::change_tick),
-    /// which is more efficient since it does not require atomic synchronization.
-    #[inline]
-    pub fn read_change_tick(&self) -> Tick {
-        let tick = self.change_tick.load(Ordering::Acquire);
-        Tick::new(tick)
-    }
-
-    /// Reads the current change tick of this world.
-    ///
-    /// This does the same thing as [`read_change_tick()`](Self::read_change_tick), only this method
-    /// is more efficient since it does not require atomic synchronization.
-    #[inline]
-    pub fn change_tick(&mut self) -> Tick {
-        let tick = *self.change_tick.get_mut();
-        Tick::new(tick)
-    }
-
-    /// When called from within an exclusive system (a [`System`] that takes `&mut World` as its first
-    /// parameter), this method returns the [`Tick`] indicating the last time the exclusive system was run.
-    ///
-    /// Otherwise, this returns the `Tick` indicating the last time that [`World::clear_trackers`] was called.
-    ///
-    /// [`System`]: crate::system::System
-    #[inline]
-    pub fn last_change_tick(&self) -> Tick {
-        self.last_change_tick
-    }
-
-    /// Returns the id of the last ECS event that was fired.
-    /// Used internally to ensure observers don't trigger multiple times for the same event.
-    #[inline]
-    pub(crate) fn last_trigger_id(&self) -> u32 {
-        self.last_trigger_id
-    }
-
-    /// Sets [`World::last_change_tick()`] to the specified value during a scope.
-    /// When the scope terminates, it will return to its old value.
-    ///
-    /// This is useful if you need a region of code to be able to react to earlier changes made in the same system.
-    ///
-    /// # Examples
-    ///
-    /// ```
-    /// # use bevy_ecs::prelude::*;
-    /// // This function runs an update loop repeatedly, allowing each iteration of the loop
-    /// // to react to changes made in the previous loop iteration.
-    /// fn update_loop(
-    ///     world: &mut World,
-    ///     mut update_fn: impl FnMut(&mut World) -> std::ops::ControlFlow<()>,
-    /// ) {
-    ///     let mut last_change_tick = world.last_change_tick();
-    ///
-    ///     // Repeatedly run the update function until it requests a break.
-    ///     loop {
-    ///         let control_flow = world.last_change_tick_scope(last_change_tick, |world| {
-    ///             // Increment the change tick so we can detect changes from the previous update.
-    ///             last_change_tick = world.change_tick();
-    ///             world.increment_change_tick();
-    ///
-    ///             // Update once.
-    ///             update_fn(world)
-    ///         });
-    ///
-    ///         // End the loop when the closure returns `ControlFlow::Break`.
-    ///         if control_flow.is_break() {
-    ///             break;
-    ///         }
-    ///     }
-    /// }
-    /// #
-    /// # #[derive(Resource)] struct Count(u32);
-    /// # let mut world = World::new();
-    /// # world.insert_resource(Count(0));
-    /// # let saved_last_tick = world.last_change_tick();
-    /// # let mut num_updates = 0;
-    /// # update_loop(&mut world, |world| {
-    /// #     let mut c = world.resource_mut::<Count>();
-    /// #     match c.0 {
-    /// #         0 => {
-    /// #             assert_eq!(num_updates, 0);
-    /// #             assert!(c.is_added());
-    /// #             c.0 = 1;
-    /// #         }
-    /// #         1 => {
-    /// #             assert_eq!(num_updates, 1);
-    /// #             assert!(!c.is_added());
-    /// #             assert!(c.is_changed());
-    /// #             c.0 = 2;
-    /// #         }
-    /// #         2 if c.is_changed() => {
-    /// #             assert_eq!(num_updates, 2);
-    /// #             assert!(!c.is_added());
-    /// #         }
-    /// #         2 => {
-    /// #             assert_eq!(num_updates, 3);
-    /// #             assert!(!c.is_changed());
-    /// #             world.remove_resource::<Count>();
-    /// #             world.insert_resource(Count(3));
-    /// #         }
-    /// #         3 if c.is_changed() => {
-    /// #             assert_eq!(num_updates, 4);
-    /// #             assert!(c.is_added());
-    /// #         }
-    /// #         3 => {
-    /// #             assert_eq!(num_updates, 5);
-    /// #             assert!(!c.is_added());
-    /// #             c.0 = 4;
-    /// #             return std::ops::ControlFlow::Break(());
-    /// #         }
-    /// #         _ => unreachable!(),
-    /// #     }
-    /// #     num_updates += 1;
-    /// #     std::ops::ControlFlow::Continue(())
-    /// # });
-    /// # assert_eq!(num_updates, 5);
-    /// # assert_eq!(world.resource::<Count>().0, 4);
-    /// # assert_eq!(world.last_change_tick(), saved_last_tick);
-    /// ```
-    pub fn last_change_tick_scope<T>(
-        &mut self,
-        last_change_tick: Tick,
-        f: impl FnOnce(&mut World<W>) -> T,
-    ) -> T {
-        struct LastTickGuard<'a, W: WorldLabel> {
-            world: &'a mut World<W>,
-            last_tick: Tick,
-        }
-
-        // By setting the change tick in the drop impl, we ensure that
-        // the change tick gets reset even if a panic occurs during the scope.
-        impl<W: WorldLabel> Drop for LastTickGuard<'_, W> {
-            fn drop(&mut self) {
-                self.world.last_change_tick = self.last_tick;
-            }
-        }
-
-        let guard = LastTickGuard {
-            last_tick: self.last_change_tick,
-            world: self,
-        };
-
-        guard.world.last_change_tick = last_change_tick;
-
-        f(guard.world)
-    }
-
-    /// Iterates all component change ticks and clamps any older than [`MAX_CHANGE_AGE`](crate::change_detection::MAX_CHANGE_AGE).
-    /// This prevents overflow and thus prevents false positives.
-    ///
-    /// **Note:** Does nothing if the [`World`] counter has not been incremented at least [`CHECK_TICK_THRESHOLD`]
-    /// times since the previous pass.
-    // TODO: benchmark and optimize
-    pub fn check_change_ticks(&mut self) {
-        let change_tick = self.change_tick();
-        if change_tick.relative_to(self.last_check_tick).get() < CHECK_TICK_THRESHOLD {
-            return;
-        }
-
-        #[cfg(feature = "trace")]
-        let _span = tracing::info_span!("check component ticks").entered();
-
-        match self.storage {
-            Storage::Components {
-                ref mut sparse_sets,
-                ref mut tables,
-                ..
-            } => {
-                tables.check_change_ticks(change_tick);
-                sparse_sets.check_change_ticks(change_tick);
-            }
-            Storage::Resources {
-                ref mut resources,
-                ref mut non_send_resources,
-            } => {
-                resources.check_change_ticks(change_tick);
-                non_send_resources.check_change_ticks(change_tick);
-            }
-        }
-
-        if let Some(mut schedules) = self.get_resource_mut::<Schedules>() {
-            schedules.check_change_ticks(change_tick);
-        }
-
-        self.last_check_tick = change_tick;
-    }
-
-    pub fn clear(&mut self) {
-        match self.storage {
-            Storage::Components {
-                ref mut entities,
-                ref mut archetypes,
-                ref mut sparse_sets,
-                ref mut tables,
-                ..
-            } => {
-                tables.clear();
-                sparse_sets.clear_entities();
-                archetypes.clear_entities();
-                entities.clear();
-            }
-            Storage::Resources {
-                ref mut resources,
-                ref mut non_send_resources,
-            } => {
-                resources.clear();
-                non_send_resources.clear();
-            }
-        }
-    }
-
     /// Registers all of the components in the given [`Bundle`] and returns both the component
     /// ids and the bundle id.
     ///
@@ -2727,6 +2626,56 @@ impl<W: WorldLabel> World<W> {
 }
 
 impl World<ResourceWorld> {
+    fn new_for_resources(id: WorldId) -> Self {
+        Self::new_for_storage(
+            id,
+            Storage::Resources {
+                resources: Default::default(),
+                non_send_resources: Default::default(),
+            },
+        )
+    }
+
+    #[inline]
+    pub fn resources(&self) -> &Resources<true> {
+        match self.storage {
+            Storage::Components { .. } => panic!("Storage is not for Resources"),
+            Storage::Resources { ref resources, .. } => resources,
+        }
+    }
+
+    #[inline]
+    pub(crate) fn resources_mut(&mut self) -> &mut Resources<true> {
+        match self.storage {
+            Storage::Components { .. } => panic!("Storage is not for Resources"),
+            Storage::Resources {
+                ref mut resources, ..
+            } => resources,
+        }
+    }
+
+    #[inline]
+    pub fn non_send_resources(&self) -> &Resources<false> {
+        match self.storage {
+            Storage::Components { .. } => panic!("Storage is not for Resources"),
+            Storage::Resources {
+                ref non_send_resources,
+                ..
+            } => non_send_resources,
+        }
+    }
+
+    #[inline]
+    pub(crate) fn non_send_resources_mut(&mut self) -> &mut Resources<false> {
+        match self.storage {
+            Storage::Components { .. } => panic!("Storage is not for Resources"),
+            Storage::Resources {
+                ref mut non_send_resources,
+                ..
+            } => non_send_resources,
+        }
+    }
+
     /// Registers a new [`Resource`] type and returns the [`ComponentId`] created for it.
     ///
     /// The [`Resource`] doesn't have a value in the [`World`], it's only registered. If you want
