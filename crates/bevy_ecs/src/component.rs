@@ -9,8 +9,8 @@ use crate::{
     relationship::RelationshipHookMode,
     resource::Resource,
     storage::{SparseSetIndex, SparseSets, Table, TableRow},
-    system::{Commands, Local, SystemParam},
-    world::{DeferredWorld, FromWorld, World},
+    system::{Commands, Local, SystemParam, TypeErasedCommands},
+    world::{DeferredWorld, FromWorld, World, WorldLabel},
 };
 use alloc::boxed::Box;
 use alloc::{borrow::Cow, format, vec::Vec};
@@ -1126,7 +1126,7 @@ impl ComponentDescriptor {
 }
 
 /// Function type that can be used to clone an entity.
-pub type ComponentCloneFn = fn(&mut Commands, &SourceComponent, &mut ComponentCloneCtx);
+pub type ComponentCloneFn = fn(&mut TypeErasedCommands, &SourceComponent, &mut ComponentCloneCtx);
 
 /// The clone behavior to use when cloning a [`Component`].
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
@@ -2578,9 +2578,9 @@ impl ComponentTicks {
 /// }
 /// ```
 #[derive(SystemParam)]
-pub struct ComponentIdFor<'s, T: Component>(Local<'s, InitComponentId<T>>);
+pub struct ComponentIdFor<'s, T: Component, W: WorldLabel>(Local<'s, InitComponentId<T, W>>);
 
-impl<T: Component> ComponentIdFor<'_, T> {
+impl<T: Component, W: WorldLabel> ComponentIdFor<'_, T, W> {
     /// Gets the [`ComponentId`] for the type `T`.
     #[inline]
     pub fn get(&self) -> ComponentId {
@@ -2588,28 +2588,28 @@ impl<T: Component> ComponentIdFor<'_, T> {
     }
 }
 
-impl<T: Component> Deref for ComponentIdFor<'_, T> {
+impl<T: Component, W: WorldLabel> Deref for ComponentIdFor<'_, T, W> {
     type Target = ComponentId;
     fn deref(&self) -> &Self::Target {
         &self.0.component_id
     }
 }
 
-impl<T: Component> From<ComponentIdFor<'_, T>> for ComponentId {
+impl<T: Component, W: WorldLabel> From<ComponentIdFor<'_, T, W>> for ComponentId {
     #[inline]
-    fn from(to_component_id: ComponentIdFor<T>) -> ComponentId {
+    fn from(to_component_id: ComponentIdFor<T, W>) -> ComponentId {
         *to_component_id
     }
 }
 
 /// Initializes the [`ComponentId`] for a specific type when used with [`FromWorld`].
-struct InitComponentId<T: Component> {
+struct InitComponentId<T: Component, W: WorldLabel> {
     component_id: ComponentId,
-    marker: PhantomData<T>,
+    marker: PhantomData<(T, W)>,
 }
 
-impl<T: Component> FromWorld for InitComponentId<T> {
-    fn from_world(world: &mut World) -> Self {
+impl<T: Component, W: WorldLabel> FromWorld<W> for InitComponentId<T, W> {
+    fn from_world(world: &mut World<W>) -> Self {
         Self {
             component_id: world.register_component::<T>(),
             marker: PhantomData,
@@ -3039,7 +3039,7 @@ pub fn component_clone_via_reflect(
 ///
 /// See [`EntityClonerBuilder`](crate::entity::EntityClonerBuilder) for details.
 pub fn component_clone_ignore(
-    _commands: &mut Commands,
+    _commands: &mut TypeErasedCommands,
     _source: &SourceComponent,
     _ctx: &mut ComponentCloneCtx,
 ) {

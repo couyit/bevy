@@ -73,10 +73,11 @@ use crate::{
         Identifier,
     },
     storage::{SparseSetIndex, TableId, TableRow},
+    world::WorldLabel,
 };
 use alloc::vec::Vec;
 use bevy_platform_support::sync::atomic::Ordering;
-use core::{fmt, hash::Hash, mem, num::NonZero, panic::Location};
+use core::{fmt, hash::Hash, marker::PhantomData, mem, num::NonZero, panic::Location};
 use log::warn;
 
 #[cfg(feature = "serialize")]
@@ -526,7 +527,7 @@ unsafe impl EntitySetIterator for ReserveEntitiesIterator<'_> {}
 ///
 /// [`World`]: crate::world::World
 #[derive(Debug)]
-pub struct Entities {
+pub struct Entities<W: WorldLabel = ()> {
     meta: Vec<EntityMeta>,
 
     /// The `pending` and `free_cursor` fields describe three sets of Entity IDs
@@ -571,14 +572,16 @@ pub struct Entities {
     /// [`flush`]: Entities::flush
     pending: Vec<u32>,
     free_cursor: AtomicIdCursor,
+    marker: PhantomData<W>,
 }
 
-impl Entities {
+impl<W: WorldLabel> Entities<W> {
     pub(crate) const fn new() -> Self {
         Entities {
             meta: Vec::new(),
             pending: Vec::new(),
             free_cursor: AtomicIdCursor::new(0),
+            marker: PhantomData,
         }
     }
 
@@ -1048,7 +1051,7 @@ pub struct EntityDoesNotExistError {
 }
 
 impl EntityDoesNotExistError {
-    pub(crate) fn new(entity: Entity, entities: &Entities) -> Self {
+    pub(crate) fn new<W: WorldLabel>(entity: Entity, entities: &Entities<W>) -> Self {
         Self {
             entity,
             details: entities.entity_does_not_exist_error_details(entity),

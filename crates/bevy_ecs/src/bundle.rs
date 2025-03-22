@@ -990,7 +990,7 @@ pub(crate) enum ArchetypeMoveType {
 impl<'w> BundleInserter<'w> {
     #[inline]
     pub(crate) fn new<T: Bundle>(
-        world: &'w mut World,
+        world: UnsafeWorldCell<'w>,
         archetype_id: ArchetypeId,
         change_tick: Tick,
     ) -> Self {
@@ -1017,7 +1017,7 @@ impl<'w> BundleInserter<'w> {
     /// - Caller must ensure that `bundle_id` exists in `world.bundles`.
     #[inline]
     pub(crate) unsafe fn new_with_id(
-        world: &'w mut World,
+        world: UnsafeWorldCell<'w>,
         archetype_id: ArchetypeId,
         bundle_id: BundleId,
         change_tick: Tick,
@@ -1060,7 +1060,7 @@ impl<'w> BundleInserter<'w> {
                 table: table.into(),
                 archetype_move_type: ArchetypeMoveType::SameArchetype,
                 change_tick,
-                world: world.as_unsafe_world_cell(),
+                world,
             }
         } else {
             let (archetype, new_archetype) = archetypes.get_2_mut(archetype_id, new_archetype_id);
@@ -1084,7 +1084,7 @@ impl<'w> BundleInserter<'w> {
                         new_archetype: new_archetype.into(),
                     },
                     change_tick,
-                    world: world.as_unsafe_world_cell(),
+                    world,
                 }
             } else {
                 let (table, new_table) = tables.get_2_mut(table_id, new_table_id);
@@ -1098,7 +1098,7 @@ impl<'w> BundleInserter<'w> {
                         new_table: new_table.into(),
                     },
                     change_tick,
-                    world: world.as_unsafe_world_cell(),
+                    world,
                 }
             }
         }
@@ -1382,7 +1382,7 @@ pub(crate) struct BundleSpawner<'w> {
 
 impl<'w> BundleSpawner<'w> {
     #[inline]
-    pub fn new<T: Bundle>(world: &'w mut World, change_tick: Tick) -> Self {
+    pub fn new<T: Bundle>(world: UnsafeWorldCell<'w>, change_tick: Tick) -> Self {
         let (bundles, sparse_sets) = match world.storage {
             Storage::Components {
                 ref mut bundles,
@@ -1406,7 +1406,7 @@ impl<'w> BundleSpawner<'w> {
     /// Caller must ensure that `bundle_id` exists in `world.bundles`
     #[inline]
     pub(crate) unsafe fn new_with_id(
-        world: &'w mut World,
+        world: UnsafeWorldCell<'w>,
         bundle_id: BundleId,
         change_tick: Tick,
     ) -> Self {
@@ -1435,7 +1435,7 @@ impl<'w> BundleSpawner<'w> {
             table: table.into(),
             archetype: archetype.into(),
             change_tick,
-            world: world.as_unsafe_world_cell(),
+            world,
         }
     }
 
@@ -1547,7 +1547,7 @@ impl<'w> BundleSpawner<'w> {
     #[inline]
     pub(crate) fn entities(&mut self) -> &mut Entities {
         // SAFETY: No outstanding references to self.world, changes to entities cannot invalidate our internal pointers
-        unsafe { &mut self.world.world_mut().entities_mut() }
+        unsafe { self.world.world_mut().entities_mut() }
     }
 
     /// # Safety

@@ -84,7 +84,7 @@ pub struct WorldId(usize);
 pub struct Worlds {
     id: WorldsId,
     pub(crate) indices: TypeIdMap<WorldId>,
-    pub(crate) worlds: Vec<World>,
+    pub(crate) worlds: Vec<World<()>>,
 
     pub(crate) change_tick: AtomicU32,
     pub(crate) last_change_tick: Tick,
@@ -100,7 +100,7 @@ impl Default for Worlds {
         let mut world = Self {
             id: WorldsId::new().unwrap(),
             indices: TypeIdMap::default(),
-            worlds: Vec::with_capacity(1),
+            worlds: Vec::with_capacity(2),
 
             change_tick: AtomicU32::new(1),
             last_change_tick: Tick::new(0),
@@ -117,11 +117,12 @@ impl Default for Worlds {
     }
 }
 
-pub trait WorldLabel: 'static {}
+pub trait WorldLabel: Send + Sync + 'static {}
 
 pub struct MainWorld;
 pub struct ResourceWorld;
 
+impl WorldLabel for () {}
 impl WorldLabel for MainWorld {}
 impl WorldLabel for ResourceWorld {}
 
@@ -139,37 +140,37 @@ impl Worlds {
         id
     }
 
-    pub fn get_world<T: WorldLabel>(&self) -> &World {
+    pub fn get_world<T: WorldLabel>(&self) -> &World<T> {
         let id = self.indices.get(&TypeId::of::<T>()).unwrap();
         &self.worlds[id.0]
     }
 
-    pub fn get_world_mut<T: WorldLabel>(&mut self) -> &mut World {
+    pub fn get_world_mut<T: WorldLabel>(&mut self) -> &mut World<T> {
         let id = self.indices.get(&TypeId::of::<T>()).unwrap();
         &mut self.worlds[id.0]
     }
 
-    pub fn get_main_world(&self) -> &World {
+    pub fn get_main_world(&self) -> &World<MainWorld> {
         self.get_world::<MainWorld>()
     }
 
-    pub fn get_main_world_mut(&mut self) -> &mut World {
+    pub fn get_main_world_mut(&mut self) -> &mut World<MainWorld> {
         self.get_world_mut::<MainWorld>()
     }
 
-    pub fn get_resource_world(&self) -> &World {
+    pub fn get_resource_world(&self) -> &World<ResourceWorld> {
         self.get_world::<ResourceWorld>()
     }
 
-    pub fn get_resource_world_mut(&mut self) -> &mut World {
+    pub fn get_resource_world_mut(&mut self) -> &mut World<ResourceWorld> {
         self.get_world_mut::<ResourceWorld>()
     }
 }
 
 // TODO: Check if Components takes up more space than Resources.
-pub enum Storage {
+pub enum Storage<W: WorldLabel> {
     Components {
-        entities: Entities,
+        entities: Entities<W>,
         archetypes: Archetypes,
         bundles: Bundles,
         sparse_sets: SparseSets,
@@ -199,11 +200,12 @@ pub enum Storage {
 /// which are unique instances of a given type that don't belong to a specific Entity.
 /// There are also *non send resources*, which can only be accessed on the main thread.
 /// See [`Resource`] for usage.
-pub struct World {
+#[repr(C)]
+pub struct World<W: WorldLabel> {
     id: WorldId,
     pub(crate) components: Components,
     pub(crate) component_ids: ComponentIds,
-    pub(crate) storage: Storage,
+    pub(crate) storage: Storage<W>,
     pub(crate) observers: Observers,
     pub(crate) removed_components: RemovedComponentEvents,
     pub(crate) change_tick: AtomicU32,
@@ -213,7 +215,7 @@ pub struct World {
     pub(crate) command_queue: RawCommandQueue,
 }
 
-impl Drop for World {
+impl<W: WorldLabel> Drop for World<W> {
     fn drop(&mut self) {
         // SAFETY: Not passing a pointer so the argument is always valid
         unsafe { self.command_queue.apply_or_drop_queued(None) };
@@ -226,12 +228,12 @@ impl Drop for World {
     }
 }
 
-impl World {
+impl<W: WorldLabel> World<W> {
     fn new(id: WorldId) -> Self {
         Self::new_for_storage(
             id,
             Storage::Components {
-                entities: Entities::new(),
+                entities: Entities::<W>::new(),
                 archetypes: Archetypes::new(),
                 bundles: Default::default(),
                 sparse_sets: Default::default(),
@@ -250,7 +252,7 @@ impl World {
         )
     }
 
-    fn new_for_storage(id: WorldId, storage: Storage) -> Self {
+    fn new_for_storage(id: WorldId, storage: Storage<W>) -> Self {
         let mut world = Self {
             id,
             components: Default::default(),
@@ -312,7 +314,7 @@ impl World {
         UnsafeWorldCell::new_readonly(self)
     }
 
-    pub fn component_storage(&self) -> (&Entities, &Archetypes, &Bundles, &SparseSets, &Tables) {
+    pub fn component_storage(&self) -> (&Entities<W>, &Archetypes, &Bundles, &SparseSets, &Tables) {
         match self.storage {
             Storage::Components {
                 ref entities,
@@ -328,7 +330,7 @@ impl World {
     pub(crate) fn component_storage_mut(
         &mut self,
     ) -> (
-        &mut Entities,
+        &mut Entities<W>,
         &mut Archetypes,
         &mut Bundles,
         &mut SparseSets,
@@ -368,7 +370,7 @@ impl World {
 
     /// Retrieves this world's [`Entities`] collection.
     #[inline]
-    pub fn entities(&self) -> &Entities {
+    pub fn entities(&self) -> &Entities<W> {
         match self.storage {
             Storage::Components { ref entities, .. } => entities,
             Storage::Resources { .. } => panic!("Storage is not for Components"),
@@ -381,7 +383,7 @@ impl World {
     /// Mutable reference must not be used to put the [`Entities`] data
     /// in an invalid state for this [`World`]
     #[inline]
-    pub(crate) fn entities_mut(&mut self) -> &mut Entities {
+    pub(crate) fn entities_mut(&mut self) -> &mut Entities<W> {
         match self.storage {
             Storage::Components {
                 ref mut entities, ..
@@ -536,7 +538,7 @@ impl World {
     /// Creates a new [`Commands`] instance that writes to the world's command queue
     /// Use [`World::flush`] to apply all queued commands
     #[inline]
-    pub fn commands(&mut self) -> Commands {
+    pub fn commands(&mut self) -> Commands<W> {
         // SAFETY: command_queue is stored on world and always valid while the world exists
         unsafe { Commands::new_raw_from_entities(self.command_queue.clone(), self.entities()) }
     }
@@ -968,7 +970,7 @@ impl World {
         #[inline(never)]
         #[cold]
         #[track_caller]
-        fn panic_no_entity(world: &World, entity: Entity) -> ! {
+        fn panic_no_entity<W: WorldLabel>(world: &World<W>, entity: Entity) -> ! {
             panic!(
                 "Entity {entity} {}",
                 world.entities().entity_does_not_exist_error_details(entity)
@@ -1298,7 +1300,7 @@ impl World {
     /// # assert_eq!(world.get::<TargetedBy>(e1).unwrap().0, eid);
     /// # assert_eq!(world.get::<TargetedBy>(e2).unwrap().0, eid);
     /// ```
-    pub fn entities_and_commands(&mut self) -> (EntityFetcher, Commands) {
+    pub fn entities_and_commands(&mut self) -> (EntityFetcher, Commands<W>) {
         let cell = self.as_unsafe_world_cell();
         // SAFETY: `&mut self` gives mutable access to the entire world, and prevents simultaneous access.
         let fetcher = unsafe { EntityFetcher::new(cell) };
@@ -1974,7 +1976,7 @@ impl World {
         }
 
         impl<'w> SpawnOrInsert<'w> {
-            fn entities(&mut self) -> &mut Entities {
+            fn entities(&mut self) -> &mut Entities<()> {
                 match self {
                     SpawnOrInsert::Spawn(spawner) => spawner.entities(),
                     SpawnOrInsert::Insert(inserter, _) => inserter.entities(),
@@ -1983,7 +1985,7 @@ impl World {
         }
         // SAFETY: we initialized this bundle_id in `init_info`
         let mut spawn_or_insert = SpawnOrInsert::Spawn(unsafe {
-            BundleSpawner::new_with_id(self, bundle_id, change_tick)
+            BundleSpawner::new_with_id(self.as_unsafe_world_cell(), bundle_id, change_tick)
         });
 
         let mut invalid_entities = Vec::new();
@@ -2589,16 +2591,16 @@ impl World {
     pub fn last_change_tick_scope<T>(
         &mut self,
         last_change_tick: Tick,
-        f: impl FnOnce(&mut World) -> T,
+        f: impl FnOnce(&mut World<W>) -> T,
     ) -> T {
-        struct LastTickGuard<'a> {
-            world: &'a mut World,
+        struct LastTickGuard<'a, W: WorldLabel> {
+            world: &'a mut World<W>,
             last_tick: Tick,
         }
 
         // By setting the change tick in the drop impl, we ensure that
         // the change tick gets reset even if a panic occurs during the scope.
-        impl Drop for LastTickGuard<'_> {
+        impl<W: WorldLabel> Drop for LastTickGuard<'_, W> {
             fn drop(&mut self) {
                 self.world.last_change_tick = self.last_tick;
             }
@@ -2722,7 +2724,9 @@ impl World {
         // SAFETY: We just initialized the bundle so its id should definitely be valid.
         unsafe { self.bundles().get(id).debug_checked_unwrap() }
     }
+}
 
+impl World<ResourceWorld> {
     /// Registers a new [`Resource`] type and returns the [`ComponentId`] created for it.
     ///
     /// The [`Resource`] doesn't have a value in the [`World`], it's only registered. If you want
@@ -2769,7 +2773,7 @@ impl World {
     /// and those default values will be here instead.
     #[inline]
     #[track_caller]
-    pub fn init_resource<R: Resource + FromWorld>(&mut self) -> ComponentId {
+    pub fn init_resource<R: Resource + FromWorld<ResourceWorld>>(&mut self) -> ComponentId {
         let caller = MaybeLocation::caller();
         let component_id = self.components_registrator().register_resource::<R>();
         if self
@@ -2829,7 +2833,7 @@ impl World {
     /// Panics if called from a thread other than the main thread.
     #[inline]
     #[track_caller]
-    pub fn init_non_send_resource<R: 'static + FromWorld>(&mut self) -> ComponentId {
+    pub fn init_non_send_resource<R: 'static + FromWorld<ResourceWorld>>(&mut self) -> ComponentId {
         let caller = MaybeLocation::caller();
         let component_id = self.components_registrator().register_non_send::<R>();
         if self
@@ -3187,7 +3191,7 @@ impl World {
     /// assert_eq!(my_res.0, 30);
     /// ```
     #[track_caller]
-    pub fn get_resource_or_init<R: Resource + FromWorld>(&mut self) -> Mut<'_, R> {
+    pub fn get_resource_or_init<R: Resource + FromWorld<ResourceWorld>>(&mut self) -> Mut<'_, R> {
         let caller = MaybeLocation::caller();
         let change_tick = self.change_tick();
         let last_change_tick = self.last_change_tick();
@@ -3318,7 +3322,10 @@ impl World {
     ///
     /// See also [`try_resource_scope`](Self::try_resource_scope).
     #[track_caller]
-    pub fn resource_scope<R: Resource, U>(&mut self, f: impl FnOnce(&mut World, Mut<R>) -> U) -> U {
+    pub fn resource_scope<R: Resource, U>(
+        &mut self,
+        f: impl FnOnce(&mut World<ResourceWorld>, Mut<R>) -> U,
+    ) -> U {
         self.try_resource_scope(f)
             .unwrap_or_else(|| panic!("resource does not exist: {}", core::any::type_name::<R>()))
     }
@@ -3332,7 +3339,7 @@ impl World {
     /// See also [`resource_scope`](Self::resource_scope).
     pub fn try_resource_scope<R: Resource, U>(
         &mut self,
-        f: impl FnOnce(&mut World, Mut<R>) -> U,
+        f: impl FnOnce(&mut World<ResourceWorld>, Mut<R>) -> U,
     ) -> Option<U> {
         let last_change_tick = self.last_change_tick();
         let change_tick = self.change_tick();
@@ -3789,7 +3796,7 @@ impl World {
     }
 }
 
-impl World {
+impl<W: WorldLabel> World<W> {
     /// Retrieves an immutable untyped reference to the given `entity`'s [`Component`] of the given [`ComponentId`].
     /// Returns `None` if the `entity` does not have a [`Component`] of the given type.
     ///
@@ -3822,7 +3829,7 @@ impl World {
 }
 
 // Schedule-related methods
-impl World {
+impl<W: WorldLabel> World<W> {
     /// Adds the specified [`Schedule`] to the world. The schedule can later be run
     /// by calling [`.run_schedule(label)`](Self::run_schedule) or by directly
     /// accessing the [`Schedules`] resource.
@@ -3847,7 +3854,7 @@ impl World {
     pub fn try_schedule_scope<R>(
         &mut self,
         label: impl ScheduleLabel,
-        f: impl FnOnce(&mut World, &mut Schedule) -> R,
+        f: impl FnOnce(&mut World<W>, &mut Schedule) -> R,
     ) -> Result<R, TryRunScheduleError> {
         let label = label.intern();
         let Some(mut schedule) = self
@@ -3907,7 +3914,7 @@ impl World {
     pub fn schedule_scope<R>(
         &mut self,
         label: impl ScheduleLabel,
-        f: impl FnOnce(&mut World, &mut Schedule) -> R,
+        f: impl FnOnce(&mut World<W>, &mut Schedule) -> R,
     ) -> R {
         self.try_schedule_scope(label, f)
             .unwrap_or_else(|e| panic!("{e}"))
@@ -3956,7 +3963,7 @@ impl World {
     }
 }
 
-impl fmt::Debug for World {
+impl<W: WorldLabel> fmt::Debug for World<W> {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         // SAFETY: `UnsafeWorldCell` requires that this must only access metadata.
         // Accessing any data stored in the world would be unsound.
@@ -3968,9 +3975,9 @@ impl fmt::Debug for World {
 }
 
 // SAFETY: all methods on the world ensure that non-send resources are only accessible on the main thread
-unsafe impl Send for World {}
+unsafe impl<W: WorldLabel> Send for World<W> {}
 // SAFETY: all methods on the world ensure that non-send resources are only accessible on the main thread
-unsafe impl Sync for World {}
+unsafe impl<W: WorldLabel> Sync for World<W> {}
 
 /// Creates an instance of the type this trait is implemented for
 /// using data from the supplied [`World`].
@@ -4008,14 +4015,14 @@ unsafe impl Sync for World {}
 ///     G
 /// }
 /// ```
-pub trait FromWorld {
+pub trait FromWorld<W: WorldLabel> {
     /// Creates `Self` using data from the given [`World`].
-    fn from_world(world: &mut World) -> Self;
+    fn from_world(world: &mut World<W>) -> Self;
 }
 
-impl<T: Default> FromWorld for T {
+impl<T: Default, W: WorldLabel> FromWorld<W> for T {
     /// Creates `Self` using [`default()`](`Default::default`).
-    fn from_world(_world: &mut World) -> Self {
+    fn from_world(_world: &mut World<W>) -> Self {
         T::default()
     }
 }
@@ -4023,7 +4030,7 @@ impl<T: Default> FromWorld for T {
 #[cfg(test)]
 #[expect(clippy::print_stdout, reason = "Allowed in tests.")]
 mod tests {
-    use super::{FromWorld, World};
+    use super::{FromWorld, ResourceWorld, World};
     use crate::{
         change_detection::MaybeLocation,
         component::{ComponentCloneBehavior, ComponentDescriptor, ComponentInfo, StorageType},
@@ -4357,8 +4364,8 @@ mod tests {
 
     #[derive(Resource)]
     struct TestFromWorld(u32);
-    impl FromWorld for TestFromWorld {
-        fn from_world(world: &mut World) -> Self {
+    impl FromWorld<ResourceWorld> for TestFromWorld {
+        fn from_world(world: &mut World<ResourceWorld>) -> Self {
             let b = world.resource::<TestResource>();
             Self(b.0)
         }

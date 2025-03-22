@@ -12,7 +12,7 @@ use crate::{
     query::Access,
     schedule::InternedSystemSet,
     system::{input::SystemInput, SystemIn},
-    world::{unsafe_world_cell::UnsafeWorldCell, DeferredWorld, World},
+    world::{unsafe_world_cell::UnsafeWorldCell, DeferredWorld, World, Worlds},
 };
 
 use alloc::{borrow::Cow, boxed::Box, vec::Vec};
@@ -351,7 +351,7 @@ pub trait RunSystemOnce: Sized {
         In: SystemInput;
 }
 
-impl RunSystemOnce for &mut World {
+impl RunSystemOnce for &mut Worlds {
     fn run_system_once_with<T, In, Out, Marker>(
         self,
         system: T,
@@ -392,7 +392,7 @@ impl Debug for RunSystemError {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::prelude::*;
+    use crate::{prelude::*, world::Worlds};
 
     #[test]
     fn run_system_once() {
@@ -420,7 +420,8 @@ mod tests {
 
     #[test]
     fn run_two_systems() {
-        let mut world = World::new();
+        let mut worlds = Worlds::new();
+        let world = worlds.get_resource_world_mut();
         world.init_resource::<Counter>();
         assert_eq!(*world.resource::<Counter>(), Counter(0));
         world.run_system_once(count_up).unwrap();
@@ -435,10 +436,11 @@ mod tests {
 
     #[test]
     fn command_processing() {
-        let mut world = World::new();
-        assert_eq!(world.entities.len(), 0);
+        let mut worlds = Worlds::new();
+        let world = worlds.get_main_world_mut();
+        assert_eq!(world.entities().len(), 0);
         world.run_system_once(spawn_entity).unwrap();
-        assert_eq!(world.entities.len(), 1);
+        assert_eq!(world.entities().len(), 1);
     }
 
     #[test]
@@ -447,7 +449,8 @@ mod tests {
             ns.0 -= 1;
         }
 
-        let mut world = World::new();
+        let mut worlds = Worlds::new();
+        let world = worlds.get_resource_world();
         world.insert_non_send_resource(Counter(10));
         assert_eq!(*world.non_send_resource::<Counter>(), Counter(10));
         world.run_system_once(non_send_count_down).unwrap();

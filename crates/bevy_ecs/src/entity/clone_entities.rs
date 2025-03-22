@@ -3,6 +3,7 @@ use bevy_platform_support::collections::{HashMap, HashSet};
 use bevy_ptr::{Ptr, PtrMut};
 use bumpalo::Bump;
 use core::any::TypeId;
+use core::marker::PhantomData;
 
 #[cfg(feature = "bevy_reflect")]
 use alloc::boxed::Box;
@@ -12,6 +13,7 @@ use crate::entity::hash_map::EntityHashMap;
 use crate::entity::{Entities, EntityMapper};
 use crate::relationship::RelationshipHookMode;
 use crate::system::Commands;
+use crate::world::WorldLabel;
 use crate::{
     bundle::Bundle,
     component::{Component, ComponentId, ComponentInfo},
@@ -86,7 +88,7 @@ pub struct ComponentCloneCtx<'a, 'b> {
     source: Entity,
     target: Entity,
     component_info: &'a ComponentInfo,
-    entity_cloner: &'a mut EntityCloner,
+    entity_cloner: &'a mut EntityCloner<()>,
     mapper: &'a mut dyn EntityMapper,
     #[cfg(feature = "bevy_reflect")]
     type_registry: Option<&'a crate::reflect::AppTypeRegistry>,
@@ -110,7 +112,7 @@ impl<'a, 'b> ComponentCloneCtx<'a, 'b> {
         bundle_scratch: &'a mut BundleScratch<'b>,
         entities: &'a Entities,
         component_info: &'a ComponentInfo,
-        entity_cloner: &'a mut EntityCloner,
+        entity_cloner: &'a mut EntityCloner<()>,
         mapper: &'a mut dyn EntityMapper,
         #[cfg(feature = "bevy_reflect")] type_registry: Option<&'a crate::reflect::AppTypeRegistry>,
         #[cfg(not(feature = "bevy_reflect"))] type_registry: Option<&'a ()>,
@@ -342,7 +344,7 @@ impl<'a, 'b> ComponentCloneCtx<'a, 'b> {
 /// 3. default handler override using [`EntityClonerBuilder::with_default_clone_fn`].
 /// 4. reflect-based or noop default clone handler depending on if `bevy_reflect` feature is enabled or not.
 #[derive(Debug)]
-pub struct EntityCloner {
+pub struct EntityCloner<W: WorldLabel> {
     filter_allows_components: bool,
     filter: HashSet<ComponentId>,
     clone_behavior_overrides: HashMap<ComponentId, ComponentCloneBehavior>,
@@ -350,9 +352,10 @@ pub struct EntityCloner {
     linked_cloning: bool,
     default_clone_fn: ComponentCloneFn,
     clone_queue: VecDeque<Entity>,
+    marker: PhantomData<W>,
 }
 
-impl Default for EntityCloner {
+impl<W: WorldLabel> Default for EntityCloner<W> {
     fn default() -> Self {
         Self {
             filter_allows_components: false,
@@ -362,6 +365,7 @@ impl Default for EntityCloner {
             linked_cloning: false,
             default_clone_fn: ComponentCloneBehavior::global_default_fn(),
             clone_queue: Default::default(),
+            marker: PhantomData,
         }
     }
 }
@@ -411,9 +415,9 @@ impl<'a> BundleScratch<'a> {
     ///
     /// # Safety
     /// All [`ComponentId`] values in this instance must come from `world`.
-    pub(crate) unsafe fn write(
+    pub(crate) unsafe fn write<W: WorldLabel>(
         self,
-        world: &mut World,
+        world: &mut World<W>,
         entity: Entity,
         relationship_hook_insert_mode: RelationshipHookMode,
     ) {
@@ -430,9 +434,9 @@ impl<'a> BundleScratch<'a> {
     }
 }
 
-impl EntityCloner {
+impl<W: WorldLabel> EntityCloner<W> {
     /// Returns a new [`EntityClonerBuilder`] using the given `world`.
-    pub fn build(world: &mut World) -> EntityClonerBuilder {
+    pub fn build(world: &mut World<W>) -> EntityClonerBuilder<W> {
         EntityClonerBuilder {
             world,
             attach_required_components: true,
@@ -450,7 +454,7 @@ impl EntityCloner {
     /// Clones and inserts components from the `source` entity into the entity mapped by `mapper` from `source` using the stored configuration.
     fn clone_entity_internal(
         &mut self,
-        world: &mut World,
+        world: &mut World<W>,
         source: Entity,
         mapper: &mut dyn EntityMapper,
         relationship_hook_insert_mode: RelationshipHookMode,
@@ -555,7 +559,7 @@ impl EntityCloner {
     /// by [`RelationshipTarget`](crate::relationship::RelationshipTarget) components with
     /// [`RelationshipTarget::LINKED_SPAWN`](crate::relationship::RelationshipTarget::LINKED_SPAWN)
     #[track_caller]
-    pub fn clone_entity(&mut self, world: &mut World, source: Entity, target: Entity) {
+    pub fn clone_entity(&mut self, world: &mut World<W>, source: Entity, target: Entity) {
         let mut map = EntityHashMap::<Entity>::new();
         map.set_mapped(source, target);
         self.clone_entity_mapped(world, source, &mut map);
@@ -566,7 +570,7 @@ impl EntityCloner {
     /// by [`RelationshipTarget`](crate::relationship::RelationshipTarget) components with
     /// [`RelationshipTarget::LINKED_SPAWN`](crate::relationship::RelationshipTarget::LINKED_SPAWN)
     #[track_caller]
-    pub fn spawn_clone(&mut self, world: &mut World, source: Entity) -> Entity {
+    pub fn spawn_clone(&mut self, world: &mut World<W>, source: Entity) -> Entity {
         let target = world.spawn_empty().id();
         self.clone_entity(world, source, target);
         target
@@ -576,7 +580,7 @@ impl EntityCloner {
     #[track_caller]
     pub fn clone_entity_mapped(
         &mut self,
-        world: &mut World,
+        world: &mut World<W>,
         source: Entity,
         mapper: &mut dyn EntityMapper,
     ) -> Entity {
@@ -610,20 +614,20 @@ impl EntityCloner {
 
 /// A builder for configuring [`EntityCloner`]. See [`EntityCloner`] for more information.
 #[derive(Debug)]
-pub struct EntityClonerBuilder<'w> {
-    world: &'w mut World,
-    entity_cloner: EntityCloner,
+pub struct EntityClonerBuilder<'w, W: WorldLabel> {
+    world: &'w mut World<W>,
+    entity_cloner: EntityCloner<W>,
     attach_required_components: bool,
 }
 
-impl<'w> EntityClonerBuilder<'w> {
+impl<'w, W: WorldLabel> EntityClonerBuilder<'w, W> {
     /// Internally calls [`EntityCloner::clone_entity`] on the builder's [`World`].
     pub fn clone_entity(&mut self, source: Entity, target: Entity) -> &mut Self {
         self.entity_cloner.clone_entity(self.world, source, target);
         self
     }
     /// Finishes configuring [`EntityCloner`] returns it.
-    pub fn finish(self) -> EntityCloner {
+    pub fn finish(self) -> EntityCloner<W> {
         self.entity_cloner
     }
 
@@ -634,7 +638,7 @@ impl<'w> EntityClonerBuilder<'w> {
     /// will not involve required components.
     pub fn without_required_components(
         &mut self,
-        builder: impl FnOnce(&mut EntityClonerBuilder),
+        builder: impl FnOnce(&mut EntityClonerBuilder<W>),
     ) -> &mut Self {
         self.attach_required_components = false;
         builder(self);
@@ -845,8 +849,8 @@ mod tests {
         entity::{hash_map::EntityHashMap, Entity, EntityCloner, SourceComponent},
         prelude::{ChildOf, Children, Resource},
         reflect::{AppTypeRegistry, ReflectComponent, ReflectFromWorld},
-        system::Commands,
-        world::{FromWorld, World},
+        system::TypeErasedCommands,
+        world::{FromWorld, World, WorldLabel, Worlds},
     };
     use alloc::vec::Vec;
     use bevy_ptr::OwningPtr;
@@ -858,10 +862,11 @@ mod tests {
     mod reflect {
         use super::*;
         use crate::{
-            component::{Component, ComponentCloneBehavior},
+            component::ComponentCloneBehavior,
             entity::{EntityCloner, SourceComponent},
-            reflect::{AppTypeRegistry, ReflectComponent, ReflectFromWorld},
-            system::Commands,
+            reflect::AppTypeRegistry,
+            system::TypeErasedCommands,
+            world::Worlds,
         };
         use alloc::vec;
         use bevy_reflect::{std_traits::ReflectDefault, FromType, Reflect, ReflectFromPtr};
@@ -936,11 +941,13 @@ mod tests {
                 ignored: NotClone,
             }
 
-            let mut world = World::default();
-            world.init_resource::<AppTypeRegistry>();
-            let registry = world.get_resource::<AppTypeRegistry>().unwrap();
+            let mut worlds = Worlds::new();
+            let resource_world = worlds.get_resource_world_mut();
+            resource_world.init_resource::<AppTypeRegistry>();
+            let registry = resource_world.get_resource::<AppTypeRegistry>().unwrap();
             registry.write().register::<(A, B, C, D)>();
 
+            let world = worlds.get_main_world_mut();
             let a_id = world.register_component::<A>();
             let b_id = world.register_component::<B>();
             let c_id = world.register_component::<C>();
@@ -970,7 +977,7 @@ mod tests {
                 .id();
             let e_clone = world.spawn_empty().id();
 
-            EntityCloner::build(&mut world)
+            EntityCloner::build(world)
                 .override_clone_behavior_with_id(a_id, ComponentCloneBehavior::reflect())
                 .override_clone_behavior_with_id(b_id, ComponentCloneBehavior::reflect())
                 .override_clone_behavior_with_id(c_id, ComponentCloneBehavior::reflect())
@@ -992,7 +999,7 @@ mod tests {
             struct B;
 
             fn test_handler(
-                _commands: &mut Commands,
+                _commands: &mut TypeErasedCommands,
                 source: &SourceComponent,
                 ctx: &mut ComponentCloneCtx,
             ) {
@@ -1000,9 +1007,10 @@ mod tests {
                 assert!(source.read_reflect(&registry.read()).is_none());
             }
 
-            let mut world = World::default();
-            world.init_resource::<AppTypeRegistry>();
-            let registry = world.get_resource::<AppTypeRegistry>().unwrap();
+            let mut worlds = Worlds::new();
+            let resource_world = worlds.get_resource_world_mut();
+            resource_world.init_resource::<AppTypeRegistry>();
+            let registry = resource_world.get_resource::<AppTypeRegistry>().unwrap();
             {
                 let mut registry = registry.write();
                 registry.register::<A>();
@@ -1012,10 +1020,11 @@ mod tests {
                     .insert(<ReflectFromPtr as FromType<B>>::from_type());
             }
 
+            let world = worlds.get_main_world_mut();
             let e = world.spawn(A).id();
             let e_clone = world.spawn_empty().id();
 
-            EntityCloner::build(&mut world)
+            EntityCloner::build(world)
                 .override_clone_behavior::<A>(ComponentCloneBehavior::Custom(test_handler))
                 .clone_entity(e, e_clone);
         }
@@ -1288,7 +1297,7 @@ mod tests {
     fn clone_entity_with_dynamic_components() {
         const COMPONENT_SIZE: usize = 10;
         fn test_handler(
-            _commands: &mut Commands,
+            _commands: &mut TypeErasedCommands,
             source: &SourceComponent,
             ctx: &mut ComponentCloneCtx,
         ) {
@@ -1343,14 +1352,15 @@ mod tests {
 
     #[test]
     fn recursive_clone() {
-        let mut world = World::new();
+        let mut worlds = Worlds::new();
+        let world = worlds.get_main_world_mut();
         let root = world.spawn_empty().id();
         let child1 = world.spawn(ChildOf { parent: root }).id();
         let grandchild = world.spawn(ChildOf { parent: child1 }).id();
         let child2 = world.spawn(ChildOf { parent: root }).id();
 
         let clone_root = world.spawn_empty().id();
-        EntityCloner::build(&mut world)
+        EntityCloner::build(world)
             .linked_cloning(true)
             .clone_entity(root, clone_root);
 
@@ -1388,17 +1398,19 @@ mod tests {
         #[derive(Resource)]
         struct FromWorldCalled(bool);
 
-        impl FromWorld for SomeRef {
-            fn from_world(world: &mut World) -> Self {
+        impl<W: WorldLabel> FromWorld<W> for SomeRef {
+            fn from_world(world: &mut World<W>) -> Self {
                 world.insert_resource(FromWorldCalled(true));
                 SomeRef(Entity::PLACEHOLDER, Default::default())
             }
         }
-        let mut world = World::new();
+        let mut worlds = Worlds::new();
+        let resource_world = worlds.get_resource_world_mut();
         let registry = AppTypeRegistry::default();
         registry.write().register::<SomeRef>();
-        world.insert_resource(registry);
+        resource_world.insert_resource(registry);
 
+        let world = worlds.get_main_world_mut();
         let a = world.spawn_empty().id();
         let b = world.spawn_empty().id();
         let c = world.spawn(SomeRef(a, Default::default())).id();

@@ -1481,7 +1481,7 @@ mod tests {
         },
         component::{Component, ComponentTicks, Tick},
         system::{IntoSystem, Single, System},
-        world::World,
+        world::{World, Worlds},
     };
 
     use super::{DetectChanges, DetectChangesMut, MutUntyped};
@@ -1518,19 +1518,20 @@ mod tests {
             query.unwrap().is_changed()
         }
 
-        let mut world = World::new();
+        let mut worlds = Worlds::new();
+        let world = worlds.get_main_world_mut();
 
         // component added: 1, changed: 1
         world.spawn(C);
 
         let mut change_detected_system = IntoSystem::into_system(change_detected);
         let mut change_expired_system = IntoSystem::into_system(change_expired);
-        change_detected_system.initialize(&mut world);
-        change_expired_system.initialize(&mut world);
+        change_detected_system.initialize(world);
+        change_expired_system.initialize(world);
 
         // world: 1, system last ran: 0, component changed: 1
         // The spawn will be detected since it happened after the system "last ran".
-        assert!(change_detected_system.run((), &mut world));
+        assert!(change_detected_system.run((), world));
 
         // world: 1 + MAX_CHANGE_AGE
         let change_tick = world.change_tick.get_mut();
@@ -1540,12 +1541,13 @@ mod tests {
         // Since we clamp things to `MAX_CHANGE_AGE` for determinism,
         // `ComponentTicks::is_changed` will now see `MAX_CHANGE_AGE > MAX_CHANGE_AGE`
         // and return `false`.
-        assert!(!change_expired_system.run((), &mut world));
+        assert!(!change_expired_system.run((), world));
     }
 
     #[test]
     fn change_tick_wraparound() {
-        let mut world = World::new();
+        let mut worlds = Worlds::new();
+        let world = worlds.get_main_world_mut();
         world.last_change_tick = Tick::new(u32::MAX);
         *world.change_tick.get_mut() = 0;
 
@@ -1562,7 +1564,8 @@ mod tests {
 
     #[test]
     fn change_tick_scan() {
-        let mut world = World::new();
+        let mut worlds = Worlds::new();
+        let world = worlds.get_main_world_mut();
 
         // component added: 1, changed: 1
         world.spawn(C);
@@ -1709,7 +1712,8 @@ mod tests {
 
     #[test]
     fn set_if_neq() {
-        let mut world = World::new();
+        let mut worlds = Worlds::new();
+        let world = worlds.get_resource_world_mut();
 
         world.insert_resource(R2(0));
         // Resources are Changed when first added
@@ -1735,7 +1739,8 @@ mod tests {
 
     #[test]
     fn as_deref_mut() {
-        let mut world = World::new();
+        let mut worlds = Worlds::new();
+        let world = worlds.get_resource_world_mut();
 
         world.insert_resource(R2(0));
         // Resources are Changed when first added

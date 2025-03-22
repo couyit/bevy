@@ -28,7 +28,7 @@ use crate::{
     system::{Deferred, IntoObserverSystem, IntoSystem, RegisteredSystem, SystemId, SystemInput},
     world::{
         command_queue::RawCommandQueue, unsafe_world_cell::UnsafeWorldCell, CommandQueue,
-        EntityWorldMut, FromWorld, World,
+        EntityWorldMut, FromWorld, World, WorldLabel,
     },
 };
 
@@ -100,16 +100,19 @@ use crate::{
 /// The [`error`](crate::error) module provides some simple error handlers for convenience.
 ///
 /// [`ApplyDeferred`]: crate::schedule::ApplyDeferred
-pub struct Commands<'w, 's> {
+pub struct Commands<'w, 's, W: WorldLabel> {
     queue: InternalQueue<'s>,
     entities: &'w Entities,
+    marker: PhantomData<W>,
 }
 
+pub type TypeErasedCommands<'w, 's> = Commands<'w, 's, ()>;
+
 // SAFETY: All commands [`Command`] implement [`Send`]
-unsafe impl Send for Commands<'_, '_> {}
+unsafe impl<W: WorldLabel> Send for Commands<'_, '_, W> {}
 
 // SAFETY: `Commands` never gives access to the inner commands.
-unsafe impl Sync for Commands<'_, '_> {}
+unsafe impl<W: WorldLabel> Sync for Commands<'_, '_, W> {}
 
 const _: () = {
     type __StructFieldsAlias<'w, 's> = (Deferred<'s, CommandQueue>, &'w Entities);
@@ -118,10 +121,12 @@ const _: () = {
         state: <__StructFieldsAlias<'static, 'static> as bevy_ecs::system::SystemParam>::State,
     }
     // SAFETY: Only reads Entities
-    unsafe impl bevy_ecs::system::SystemParam for Commands<'_, '_> {
+    unsafe impl<W: WorldLabel> bevy_ecs::system::SystemParam for Commands<'_, '_, W> {
         type State = FetchState;
 
-        type Item<'w, 's> = Commands<'w, 's>;
+        type Item<'w, 's> = Commands<'w, 's, W>;
+
+        type World = W;
 
         fn init_state(
             world: &mut World,
@@ -198,11 +203,12 @@ const _: () = {
             Commands {
                 queue: InternalQueue::CommandQueue(f0),
                 entities: f1,
+                marker: PhantomData,
             }
         }
     }
     // SAFETY: Only reads Entities
-    unsafe impl<'w, 's> bevy_ecs::system::ReadOnlySystemParam for Commands<'w, 's>
+    unsafe impl<'w, 's, W: WorldLabel> bevy_ecs::system::ReadOnlySystemParam for Commands<'w, 's, W>
     where
         Deferred<'s, CommandQueue>: bevy_ecs::system::ReadOnlySystemParam,
         &'w Entities: bevy_ecs::system::ReadOnlySystemParam,
@@ -215,7 +221,7 @@ enum InternalQueue<'s> {
     RawCommandQueue(RawCommandQueue),
 }
 
-impl<'w, 's> Commands<'w, 's> {
+impl<'w, 's, W: WorldLabel> Commands<'w, 's, W> {
     /// Returns a new `Commands` instance from a [`CommandQueue`] and a [`World`].
     ///
     /// It is not required to call this constructor when using `Commands` as a [system parameter].
@@ -234,6 +240,7 @@ impl<'w, 's> Commands<'w, 's> {
         Self {
             queue: InternalQueue::CommandQueue(Deferred(queue)),
             entities,
+            marker: PhantomData,
         }
     }
 
@@ -251,6 +258,7 @@ impl<'w, 's> Commands<'w, 's> {
         Self {
             queue: InternalQueue::RawCommandQueue(queue),
             entities,
+            marker: PhantomData,
         }
     }
 
@@ -272,7 +280,7 @@ impl<'w, 's> Commands<'w, 's> {
     /// #
     /// # fn do_initialization(_: Commands) {}
     /// ```
-    pub fn reborrow(&mut self) -> Commands<'w, '_> {
+    pub fn reborrow(&mut self) -> Commands<'w, '_, W> {
         Commands {
             queue: match &mut self.queue {
                 InternalQueue::CommandQueue(queue) => InternalQueue::CommandQueue(queue.reborrow()),
@@ -281,6 +289,7 @@ impl<'w, 's> Commands<'w, 's> {
                 }
             },
             entities: self.entities,
+            marker: PhantomData,
         }
     }
 
