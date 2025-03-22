@@ -4,6 +4,7 @@ use bevy_ptr::{Ptr, PtrMut};
 use bumpalo::Bump;
 use core::any::TypeId;
 use core::marker::PhantomData;
+use core::ptr;
 
 #[cfg(feature = "bevy_reflect")]
 use alloc::boxed::Box;
@@ -13,7 +14,7 @@ use crate::entity::hash_map::EntityHashMap;
 use crate::entity::{Entities, EntityMapper};
 use crate::relationship::RelationshipHookMode;
 use crate::system::Commands;
-use crate::world::WorldLabel;
+use crate::world::{ComponentWorld, InvalidComponentWorld, WorldLabel};
 use crate::{
     bundle::Bundle,
     component::{Component, ComponentId, ComponentInfo},
@@ -84,11 +85,11 @@ pub struct ComponentCloneCtx<'a, 'b> {
     target_component_written: bool,
     bundle_scratch: &'a mut BundleScratch<'b>,
     bundle_scratch_allocator: &'b Bump,
-    entities: &'a Entities,
+    entities: &'a Entities<InvalidComponentWorld>,
     source: Entity,
     target: Entity,
     component_info: &'a ComponentInfo,
-    entity_cloner: &'a mut EntityCloner<()>,
+    entity_cloner: &'a mut EntityCloner<InvalidComponentWorld>,
     mapper: &'a mut dyn EntityMapper,
     #[cfg(feature = "bevy_reflect")]
     type_registry: Option<&'a crate::reflect::AppTypeRegistry>,
@@ -110,9 +111,9 @@ impl<'a, 'b> ComponentCloneCtx<'a, 'b> {
         target: Entity,
         bundle_scratch_allocator: &'b Bump,
         bundle_scratch: &'a mut BundleScratch<'b>,
-        entities: &'a Entities,
+        entities: &'a Entities<InvalidComponentWorld>,
         component_info: &'a ComponentInfo,
-        entity_cloner: &'a mut EntityCloner<()>,
+        entity_cloner: &'a mut EntityCloner<InvalidComponentWorld>,
         mapper: &'a mut dyn EntityMapper,
         #[cfg(feature = "bevy_reflect")] type_registry: Option<&'a crate::reflect::AppTypeRegistry>,
         #[cfg(not(feature = "bevy_reflect"))] type_registry: Option<&'a ()>,
@@ -344,7 +345,7 @@ impl<'a, 'b> ComponentCloneCtx<'a, 'b> {
 /// 3. default handler override using [`EntityClonerBuilder::with_default_clone_fn`].
 /// 4. reflect-based or noop default clone handler depending on if `bevy_reflect` feature is enabled or not.
 #[derive(Debug)]
-pub struct EntityCloner<W: WorldLabel> {
+pub struct EntityCloner<W: ComponentWorld> {
     filter_allows_components: bool,
     filter: HashSet<ComponentId>,
     clone_behavior_overrides: HashMap<ComponentId, ComponentCloneBehavior>,
@@ -355,7 +356,7 @@ pub struct EntityCloner<W: WorldLabel> {
     marker: PhantomData<W>,
 }
 
-impl<W: WorldLabel> Default for EntityCloner<W> {
+impl<W: ComponentWorld> Default for EntityCloner<W> {
     fn default() -> Self {
         Self {
             filter_allows_components: false,
@@ -415,7 +416,7 @@ impl<'a> BundleScratch<'a> {
     ///
     /// # Safety
     /// All [`ComponentId`] values in this instance must come from `world`.
-    pub(crate) unsafe fn write<W: WorldLabel>(
+    pub(crate) unsafe fn write<W: ComponentWorld>(
         self,
         world: &mut World<W>,
         entity: Entity,
@@ -434,7 +435,7 @@ impl<'a> BundleScratch<'a> {
     }
 }
 
-impl<W: WorldLabel> EntityCloner<W> {
+impl<W: ComponentWorld> EntityCloner<W> {
     /// Returns a new [`EntityClonerBuilder`] using the given `world`.
     pub fn build(world: &mut World<W>) -> EntityClonerBuilder<W> {
         EntityClonerBuilder {
@@ -525,7 +526,9 @@ impl<W: WorldLabel> EntityCloner<W> {
                         &mut bundle_scratch,
                         world.entities(),
                         info,
-                        self,
+                        unsafe {
+                            &mut *(ptr::from_mut(self) as *mut EntityCloner<InvalidComponentWorld>)
+                        },
                         mapper,
                         app_registry.as_ref(),
                     )
@@ -537,7 +540,7 @@ impl<W: WorldLabel> EntityCloner<W> {
 
         world.flush();
 
-        if !world.entities.contains(target) {
+        if !world.entities().contains(target) {
             panic!("Target entity does not exist");
         }
 
@@ -614,13 +617,13 @@ impl<W: WorldLabel> EntityCloner<W> {
 
 /// A builder for configuring [`EntityCloner`]. See [`EntityCloner`] for more information.
 #[derive(Debug)]
-pub struct EntityClonerBuilder<'w, W: WorldLabel> {
+pub struct EntityClonerBuilder<'w, W: ComponentWorld> {
     world: &'w mut World<W>,
     entity_cloner: EntityCloner<W>,
     attach_required_components: bool,
 }
 
-impl<'w, W: WorldLabel> EntityClonerBuilder<'w, W> {
+impl<'w, W: ComponentWorld> EntityClonerBuilder<'w, W> {
     /// Internally calls [`EntityCloner::clone_entity`] on the builder's [`World`].
     pub fn clone_entity(&mut self, source: Entity, target: Entity) -> &mut Self {
         self.entity_cloner.clone_entity(self.world, source, target);
@@ -850,7 +853,7 @@ mod tests {
         prelude::{ChildOf, Children, Resource},
         reflect::{AppTypeRegistry, ReflectComponent, ReflectFromWorld},
         system::TypeErasedCommands,
-        world::{FromWorld, World, WorldLabel, Worlds},
+        world::{FromWorld, ResourceWorld, World, Worlds},
     };
     use alloc::vec::Vec;
     use bevy_ptr::OwningPtr;
@@ -879,18 +882,20 @@ mod tests {
                 field: usize,
             }
 
-            let mut world = World::default();
-            world.init_resource::<AppTypeRegistry>();
-            let registry = world.get_resource::<AppTypeRegistry>().unwrap();
+            let mut worlds = Worlds::new();
+            let resource_world = worlds.get_resource_world_mut();
+            resource_world.init_resource::<AppTypeRegistry>();
+            let registry = resource_world.get_resource::<AppTypeRegistry>().unwrap();
             registry.write().register::<A>();
 
+            let world = worlds.get_main_world_mut();
             world.register_component::<A>();
             let component = A { field: 5 };
 
             let e = world.spawn(component.clone()).id();
             let e_clone = world.spawn_empty().id();
 
-            EntityCloner::build(&mut world)
+            EntityCloner::build(world)
                 .override_clone_behavior::<A>(ComponentCloneBehavior::reflect())
                 .clone_entity(e, e_clone);
 
@@ -1043,17 +1048,19 @@ mod tests {
                 }
             }
 
-            let mut world = World::default();
-            world.init_resource::<AppTypeRegistry>();
-            let registry = world.get_resource::<AppTypeRegistry>().unwrap();
+            let mut worlds = Worlds::new();
+            let resource_world = worlds.get_resource_world_mut();
+            resource_world.init_resource::<AppTypeRegistry>();
+            let registry = resource_world.get_resource::<AppTypeRegistry>().unwrap();
             registry.write().register::<A>();
 
             let component = A { field: 5 };
 
+            let world = worlds.get_main_world_mut();
             let e = world.spawn(component.clone()).id();
             let e_clone = world.spawn_empty().id();
 
-            EntityCloner::build(&mut world).clone_entity(e, e_clone);
+            EntityCloner::build(world).clone_entity(e, e_clone);
 
             assert!(world
                 .get::<A>(e_clone)
@@ -1072,26 +1079,29 @@ mod tests {
             #[reflect(from_reflect = false)]
             struct B(#[reflect(ignore)] PhantomData<()>);
 
-            let mut world = World::default();
+            let mut worlds = Worlds::new();
+            let world = worlds.get_main_world_mut();
 
             // No AppTypeRegistry
             let e = world.spawn((A, B(Default::default()))).id();
             let e_clone = world.spawn_empty().id();
-            EntityCloner::build(&mut world)
+            EntityCloner::build(world)
                 .override_clone_behavior::<A>(ComponentCloneBehavior::reflect())
                 .override_clone_behavior::<B>(ComponentCloneBehavior::reflect())
                 .clone_entity(e, e_clone);
             assert_eq!(world.get::<A>(e_clone), None);
             assert_eq!(world.get::<B>(e_clone), None);
 
+            let world = worlds.get_resource_world_mut();
             // With AppTypeRegistry
             world.init_resource::<AppTypeRegistry>();
             let registry = world.get_resource::<AppTypeRegistry>().unwrap();
             registry.write().register::<B>();
 
+            let world = worlds.get_main_world_mut();
             let e = world.spawn((A, B(Default::default()))).id();
             let e_clone = world.spawn_empty().id();
-            EntityCloner::build(&mut world).clone_entity(e, e_clone);
+            EntityCloner::build(world).clone_entity(e, e_clone);
             assert_eq!(world.get::<A>(e_clone), None);
             assert_eq!(world.get::<B>(e_clone), None);
         }
@@ -1104,14 +1114,15 @@ mod tests {
             field: usize,
         }
 
-        let mut world = World::default();
+        let mut worlds = Worlds::new();
+        let world = worlds.get_main_world_mut();
 
         let component = A { field: 5 };
 
         let e = world.spawn(component.clone()).id();
         let e_clone = world.spawn_empty().id();
 
-        EntityCloner::build(&mut world).clone_entity(e, e_clone);
+        EntityCloner::build(world).clone_entity(e, e_clone);
 
         assert!(world.get::<A>(e_clone).is_some_and(|c| *c == component));
     }
@@ -1126,14 +1137,15 @@ mod tests {
         #[derive(Component, Clone)]
         struct B;
 
-        let mut world = World::default();
+        let mut worlds = Worlds::new();
+        let world = worlds.get_main_world_mut();
 
         let component = A { field: 5 };
 
         let e = world.spawn((component.clone(), B)).id();
         let e_clone = world.spawn_empty().id();
 
-        EntityCloner::build(&mut world)
+        EntityCloner::build(world)
             .deny_all()
             .allow::<A>()
             .clone_entity(e, e_clone);
@@ -1155,14 +1167,15 @@ mod tests {
         #[derive(Component, Clone)]
         struct C;
 
-        let mut world = World::default();
+        let mut worlds = Worlds::new();
+        let world = worlds.get_main_world_mut();
 
         let component = A { field: 5 };
 
         let e = world.spawn((component.clone(), B, C)).id();
         let e_clone = world.spawn_empty().id();
 
-        EntityCloner::build(&mut world)
+        EntityCloner::build(world)
             .deny::<B>()
             .clone_entity(e, e_clone);
 
@@ -1184,14 +1197,15 @@ mod tests {
         #[derive(Component, Clone)]
         struct C;
 
-        let mut world = World::default();
+        let mut worlds = Worlds::new();
+        let world = worlds.get_main_world_mut();
 
         let component = A { field: 5 };
 
         let e = world.spawn((component.clone(), B, C)).id();
         let e_clone = world.spawn_empty().id();
 
-        EntityCloner::build(&mut world)
+        EntityCloner::build(world)
             .deny_all()
             .allow::<A>()
             .allow::<B>()
@@ -1217,14 +1231,15 @@ mod tests {
         #[derive(Component, Clone)]
         struct C;
 
-        let mut world = World::default();
+        let mut worlds = Worlds::new();
+        let world = worlds.get_main_world_mut();
 
         let component = A { field: 5 };
 
         let e = world.spawn((component.clone(), B, C)).id();
         let e_clone = world.spawn_empty().id();
 
-        EntityCloner::build(&mut world)
+        EntityCloner::build(world)
             .deny_all()
             .allow::<(A, B, C)>()
             .deny::<(B, C)>()
@@ -1248,12 +1263,13 @@ mod tests {
         #[derive(Component, Clone, PartialEq, Debug)]
         struct C(u32);
 
-        let mut world = World::default();
+        let mut worlds = Worlds::new();
+        let world = worlds.get_main_world_mut();
 
         let e = world.spawn(A).id();
         let e_clone = world.spawn_empty().id();
 
-        EntityCloner::build(&mut world)
+        EntityCloner::build(world)
             .deny_all()
             .allow::<B>()
             .clone_entity(e, e_clone);
@@ -1276,12 +1292,13 @@ mod tests {
         #[derive(Component, Clone, PartialEq, Debug)]
         struct C(u32);
 
-        let mut world = World::default();
+        let mut worlds = Worlds::new();
+        let world = worlds.get_main_world_mut();
 
         let e = world.spawn((A, C(0))).id();
         let e_clone = world.spawn_empty().id();
 
-        EntityCloner::build(&mut world)
+        EntityCloner::build(world)
             .deny_all()
             .without_required_components(|builder| {
                 builder.allow::<A>();
@@ -1307,7 +1324,8 @@ mod tests {
             }
         }
 
-        let mut world = World::default();
+        let mut worlds = Worlds::new();
+        let world = worlds.get_main_world_mut();
 
         let layout = Layout::array::<u8>(COMPONENT_SIZE).unwrap();
         // SAFETY:
@@ -1337,7 +1355,7 @@ mod tests {
         let entity = entity.id();
 
         let entity_clone = world.spawn_empty().id();
-        EntityCloner::build(&mut world).clone_entity(entity, entity_clone);
+        EntityCloner::build(world).clone_entity(entity, entity_clone);
 
         let ptr = world.get_by_id(entity, component_id).unwrap();
         let clone_ptr = world.get_by_id(entity_clone, component_id).unwrap();
@@ -1398,8 +1416,8 @@ mod tests {
         #[derive(Resource)]
         struct FromWorldCalled(bool);
 
-        impl<W: WorldLabel> FromWorld<W> for SomeRef {
-            fn from_world(world: &mut World<W>) -> Self {
+        impl FromWorld<ResourceWorld> for SomeRef {
+            fn from_world(world: &mut World<ResourceWorld>) -> Self {
                 world.insert_resource(FromWorldCalled(true));
                 SomeRef(Entity::PLACEHOLDER, Default::default())
             }

@@ -9,7 +9,7 @@ use crate::{
         QueryFilter, QueryIter, QueryManyIter, QueryManyUniqueIter, QueryParIter, QueryParManyIter,
         QueryParManyUniqueIter, QuerySingleError, QueryState, ROQueryItem, ReadOnlyQueryData,
     },
-    world::unsafe_world_cell::UnsafeWorldCell,
+    world::{unsafe_world_cell::UnsafeWorldCell, ComponentWorld},
 };
 use core::{
     marker::PhantomData,
@@ -376,7 +376,7 @@ use core::{
 /// [`Table`]: crate::storage::Table
 /// [`With`]: crate::query::With
 /// [`Without`]: crate::query::Without
-pub struct Query<'world, 'state, D: QueryData, F: QueryFilter = ()> {
+pub struct Query<'world, 'state, W: ComponentWorld, D: QueryData, F: QueryFilter = ()> {
     // SAFETY: Must have access to the components registered in `state`.
     world: UnsafeWorldCell<'world>,
     state: &'state QueryState<D, F>,
@@ -384,15 +384,15 @@ pub struct Query<'world, 'state, D: QueryData, F: QueryFilter = ()> {
     this_run: Tick,
 }
 
-impl<D: ReadOnlyQueryData, F: QueryFilter> Clone for Query<'_, '_, D, F> {
+impl<W: ComponentWorld, D: ReadOnlyQueryData, F: QueryFilter> Clone for Query<'_, '_, W, D, F> {
     fn clone(&self) -> Self {
         *self
     }
 }
 
-impl<D: ReadOnlyQueryData, F: QueryFilter> Copy for Query<'_, '_, D, F> {}
+impl<W: ComponentWorld, D: ReadOnlyQueryData, F: QueryFilter> Copy for Query<'_, '_, W, D, F> {}
 
-impl<D: QueryData, F: QueryFilter> core::fmt::Debug for Query<'_, '_, D, F> {
+impl<W: ComponentWorld, D: QueryData, F: QueryFilter> core::fmt::Debug for Query<'_, '_, W, D, F> {
     fn fmt(&self, f: &mut core::fmt::Formatter) -> core::fmt::Result {
         f.debug_struct("Query")
             .field("matched_entities", &self.iter().count())
@@ -404,7 +404,7 @@ impl<D: QueryData, F: QueryFilter> core::fmt::Debug for Query<'_, '_, D, F> {
     }
 }
 
-impl<'w, 's, D: QueryData, F: QueryFilter> Query<'w, 's, D, F> {
+impl<'w, 's, W: ComponentWorld, D: QueryData, F: QueryFilter> Query<'w, 's, W, D, F> {
     /// Creates a new query.
     ///
     /// # Safety
@@ -2619,7 +2619,9 @@ impl<'w, D: QueryData, F: QueryFilter> Single<'w, D, F> {
 /// See [`Query`] for more details.
 ///
 /// [System parameter]: crate::system::SystemParam
-pub struct Populated<'w, 's, D: QueryData, F: QueryFilter = ()>(pub(crate) Query<'w, 's, D, F>);
+pub struct Populated<'w, 's, W: ComponentWorld, D: QueryData, F: QueryFilter = ()>(
+    pub(crate) Query<'w, 's, W, D, F>,
+);
 
 impl<'w, 's, D: QueryData, F: QueryFilter> Deref for Populated<'w, 's, D, F> {
     type Target = Query<'w, 's, D, F>;
@@ -2649,7 +2651,8 @@ mod tests {
 
     #[test]
     fn get_many_uniqueness() {
-        let mut world = World::new();
+        let mut worlds = Worlds::new();
+        let world = worlds.get_main_world_mut();
 
         let entities: Vec<Entity> = (0..10).map(|_| world.spawn_empty().id()).collect();
 

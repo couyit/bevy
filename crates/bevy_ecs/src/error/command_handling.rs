@@ -3,14 +3,14 @@ use core::{any::type_name, fmt};
 use crate::{
     entity::Entity,
     system::{entity_command::EntityCommandError, Command, EntityCommand},
-    world::{error::EntityMutableFetchError, ComponentWorld, World, WorldLabel},
+    world::{error::EntityMutableFetchError, ComponentWorld, World},
 };
 
 use super::{default_error_handler, BevyError, ErrorContext};
 
 /// Takes a [`Command`] that returns a Result and uses a given error handler function to convert it into
 /// a [`Command`] that internally handles an error if it occurs and returns `()`.
-pub trait HandleError<W: WorldLabel, Out = ()> {
+pub trait HandleError<W: ComponentWorld, Out = ()> {
     /// Takes a [`Command`] that returns a Result and uses a given error handler function to convert it into
     /// a [`Command`] that internally handles an error if it occurs and returns `()`.
     fn handle_error_with(self, error_handler: fn(BevyError, ErrorContext)) -> impl Command<W>;
@@ -28,7 +28,7 @@ impl<C, T, E, W> HandleError<W, Result<T, E>> for C
 where
     C: Command<W, Result<T, E>>,
     E: Into<BevyError>,
-    W: WorldLabel,
+    W: ComponentWorld,
 {
     fn handle_error_with(self, error_handler: fn(BevyError, ErrorContext)) -> impl Command<W> {
         move |world: &mut World<W>| match self.apply(world) {
@@ -46,7 +46,7 @@ where
 impl<C, W> HandleError<W> for C
 where
     C: Command<W>,
-    W: WorldLabel,
+    W: ComponentWorld,
 {
     #[inline]
     fn handle_error_with(self, _error_handler: fn(BevyError, ErrorContext)) -> impl Command<W> {

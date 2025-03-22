@@ -74,7 +74,7 @@ use crate::{
 use alloc::{boxed::Box, vec::Vec};
 use bevy_platform_support::sync::atomic::{AtomicU32, Ordering};
 use bevy_ptr::{OwningPtr, Ptr, UnsafeCellDeref};
-use core::{any::TypeId, fmt, mem::transmute};
+use core::{any::TypeId, fmt, mem::transmute, ptr};
 use log::warn;
 use unsafe_world_cell::{UnsafeEntityCell, UnsafeWorldCell};
 
@@ -182,13 +182,27 @@ impl Worlds {
     pub fn get_resource_world_mut(&mut self) -> &mut World<ResourceWorld> {
         self.get_world_mut::<ResourceWorld>()
     }
+
+    pub fn get_2_mut<V: WorldLabel, W: WorldLabel>(&mut self) -> (&mut World<V>, &mut World<W>) {
+        let v_id = self.indices.get(&TypeId::of::<V>()).unwrap();
+        let w_id = self.indices.get(&TypeId::of::<W>()).unwrap();
+        if v_id.0 < w_id.0 {
+            let (left, right) = self.worlds.split_at_mut(w_id.0);
+            (left[v_id.0].as_world_mut(), right[w_id.0].as_world_mut())
+        } else if v_id.0 > w_id.0 {
+            let (left, right) = self.worlds.split_at_mut(v_id.0);
+            (right[v_id.0].as_world_mut(), left[w_id.0].as_world_mut())
+        } else {
+            panic!()
+        }
+    }
 }
 
 // TODO: Check if Components takes up more space than Resources.
-pub enum Storage<W: WorldLabel> {
+pub enum Storage {
     Components {
-        entities: Entities<W>,
-        archetypes: Archetypes,
+        entities: Entities<InvalidComponentWorld>,
+        archetypes: Archetypes<InvalidComponentWorld>,
         bundles: Bundles,
         sparse_sets: SparseSets,
         tables: Tables,
@@ -222,7 +236,7 @@ pub struct World<W: WorldLabel> {
     id: WorldId,
     pub(crate) components: Components,
     pub(crate) component_ids: ComponentIds,
-    pub(crate) storage: Storage<W>,
+    pub(crate) storage: Storage,
     pub(crate) observers: Observers,
     pub(crate) removed_components: RemovedComponentEvents,
     pub(crate) change_tick: AtomicU32,
@@ -256,7 +270,7 @@ impl World<InvalidWorld> {
 }
 
 impl<W: WorldLabel> World<W> {
-    fn new_for_storage(id: WorldId, storage: Storage<W>) -> Self {
+    fn new_for_storage(id: WorldId, storage: Storage) -> Self {
         let mut world = Self {
             id,
             components: Default::default(),
@@ -793,28 +807,48 @@ impl<W: WorldLabel> World<W> {
         f(guard.world)
     }
 
-    pub fn clear(&mut self) {
-        match self.storage {
-            Storage::Components {
-                ref mut entities,
-                ref mut archetypes,
-                ref mut sparse_sets,
-                ref mut tables,
-                ..
-            } => {
-                tables.clear();
-                sparse_sets.clear_entities();
-                archetypes.clear_entities();
-                entities.clear();
-            }
-            Storage::Resources {
-                ref mut resources,
-                ref mut non_send_resources,
-            } => {
-                resources.clear();
-                non_send_resources.clear();
-            }
-        }
+    /// Clears the internal component tracker state.
+    ///
+    /// The world maintains some internal state about changed and removed components. This state
+    /// is used by [`RemovedComponents`] to provide access to the entities that had a specific type
+    /// of component removed since last tick.
+    ///
+    /// The state is also used for change detection when accessing components and resources outside
+    /// of a system, for example via [`World::get_mut()`] or [`World::get_resource_mut()`].
+    ///
+    /// By clearing this internal state, the world "forgets" about those changes, allowing a new round
+    /// of detection to be recorded.
+    ///
+    /// When using `bevy_ecs` as part of the full Bevy engine, this method is called automatically
+    /// by `bevy_app::App::update` and `bevy_app::SubApp::update`, so you don't need to call it manually.
+    /// When using `bevy_ecs` as a separate standalone crate however, you do need to call this manually.
+    ///
+    /// ```
+    /// # use bevy_ecs::prelude::*;
+    /// # #[derive(Component, Default)]
+    /// # struct Transform;
+    /// // a whole new world
+    /// let mut world = World::new();
+    ///
+    /// // you changed it
+    /// let entity = world.spawn(Transform::default()).id();
+    ///
+    /// // change is detected
+    /// let transform = world.get_mut::<Transform>(entity).unwrap();
+    /// assert!(transform.is_changed());
+    ///
+    /// // update the last change tick
+    /// world.clear_trackers();
+    ///
+    /// // change is no longer detected
+    /// let transform = world.get_mut::<Transform>(entity).unwrap();
+    /// assert!(!transform.is_changed());
+    /// ```
+    ///
+    /// [`RemovedComponents`]: crate::removal_detection::RemovedComponents
+    pub fn clear_trackers(&mut self) {
+        self.removed_components.update();
+        self.last_change_tick = self.increment_change_tick();
     }
 }
 
@@ -823,8 +857,8 @@ impl<W: ComponentWorld> World<W> {
         Self::new_for_storage(
             id,
             Storage::Components {
-                entities: Entities::<W>::new(),
-                archetypes: Archetypes::new(),
+                entities: Entities::<InvalidComponentWorld>::new(),
+                archetypes: Archetypes::<InvalidComponentWorld>::new(),
                 bundles: Default::default(),
                 sparse_sets: Default::default(),
                 tables: Default::default(),
@@ -836,7 +870,9 @@ impl<W: ComponentWorld> World<W> {
     #[inline]
     pub fn entities(&self) -> &Entities<W> {
         match self.storage {
-            Storage::Components { ref entities, .. } => entities,
+            Storage::Components { ref entities, .. } => unsafe {
+                &*(ptr::from_ref(entities) as *const Entities<W>)
+            },
             Storage::Resources { .. } => panic!("Storage is not for Components"),
         }
     }
@@ -851,26 +887,28 @@ impl<W: ComponentWorld> World<W> {
         match self.storage {
             Storage::Components {
                 ref mut entities, ..
-            } => entities,
+            } => unsafe { &mut *(ptr::from_mut(entities) as *mut Entities<W>) },
             Storage::Resources { .. } => panic!("Storage is not for Components"),
         }
     }
 
     /// Retrieves this world's [`Archetypes`] collection.
     #[inline]
-    pub fn archetypes(&self) -> &Archetypes {
+    pub fn archetypes(&self) -> &Archetypes<W> {
         match self.storage {
-            Storage::Components { ref archetypes, .. } => archetypes,
+            Storage::Components { ref archetypes, .. } => unsafe {
+                &*(ptr::from_ref(archetypes) as *const Archetypes<W>)
+            },
             Storage::Resources { .. } => panic!("Storage is not for Components"),
         }
     }
 
     #[inline]
-    pub(crate) fn archetypes_mut(&mut self) -> &mut Archetypes {
+    pub(crate) fn archetypes_mut(&mut self) -> &mut Archetypes<W> {
         match self.storage {
             Storage::Components {
                 ref mut archetypes, ..
-            } => archetypes,
+            } => unsafe { &mut *(ptr::from_mut(archetypes) as *mut Archetypes<W>) },
             Storage::Resources { .. } => panic!("Storage is not for Components"),
         }
     }
@@ -1323,27 +1361,28 @@ impl<W: ComponentWorld> World<W> {
     /// Returns a mutable iterator over all entities in the `World`.
     pub fn iter_entities_mut(&mut self) -> impl Iterator<Item = EntityMut<'_>> + '_ {
         let world_cell = self.as_unsafe_world_cell();
-        world_cell.archetypes().iter().flat_map(move |archetype| {
-            archetype
-                .entities()
-                .iter()
-                .enumerate()
-                .map(move |(archetype_row, archetype_entity)| {
-                    let entity = archetype_entity.id();
-                    let location = EntityLocation {
-                        archetype_id: archetype.id(),
-                        archetype_row: ArchetypeRow::new(archetype_row),
-                        table_id: archetype.table_id(),
-                        table_row: archetype_entity.table_row(),
-                    };
+        world_cell
+            .archetypes::<W>()
+            .iter()
+            .flat_map(move |archetype| {
+                archetype.entities().iter().enumerate().map(
+                    move |(archetype_row, archetype_entity)| {
+                        let entity = archetype_entity.id();
+                        let location = EntityLocation {
+                            archetype_id: archetype.id(),
+                            archetype_row: ArchetypeRow::new(archetype_row),
+                            table_id: archetype.table_id(),
+                            table_row: archetype_entity.table_row(),
+                        };
 
-                    // SAFETY: entity exists and location accurately specifies the archetype where the entity is stored.
-                    let cell = UnsafeEntityCell::new(world_cell, entity, location);
-                    // SAFETY: We have exclusive access to the entire world. We only create one borrow for each entity,
-                    // so none will conflict with one another.
-                    unsafe { EntityMut::new(cell) }
-                })
-        })
+                        // SAFETY: entity exists and location accurately specifies the archetype where the entity is stored.
+                        let cell = UnsafeEntityCell::new(world_cell, entity, location);
+                        // SAFETY: We have exclusive access to the entire world. We only create one borrow for each entity,
+                        // so none will conflict with one another.
+                        unsafe { EntityMut::new(cell) }
+                    },
+                )
+            })
     }
 
     /// Simultaneously provides access to entity data and a command queue, which
@@ -1734,50 +1773,6 @@ impl<W: ComponentWorld> World<W> {
         let entity = self.get_entity_mut(entity)?;
         entity.despawn_with_caller(caller);
         Ok(())
-    }
-
-    /// Clears the internal component tracker state.
-    ///
-    /// The world maintains some internal state about changed and removed components. This state
-    /// is used by [`RemovedComponents`] to provide access to the entities that had a specific type
-    /// of component removed since last tick.
-    ///
-    /// The state is also used for change detection when accessing components and resources outside
-    /// of a system, for example via [`World::get_mut()`] or [`World::get_resource_mut()`].
-    ///
-    /// By clearing this internal state, the world "forgets" about those changes, allowing a new round
-    /// of detection to be recorded.
-    ///
-    /// When using `bevy_ecs` as part of the full Bevy engine, this method is called automatically
-    /// by `bevy_app::App::update` and `bevy_app::SubApp::update`, so you don't need to call it manually.
-    /// When using `bevy_ecs` as a separate standalone crate however, you do need to call this manually.
-    ///
-    /// ```
-    /// # use bevy_ecs::prelude::*;
-    /// # #[derive(Component, Default)]
-    /// # struct Transform;
-    /// // a whole new world
-    /// let mut world = World::new();
-    ///
-    /// // you changed it
-    /// let entity = world.spawn(Transform::default()).id();
-    ///
-    /// // change is detected
-    /// let transform = world.get_mut::<Transform>(entity).unwrap();
-    /// assert!(transform.is_changed());
-    ///
-    /// // update the last change tick
-    /// world.clear_trackers();
-    ///
-    /// // change is no longer detected
-    /// let transform = world.get_mut::<Transform>(entity).unwrap();
-    /// assert!(!transform.is_changed());
-    /// ```
-    ///
-    /// [`RemovedComponents`]: crate::removal_detection::RemovedComponents
-    pub fn clear_trackers(&mut self) {
-        self.removed_components.update();
-        self.last_change_tick = self.increment_change_tick();
     }
 
     /// Returns [`QueryState`] for the given [`QueryData`], which is used to efficiently
@@ -2625,6 +2620,56 @@ impl<W: ComponentWorld> World<W> {
         }
 
         self.last_check_tick = change_tick;
+    }
+
+    pub fn clear(&mut self) {
+        match self.storage {
+            Storage::Components {
+                ref mut entities,
+                ref mut archetypes,
+                ref mut sparse_sets,
+                ref mut tables,
+                ..
+            } => {
+                entities.clear();
+                archetypes.clear_entities();
+                sparse_sets.clear_entities();
+                tables.clear();
+            }
+            Storage::Resources { .. } => {
+                unreachable!()
+            }
+        }
+    }
+
+    /// Retrieves an immutable untyped reference to the given `entity`'s [`Component`] of the given [`ComponentId`].
+    /// Returns `None` if the `entity` does not have a [`Component`] of the given type.
+    ///
+    /// **You should prefer to use the typed API [`World::get_mut`] where possible and only
+    /// use this in cases where the actual types are not known at compile time.**
+    ///
+    /// # Panics
+    /// This function will panic if it isn't called from the same thread that the resource was inserted from.
+    #[inline]
+    pub fn get_by_id(&self, entity: Entity, component_id: ComponentId) -> Option<Ptr<'_>> {
+        self.get_entity(entity).ok()?.get_by_id(component_id).ok()
+    }
+
+    /// Retrieves a mutable untyped reference to the given `entity`'s [`Component`] of the given [`ComponentId`].
+    /// Returns `None` if the `entity` does not have a [`Component`] of the given type.
+    ///
+    /// **You should prefer to use the typed API [`World::get_mut`] where possible and only
+    /// use this in cases where the actual types are not known at compile time.**
+    #[inline]
+    pub fn get_mut_by_id(
+        &mut self,
+        entity: Entity,
+        component_id: ComponentId,
+    ) -> Option<MutUntyped<'_>> {
+        self.get_entity_mut(entity)
+            .ok()?
+            .into_mut_by_id(component_id)
+            .ok()
     }
 }
 
@@ -3792,42 +3837,25 @@ impl World<ResourceWorld> {
 
         self.last_check_tick = change_tick;
     }
-}
 
-impl<W: WorldLabel> World<W> {
-    /// Retrieves an immutable untyped reference to the given `entity`'s [`Component`] of the given [`ComponentId`].
-    /// Returns `None` if the `entity` does not have a [`Component`] of the given type.
-    ///
-    /// **You should prefer to use the typed API [`World::get_mut`] where possible and only
-    /// use this in cases where the actual types are not known at compile time.**
-    ///
-    /// # Panics
-    /// This function will panic if it isn't called from the same thread that the resource was inserted from.
-    #[inline]
-    pub fn get_by_id(&self, entity: Entity, component_id: ComponentId) -> Option<Ptr<'_>> {
-        self.get_entity(entity).ok()?.get_by_id(component_id).ok()
-    }
-
-    /// Retrieves a mutable untyped reference to the given `entity`'s [`Component`] of the given [`ComponentId`].
-    /// Returns `None` if the `entity` does not have a [`Component`] of the given type.
-    ///
-    /// **You should prefer to use the typed API [`World::get_mut`] where possible and only
-    /// use this in cases where the actual types are not known at compile time.**
-    #[inline]
-    pub fn get_mut_by_id(
-        &mut self,
-        entity: Entity,
-        component_id: ComponentId,
-    ) -> Option<MutUntyped<'_>> {
-        self.get_entity_mut(entity)
-            .ok()?
-            .into_mut_by_id(component_id)
-            .ok()
+    pub fn clear(&mut self) {
+        match self.storage {
+            Storage::Components { .. } => {
+                unreachable!()
+            }
+            Storage::Resources {
+                ref mut resources,
+                ref mut non_send_resources,
+            } => {
+                resources.clear();
+                non_send_resources.clear();
+            }
+        }
     }
 }
 
 // Schedule-related methods
-impl<W: WorldLabel> World<W> {
+impl World<ResourceWorld> {
     /// Adds the specified [`Schedule`] to the world. The schedule can later be run
     /// by calling [`.run_schedule(label)`](Self::run_schedule) or by directly
     /// accessing the [`Schedules`] resource.
@@ -3852,7 +3880,7 @@ impl<W: WorldLabel> World<W> {
     pub fn try_schedule_scope<R>(
         &mut self,
         label: impl ScheduleLabel,
-        f: impl FnOnce(&mut World<W>, &mut Schedule) -> R,
+        f: impl FnOnce(&mut World<ResourceWorld>, &mut Schedule) -> R,
     ) -> Result<R, TryRunScheduleError> {
         let label = label.intern();
         let Some(mut schedule) = self
@@ -3912,7 +3940,7 @@ impl<W: WorldLabel> World<W> {
     pub fn schedule_scope<R>(
         &mut self,
         label: impl ScheduleLabel,
-        f: impl FnOnce(&mut World<W>, &mut Schedule) -> R,
+        f: impl FnOnce(&mut World<ResourceWorld>, &mut Schedule) -> R,
     ) -> R {
         self.try_schedule_scope(label, f)
             .unwrap_or_else(|e| panic!("{e}"))

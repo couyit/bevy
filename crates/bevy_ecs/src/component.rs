@@ -9,7 +9,7 @@ use crate::{
     relationship::RelationshipHookMode,
     resource::Resource,
     storage::{SparseSetIndex, SparseSets, Table, TableRow},
-    system::{Commands, Local, SystemParam, TypeErasedCommands},
+    system::{Local, SystemParam, TypeErasedCommands},
     world::{DeferredWorld, FromWorld, World, WorldLabel},
 };
 use alloc::boxed::Box;
@@ -1865,7 +1865,7 @@ impl<'w> ComponentsRegistrator<'w> {
 
 /// Stores metadata associated with each kind of [`Component`] in a given [`World`].
 #[derive(Debug, Default)]
-pub struct Components {
+pub struct Components<W: WorldLabel> {
     components: Vec<Option<ComponentInfo>>,
     indices: TypeIdMap<ComponentId>,
     resource_indices: TypeIdMap<ComponentId>,
@@ -1873,7 +1873,7 @@ pub struct Components {
     queued: bevy_platform_support::sync::RwLock<QueuedComponents>,
 }
 
-impl Components {
+impl<W: WorldLabel> Components<W> {
     /// This registers any descriptor, component or resource.
     ///
     /// # Safety
@@ -2925,6 +2925,8 @@ pub fn component_clone_via_reflect(
     source: &SourceComponent,
     ctx: &mut ComponentCloneCtx,
 ) {
+    use crate::world::InvalidComponentWorld;
+
     let Some(app_registry) = ctx.type_registry().cloned() else {
         return;
     };
@@ -3002,7 +3004,7 @@ pub fn component_clone_via_reflect(
             *entity = ctx.entity_mapper().get_mapped(*entity);
         }
         drop(registry);
-        commands.queue(move |world: &mut World<()>| {
+        commands.queue(move |world: &mut World<InvalidComponentWorld>| {
             let mut component = reflect_from_world.from_world(world);
             assert_eq!(type_id, (*component).type_id());
             component.apply(source_component_cloned.as_partial_reflect());

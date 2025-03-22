@@ -28,7 +28,8 @@ use crate::{
     system::{Deferred, IntoObserverSystem, IntoSystem, RegisteredSystem, SystemId, SystemInput},
     world::{
         command_queue::RawCommandQueue, unsafe_world_cell::UnsafeWorldCell, CommandQueue,
-        EntityWorldMut, FromWorld, World, WorldLabel,
+        ComponentWorld, EntityWorldMut, FromWorld, InvalidComponentWorld, InvalidWorld, World,
+        WorldLabel,
     },
 };
 
@@ -100,19 +101,19 @@ use crate::{
 /// The [`error`](crate::error) module provides some simple error handlers for convenience.
 ///
 /// [`ApplyDeferred`]: crate::schedule::ApplyDeferred
-pub struct Commands<'w, 's, W: WorldLabel> {
+pub struct Commands<'w, 's, W: ComponentWorld> {
     queue: InternalQueue<'s>,
-    entities: &'w Entities,
+    entities: &'w Entities<W>,
     marker: PhantomData<W>,
 }
 
-pub type TypeErasedCommands<'w, 's> = Commands<'w, 's, ()>;
+pub type TypeErasedCommands<'w, 's> = Commands<'w, 's, InvalidComponentWorld>;
 
 // SAFETY: All commands [`Command`] implement [`Send`]
-unsafe impl<W: WorldLabel> Send for Commands<'_, '_, W> {}
+unsafe impl<W: ComponentWorld> Send for Commands<'_, '_, W> {}
 
 // SAFETY: `Commands` never gives access to the inner commands.
-unsafe impl<W: WorldLabel> Sync for Commands<'_, '_, W> {}
+unsafe impl<W: ComponentWorld> Sync for Commands<'_, '_, W> {}
 
 const _: () = {
     type __StructFieldsAlias<'w, 's> = (Deferred<'s, CommandQueue>, &'w Entities);
@@ -121,7 +122,7 @@ const _: () = {
         state: <__StructFieldsAlias<'static, 'static> as bevy_ecs::system::SystemParam>::State,
     }
     // SAFETY: Only reads Entities
-    unsafe impl<W: WorldLabel> bevy_ecs::system::SystemParam for Commands<'_, '_, W> {
+    unsafe impl<W: ComponentWorld> bevy_ecs::system::SystemParam for Commands<'_, '_, W> {
         type State = FetchState;
 
         type Item<'w, 's> = Commands<'w, 's, W>;
@@ -221,7 +222,7 @@ enum InternalQueue<'s> {
     RawCommandQueue(RawCommandQueue),
 }
 
-impl<'w, 's, W: WorldLabel> Commands<'w, 's, W> {
+impl<'w, 's, W: ComponentWorld> Commands<'w, 's, W> {
     /// Returns a new `Commands` instance from a [`CommandQueue`] and a [`World`].
     ///
     /// It is not required to call this constructor when using `Commands` as a [system parameter].
@@ -641,7 +642,7 @@ impl<'w, 's, W: WorldLabel> Commands<'w, 's, W> {
     /// # bevy_ecs::system::assert_is_system(add_three_to_counter_system);
     /// # bevy_ecs::system::assert_is_system(add_twenty_five_to_counter_system);
     /// ```
-    pub fn queue_handled<C: Command<T> + HandleError<T>, T>(
+    pub fn queue_handled<C: Command<W, T> + HandleError<W, T>, T>(
         &mut self,
         command: C,
         error_handler: fn(BevyError, ErrorContext),
