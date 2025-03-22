@@ -2581,9 +2581,9 @@ impl<'w, 'q, Q: QueryData, F: QueryFilter> From<&'q mut Query<'w, '_, Q, F>>
 /// See [`Query`] for more details.
 ///
 /// [System parameter]: crate::system::SystemParam
-pub struct Single<'w, D: QueryData, F: QueryFilter = ()> {
+pub struct Single<'w, W: ComponentWorld, D: QueryData, F: QueryFilter = ()> {
     pub(crate) item: D::Item<'w>,
-    pub(crate) _filter: PhantomData<F>,
+    pub(crate) _filter: PhantomData<(W, F)>,
 }
 
 impl<'w, D: QueryData, F: QueryFilter> Deref for Single<'w, D, F> {

@@ -490,7 +490,7 @@ pub fn derive_system_param(input: TokenStream) -> TokenStream {
     });
     let (builder_struct, builder_impl) = builder.unzip();
 
-    let a = TokenStream::from(quote! {
+    TokenStream::from(quote! {
         // We define the FetchState struct in an anonymous scope to avoid polluting the user namespace.
         // The struct can still be accessed via SystemParam::State, e.g. EventReaderState can be accessed via
         // <EventReader<'static, 'static, T> as SystemParam>::State
@@ -560,11 +560,7 @@ pub fn derive_system_param(input: TokenStream) -> TokenStream {
         };
 
         #builder_struct
-    });
-
-    dbg!(a.to_string());
-
-    a
+    })
 }
 
 /// Implement `QueryData` to use a struct as a data parameter in a query

@@ -469,7 +469,7 @@ mod tests {
     use crate::entity::Entity;
     use crate::query::{QueryState, With};
     use crate::system::Query;
-    use crate::world::Mut;
+    use crate::world::{MainWorld, Mut};
 
     use super::UniqueEntityIter;
 
@@ -482,7 +482,8 @@ mod tests {
     )]
     #[test]
     fn preserving_uniqueness() {
-        let mut world = World::new();
+        let mut worlds = Worlds::new();
+        let world = worlds.get_main_world_mut();
 
         let mut query = QueryState::<&mut Thing>::new(&mut world);
 
@@ -512,13 +513,14 @@ mod tests {
 
     #[test]
     fn nesting_queries() {
-        let mut world = World::new();
+        let mut worlds = Worlds::new();
+        let world = worlds.get_main_world_mut();
 
         world.spawn_batch(vec![Thing; 1000]);
 
         pub fn system(
-            mut thing_entities: Query<Entity, With<Thing>>,
-            mut things: Query<&mut Thing>,
+            mut thing_entities: Query<Entity, With<Thing>, MainWorld>,
+            mut things: Query<&mut Thing, MainWorld>,
         ) {
             things.iter_many_unique(thing_entities.iter());
             things.iter_many_unique_mut(thing_entities.iter_mut());

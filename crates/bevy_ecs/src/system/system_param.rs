@@ -300,21 +300,21 @@ pub unsafe trait ReadOnlySystemParam: SystemParam {}
 pub type SystemParamItem<'w, 's, P> = <P as SystemParam>::Item<'w, 's>;
 
 // SAFETY: QueryState is constrained to read-only fetches, so it only reads World.
-unsafe impl<'w, 's, D: ReadOnlyQueryData + 'static, F: QueryFilter + 'static> ReadOnlySystemParam
-    for Query<'w, 's, D, F>
+unsafe impl<'w, 's, W: ComponentWorld, D: ReadOnlyQueryData + 'static, F: QueryFilter + 'static>
+    ReadOnlySystemParam for Query<'w, 's, W, D, F>
 {
 }
 
 // SAFETY: Relevant query ComponentId and ArchetypeComponentId access is applied to SystemMeta. If
 // this Query conflicts with any prior access, a panic will occur.
-unsafe impl<D: QueryData + 'static, F: QueryFilter + 'static, W: ComponentWorld> SystemParam
-    for Query<'_, '_, D, F>
+unsafe impl<W: ComponentWorld, D: QueryData + 'static, F: QueryFilter + 'static> SystemParam
+    for Query<'_, '_, W, D, F>
 {
     type State = QueryState<D, F>;
-    type Item<'w, 's> = Query<'w, 's, D, F>;
+    type Item<'w, 's> = Query<'w, 's, W, D, F>;
     type World = W;
 
-    fn init_state(world: &mut World, system_meta: &mut SystemMeta) -> Self::State {
+    fn init_state(world: UnsafeWorldCell, system_meta: &mut SystemMeta) -> Self::State {
         let state = QueryState::new_with_access(world, &mut system_meta.archetype_component_access);
         init_query_param(world, system_meta, &state);
         state
@@ -344,7 +344,7 @@ unsafe impl<D: QueryData + 'static, F: QueryFilter + 'static, W: ComponentWorld>
 }
 
 pub(crate) fn init_query_param<D: QueryData + 'static, F: QueryFilter + 'static>(
-    world: &mut World,
+    world: UnsafeWorldCell,
     system_meta: &mut SystemMeta,
     state: &QueryState<D, F>,
 ) {
@@ -367,7 +367,7 @@ fn assert_component_access_compatibility(
     filter_type: &'static str,
     system_access: &FilteredAccessSet<ComponentId>,
     current: &FilteredAccess<ComponentId>,
-    world: &World,
+    world: UnsafeWorldCell,
 ) {
     let conflicts = system_access.get_conflicts_single(current);
     if conflicts.is_empty() {
@@ -384,14 +384,14 @@ fn assert_component_access_compatibility(
 // SAFETY: Relevant query ComponentId and ArchetypeComponentId access is applied to SystemMeta. If
 // this Query conflicts with any prior access, a panic will occur.
 unsafe impl<'a, W: ComponentWorld, D: QueryData + 'static, F: QueryFilter + 'static> SystemParam
-    for Single<'a, D, F>
+    for Single<'a, W, D, F>
 {
     type State = QueryState<D, F>;
-    type Item<'w, 's> = Single<'w, D, F>;
+    type Item<'w, 's> = Single<'w, W, D, F>;
     type World = W;
 
-    fn init_state(world: &mut World, system_meta: &mut SystemMeta) -> Self::State {
-        Query::init_state(world, system_meta)
+    fn init_state(world: UnsafeWorldCell, system_meta: &mut SystemMeta) -> Self::State {
+        Query::<W, D, F>::init_state(world, system_meta)
     }
 
     unsafe fn new_archetype(
@@ -400,7 +400,7 @@ unsafe impl<'a, W: ComponentWorld, D: QueryData + 'static, F: QueryFilter + 'sta
         system_meta: &mut SystemMeta,
     ) {
         // SAFETY: Delegate to existing `SystemParam` implementations.
-        unsafe { Query::new_archetype(state, archetype, system_meta) };
+        unsafe { Query::<W, D, F>::new_archetype(state, archetype, system_meta) };
     }
 
     #[inline]
@@ -451,14 +451,14 @@ unsafe impl<'a, W: ComponentWorld, D: QueryData + 'static, F: QueryFilter + 'sta
 // SAFETY: Relevant query ComponentId and ArchetypeComponentId access is applied to SystemMeta. If
 // this Query conflicts with any prior access, a panic will occur.
 unsafe impl<'a, W: ComponentWorld, D: QueryData + 'static, F: QueryFilter + 'static> SystemParam
-    for Option<Single<'a, D, F>>
+    for Option<Single<'a, W, D, F>>
 {
     type State = QueryState<D, F>;
-    type Item<'w, 's> = Option<Single<'w, D, F>>;
+    type Item<'w, 's> = Option<Single<'w, W, D, F>>;
     type World = W;
 
-    fn init_state(world: &mut World, system_meta: &mut SystemMeta) -> Self::State {
-        Single::init_state(world, system_meta)
+    fn init_state(world: UnsafeWorldCell, system_meta: &mut SystemMeta) -> Self::State {
+        Single::<W, D, F>::init_state(world, system_meta)
     }
 
     unsafe fn new_archetype(
@@ -467,7 +467,7 @@ unsafe impl<'a, W: ComponentWorld, D: QueryData + 'static, F: QueryFilter + 'sta
         system_meta: &mut SystemMeta,
     ) {
         // SAFETY: Delegate to existing `SystemParam` implementations.
-        unsafe { Single::new_archetype(state, archetype, system_meta) };
+        unsafe { Single::<W, D, F>::new_archetype(state, archetype, system_meta) };
     }
 
     #[inline]
@@ -519,14 +519,14 @@ unsafe impl<'a, W: ComponentWorld, D: QueryData + 'static, F: QueryFilter + 'sta
 }
 
 // SAFETY: QueryState is constrained to read-only fetches, so it only reads World.
-unsafe impl<'a, D: ReadOnlyQueryData + 'static, F: QueryFilter + 'static> ReadOnlySystemParam
-    for Single<'a, D, F>
+unsafe impl<'a, W: ComponentWorld, D: ReadOnlyQueryData + 'static, F: QueryFilter + 'static>
+    ReadOnlySystemParam for Single<'a, W, D, F>
 {
 }
 
 // SAFETY: QueryState is constrained to read-only fetches, so it only reads World.
-unsafe impl<'a, D: ReadOnlyQueryData + 'static, F: QueryFilter + 'static> ReadOnlySystemParam
-    for Option<Single<'a, D, F>>
+unsafe impl<'a, W: ComponentWorld, D: ReadOnlyQueryData + 'static, F: QueryFilter + 'static>
+    ReadOnlySystemParam for Option<Single<'a, W, D, F>>
 {
 }
 
@@ -536,11 +536,11 @@ unsafe impl<W: ComponentWorld, D: QueryData + 'static, F: QueryFilter + 'static>
     for Populated<'_, '_, W, D, F>
 {
     type State = QueryState<D, F>;
-    type Item<'w, 's> = Populated<'w, 's, D, F>;
+    type Item<'w, 's> = Populated<'w, 's, W, D, F>;
     type World = W;
 
-    fn init_state(world: &mut World, system_meta: &mut SystemMeta) -> Self::State {
-        Query::init_state(world, system_meta)
+    fn init_state(world: UnsafeWorldCell, system_meta: &mut SystemMeta) -> Self::State {
+        Query::<W, D, F>::init_state(world, system_meta)
     }
 
     unsafe fn new_archetype(
@@ -549,7 +549,7 @@ unsafe impl<W: ComponentWorld, D: QueryData + 'static, F: QueryFilter + 'static>
         system_meta: &mut SystemMeta,
     ) {
         // SAFETY: Delegate to existing `SystemParam` implementations.
-        unsafe { Query::new_archetype(state, archetype, system_meta) };
+        unsafe { Query::<W, D, F>::new_archetype(state, archetype, system_meta) };
     }
 
     #[inline]
@@ -560,7 +560,7 @@ unsafe impl<W: ComponentWorld, D: QueryData + 'static, F: QueryFilter + 'static>
         change_tick: Tick,
     ) -> Self::Item<'w, 's> {
         // SAFETY: Delegate to existing `SystemParam` implementations.
-        let query = unsafe { Query::get_param(state, system_meta, world, change_tick) };
+        let query = unsafe { Query::<W, D, F>::get_param(state, system_meta, world, change_tick) };
         Populated(query)
     }
 
@@ -585,238 +585,10 @@ unsafe impl<W: ComponentWorld, D: QueryData + 'static, F: QueryFilter + 'static>
 }
 
 // SAFETY: QueryState is constrained to read-only fetches, so it only reads World.
-unsafe impl<'w, 's, D: ReadOnlyQueryData + 'static, F: QueryFilter + 'static> ReadOnlySystemParam
-    for Populated<'w, 's, D, F>
+unsafe impl<'w, 's, W: ComponentWorld, D: ReadOnlyQueryData + 'static, F: QueryFilter + 'static>
+    ReadOnlySystemParam for Populated<'w, 's, W, D, F>
 {
 }
-
-/// A collection of potentially conflicting [`SystemParam`]s allowed by disjoint access.
-///
-/// Allows systems to safely access and interact with up to 8 mutually exclusive [`SystemParam`]s, such as
-/// two queries that reference the same mutable data or an event reader and writer of the same type.
-///
-/// Each individual [`SystemParam`] can be accessed by using the functions `p0()`, `p1()`, ..., `p7()`,
-/// according to the order they are defined in the `ParamSet`. This ensures that there's either
-/// only one mutable reference to a parameter at a time or any number of immutable references.
-///
-/// # Examples
-///
-/// The following system mutably accesses the same component two times,
-/// which is not allowed due to rust's mutability rules.
-///
-/// ```should_panic
-/// # use bevy_ecs::prelude::*;
-/// #
-/// # #[derive(Component)]
-/// # struct Health;
-/// #
-/// # #[derive(Component)]
-/// # struct Enemy;
-/// #
-/// # #[derive(Component)]
-/// # struct Ally;
-/// #
-/// // This will panic at runtime when the system gets initialized.
-/// fn bad_system(
-///     mut enemies: Query<&mut Health, With<Enemy>>,
-///     mut allies: Query<&mut Health, With<Ally>>,
-/// ) {
-///     // ...
-/// }
-/// #
-/// # let mut bad_system_system = IntoSystem::into_system(bad_system);
-/// # let mut world = World::new();
-/// # bad_system_system.initialize(&mut world);
-/// # bad_system_system.run((), &mut world);
-/// ```
-///
-/// Conflicting `SystemParam`s like these can be placed in a `ParamSet`,
-/// which leverages the borrow checker to ensure that only one of the contained parameters are accessed at a given time.
-///
-/// ```
-/// # use bevy_ecs::prelude::*;
-/// #
-/// # #[derive(Component)]
-/// # struct Health;
-/// #
-/// # #[derive(Component)]
-/// # struct Enemy;
-/// #
-/// # #[derive(Component)]
-/// # struct Ally;
-/// #
-/// // Given the following system
-/// fn fancy_system(
-///     mut set: ParamSet<(
-///         Query<&mut Health, With<Enemy>>,
-///         Query<&mut Health, With<Ally>>,
-///     )>
-/// ) {
-///     // This will access the first `SystemParam`.
-///     for mut health in set.p0().iter_mut() {
-///         // Do your fancy stuff here...
-///     }
-///
-///     // The second `SystemParam`.
-///     // This would fail to compile if the previous parameter was still borrowed.
-///     for mut health in set.p1().iter_mut() {
-///         // Do even fancier stuff here...
-///     }
-/// }
-/// # bevy_ecs::system::assert_is_system(fancy_system);
-/// ```
-///
-/// Of course, `ParamSet`s can be used with any kind of `SystemParam`, not just [queries](Query).
-///
-/// ```
-/// # use bevy_ecs::prelude::*;
-/// #
-/// # #[derive(Event)]
-/// # struct MyEvent;
-/// # impl MyEvent {
-/// #   pub fn new() -> Self { Self }
-/// # }
-/// fn event_system(
-///     mut set: ParamSet<(
-///         // PROBLEM: `EventReader` and `EventWriter` cannot be used together normally,
-///         // because they both need access to the same event queue.
-///         // SOLUTION: `ParamSet` allows these conflicting parameters to be used safely
-///         // by ensuring only one is accessed at a time.
-///         EventReader<MyEvent>,
-///         EventWriter<MyEvent>,
-///         // PROBLEM: `&World` needs read access to everything, which conflicts with
-///         // any mutable access in the same system.
-///         // SOLUTION: `ParamSet` ensures `&World` is only accessed when we're not
-///         // using the other mutable parameters.
-///         &World,
-///     )>,
-/// ) {
-///     for event in set.p0().read() {
-///         // ...
-///         # let _event = event;
-///     }
-///     set.p1().write(MyEvent::new());
-///
-///     let entities = set.p2().entities();
-///     // ...
-///     # let _entities = entities;
-/// }
-/// # bevy_ecs::system::assert_is_system(event_system);
-/// ```
-pub struct ParamSet<'w, 's, T: SystemParam> {
-    param_states: &'s mut T::State,
-    world: UnsafeWorldCell<'w>,
-    system_meta: SystemMeta,
-    change_tick: Tick,
-}
-
-macro_rules! impl_param_set {
-    ($(($index: tt, $param: ident, $system_meta: ident, $fn_name: ident)),*) => {
-        // SAFETY: All parameters are constrained to ReadOnlySystemParam, so World is only read
-        unsafe impl<'w, 's, $($param,)*> ReadOnlySystemParam for ParamSet<'w, 's, ($($param,)*)>
-        where $($param: ReadOnlySystemParam,)*
-        { }
-
-        // SAFETY: Relevant parameter ComponentId and ArchetypeComponentId access is applied to SystemMeta. If any ParamState conflicts
-        // with any prior access, a panic will occur.
-        unsafe impl<'_w, '_s, W: WorldLabel, $($param: SystemParam<World = W>,)*> SystemParam for ParamSet<'_w, '_s, ($($param,)*)>
-        {
-            type State = ($($param::State,)*);
-            type Item<'w, 's> = ParamSet<'w, 's, ($($param,)*)>;
-            type World = W;
-
-            #[expect(
-                clippy::allow_attributes,
-                reason = "This is inside a macro meant for tuples; as such, `non_snake_case` won't always lint."
-            )]
-            #[allow(
-                non_snake_case,
-                reason = "Certain variable names are provided by the caller, not by us."
-            )]
-            fn init_state(world: &mut World, system_meta: &mut SystemMeta) -> Self::State {
-                $(
-                    // Pretend to add each param to the system alone, see if it conflicts
-                    let mut $system_meta = system_meta.clone();
-                    $system_meta.component_access_set.clear();
-                    $system_meta.archetype_component_access.clear();
-                    $param::init_state(world, &mut $system_meta);
-                    // The variable is being defined with non_snake_case here
-                    let $param = $param::init_state(world, &mut system_meta.clone());
-                )*
-                // Make the ParamSet non-send if any of its parameters are non-send.
-                if false $(|| !$system_meta.is_send())* {
-                    system_meta.set_non_send();
-                }
-                $(
-                    system_meta
-                        .component_access_set
-                        .extend($system_meta.component_access_set);
-                    system_meta
-                        .archetype_component_access
-                        .extend(&$system_meta.archetype_component_access);
-                )*
-                ($($param,)*)
-            }
-
-            unsafe fn new_archetype(state: &mut Self::State, archetype: &Archetype, system_meta: &mut SystemMeta) {
-                // SAFETY: The caller ensures that `archetype` is from the World the state was initialized from in `init_state`.
-                unsafe { <($($param,)*) as SystemParam>::new_archetype(state, archetype, system_meta); }
-            }
-
-            fn apply(state: &mut Self::State, system_meta: &SystemMeta, world: &mut World) {
-                <($($param,)*) as SystemParam>::apply(state, system_meta, world);
-            }
-
-            fn queue(state: &mut Self::State, system_meta: &SystemMeta, mut world: DeferredWorld) {
-                <($($param,)*) as SystemParam>::queue(state, system_meta, world.reborrow());
-            }
-
-            #[inline]
-            unsafe fn validate_param<'w, 's>(
-                state: &'s Self::State,
-                system_meta: &SystemMeta,
-                world: UnsafeWorldCell<'w>,
-            ) -> bool {
-                <($($param,)*) as SystemParam>::validate_param(state, system_meta, world)
-            }
-
-            #[inline]
-            unsafe fn get_param<'w, 's>(
-                state: &'s mut Self::State,
-                system_meta: &SystemMeta,
-                world: UnsafeWorldCell<'w>,
-                change_tick: Tick,
-            ) -> Self::Item<'w, 's> {
-                ParamSet {
-                    param_states: state,
-                    system_meta: system_meta.clone(),
-                    world,
-                    change_tick,
-                }
-            }
-        }
-
-        impl<'w, 's, $($param: SystemParam,)*> ParamSet<'w, 's, ($($param,)*)>
-        {
-            $(
-                /// Gets exclusive access to the parameter at index
-                #[doc = stringify!($index)]
-                /// in this [`ParamSet`].
-                /// No other parameters may be accessed while this one is active.
-                pub fn $fn_name<'a>(&'a mut self) -> SystemParamItem<'a, 'a, $param> {
-                    // SAFETY: systems run without conflicts with other systems.
-                    // Conflicting params in ParamSet are not accessible at the same time
-                    // ParamSets are guaranteed to not conflict with other SystemParams
-                    unsafe {
-                        $param::get_param(&mut self.param_states.$index, &self.system_meta, self.world, self.change_tick)
-                    }
-                }
-            )*
-        }
-    }
-}
-
-all_tuples_enumerated!(impl_param_set, 1, 8, P, m, p);
 
 // SAFETY: Res only reads a single World resource
 unsafe impl<'a, T: Resource> ReadOnlySystemParam for Res<'a, T> {}
@@ -2007,96 +1779,6 @@ impl<T: SystemParam> ParamSet<'_, '_, Vec<T>> {
         });
     }
 }
-
-macro_rules! impl_system_param_tuple {
-    ($(#[$meta:meta])* $($param: ident),*) => {
-        $(#[$meta])*
-        // SAFETY: tuple consists only of ReadOnlySystemParams
-        unsafe impl<$($param: ReadOnlySystemParam),*> ReadOnlySystemParam for ($($param,)*) {}
-
-        #[expect(
-            clippy::allow_attributes,
-            reason = "This is in a macro, and as such, the below lints may not always apply."
-        )]
-        #[allow(
-            non_snake_case,
-            reason = "Certain variable names are provided by the caller, not by us."
-        )]
-        #[allow(
-            unused_variables,
-            reason = "Zero-length tuples won't use some of the parameters."
-        )]
-        $(#[$meta])*
-        // SAFETY: implementors of each `SystemParam` in the tuple have validated their impls
-        unsafe impl<W: WorldLabel, $($param: SystemParam<World = W>),*> SystemParam for ($($param,)*) {
-            type State = ($($param::State,)*);
-            type Item<'w, 's> = ($($param::Item::<'w, 's>,)*);
-            type World = W;
-
-            #[inline]
-            fn init_state(world: &mut World, system_meta: &mut SystemMeta) -> Self::State {
-                (($($param::init_state(world, system_meta),)*))
-            }
-
-            #[inline]
-            unsafe fn new_archetype(($($param,)*): &mut Self::State, archetype: &Archetype, system_meta: &mut SystemMeta) {
-                #[allow(
-                    unused_unsafe,
-                    reason = "Zero-length tuples will not run anything in the unsafe block."
-                )]
-                // SAFETY: The caller ensures that `archetype` is from the World the state was initialized from in `init_state`.
-                unsafe { $($param::new_archetype($param, archetype, system_meta);)* }
-            }
-
-            #[inline]
-            fn apply(($($param,)*): &mut Self::State, system_meta: &SystemMeta, world: &mut World) {
-                $($param::apply($param, system_meta, world);)*
-            }
-
-            #[inline]
-            #[allow(
-                unused_mut,
-                reason = "The `world` parameter is unused for zero-length tuples; however, it must be mutable for other lengths of tuples."
-            )]
-            fn queue(($($param,)*): &mut Self::State, system_meta: &SystemMeta, mut world: DeferredWorld) {
-                $($param::queue($param, system_meta, world.reborrow());)*
-            }
-
-            #[inline]
-            unsafe fn validate_param(
-                state: &Self::State,
-                system_meta: &SystemMeta,
-                world: UnsafeWorldCell,
-            ) -> bool {
-                let ($($param,)*) = state;
-                $($param::validate_param($param, system_meta, world)&&)* true
-            }
-
-            #[inline]
-            unsafe fn get_param<'w, 's>(
-                state: &'s mut Self::State,
-                system_meta: &SystemMeta,
-                world: UnsafeWorldCell<'w>,
-                change_tick: Tick,
-            ) -> Self::Item<'w, 's> {
-                let ($($param,)*) = state;
-                #[allow(
-                    clippy::unused_unit,
-                    reason = "Zero-length tuples won't have any params to get."
-                )]
-                ($($param::get_param($param, system_meta, world, change_tick),)*)
-            }
-        }
-    };
-}
-
-all_tuples!(
-    #[doc(fake_variadic)]
-    impl_system_param_tuple,
-    0,
-    16,
-    P
-);
 
 /// Contains type aliases for built-in [`SystemParam`]s with `'static` lifetimes.
 /// This makes it more convenient to refer to these types in contexts where
