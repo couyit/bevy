@@ -671,6 +671,19 @@ pub fn derive_from_world(input: TokenStream) -> TokenStream {
     })
 }
 
+#[proc_macro_derive(ComponentWorld)]
+pub fn derive_component_world(input: TokenStream) -> TokenStream {
+    let bevy_ecs_path = bevy_ecs_path();
+    let ast = parse_macro_input!(input as DeriveInput);
+    let name = ast.ident;
+    let (impl_generics, ty_generics, where_clauses) = ast.generics.split_for_impl();
+
+    TokenStream::from(quote! {
+        impl #impl_generics #bevy_ecs_path::world::WorldLabel for #name #ty_generics #where_clauses {}
+        impl #impl_generics #bevy_ecs_path::world::ComponentWorld for #name #ty_generics #where_clauses {}
+    })
+}
+
 struct ManyWorldTupleInput(Punctuated<Ident, Token![,]>);
 
 impl Parse for ManyWorldTupleInput {

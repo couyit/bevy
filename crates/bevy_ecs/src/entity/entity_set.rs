@@ -463,13 +463,13 @@ impl<I: Iterator<Item: TrustedEntityBorrow> + Debug> Debug for UniqueEntityIter<
 mod tests {
     use alloc::{vec, vec::Vec};
 
-    use crate::prelude::{Schedule, World};
+    use crate::prelude::Schedule;
 
     use crate::component::Component;
     use crate::entity::Entity;
     use crate::query::{QueryState, With};
     use crate::system::Query;
-    use crate::world::{MainWorld, Mut};
+    use crate::world::{MainWorld, Mut, Worlds};
 
     use super::UniqueEntityIter;
 
@@ -485,7 +485,7 @@ mod tests {
         let mut worlds = Worlds::new();
         let world = worlds.get_main_world_mut();
 
-        let mut query = QueryState::<&mut Thing>::new(&mut world);
+        let mut query = QueryState::<&mut Thing>::new(world);
 
         let spawn_batch: Vec<Entity> = world.spawn_batch(vec![Thing; 1000]).collect();
 
@@ -507,8 +507,7 @@ mod tests {
             .cloned();
 
         // With `iter_many_mut` collecting is not possible, because you need to drop each `Mut`/`&mut` before the next is retrieved.
-        let _results: Vec<Mut<Thing>> =
-            query.iter_many_unique_mut(&mut world, entity_set).collect();
+        let _results: Vec<Mut<Thing>> = query.iter_many_unique_mut(world, entity_set).collect();
     }
 
     #[test]
@@ -520,7 +519,7 @@ mod tests {
 
         pub fn system(
             mut thing_entities: Query<Entity, With<Thing>, MainWorld>,
-            mut things: Query<&mut Thing, MainWorld>,
+            mut things: Query<&mut Thing, (), MainWorld>,
         ) {
             things.iter_many_unique(thing_entities.iter());
             things.iter_many_unique_mut(thing_entities.iter_mut());
@@ -528,6 +527,6 @@ mod tests {
 
         let mut schedule = Schedule::default();
         schedule.add_systems(system);
-        schedule.run(&mut world);
+        schedule.run(world);
     }
 }

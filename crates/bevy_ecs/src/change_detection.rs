@@ -1481,7 +1481,7 @@ mod tests {
         },
         component::{Component, ComponentTicks, Tick},
         system::{IntoSystem, Single, System},
-        world::{World, Worlds},
+        world::{MainWorld, World, Worlds},
     };
 
     use super::{DetectChanges, DetectChangesMut, MutUntyped};
@@ -1510,11 +1510,11 @@ mod tests {
 
     #[test]
     fn change_expiration() {
-        fn change_detected(query: Option<Single<Ref<C>>>) -> bool {
+        fn change_detected(query: Option<Single<Ref<C>, (), MainWorld>>) -> bool {
             query.unwrap().is_changed()
         }
 
-        fn change_expired(query: Option<Single<Ref<C>>>) -> bool {
+        fn change_expired(query: Option<Single<Ref<C>, (), MainWorld>>) -> bool {
             query.unwrap().is_changed()
         }
 

@@ -1879,19 +1879,25 @@ impl<D: QueryData, F: QueryFilter> From<QueryBuilder<'_, D, F>> for QueryState<D
 
 #[cfg(test)]
 mod tests {
+    use bevy_ecs_macros::ComponentWorld;
+
     use crate::{
         component::Component,
         entity_disabling::DefaultQueryFilters,
         prelude::*,
         system::{QueryLens, RunSystemOnce},
-        world::{FilteredEntityMut, FilteredEntityRef},
+        world::{FilteredEntityMut, FilteredEntityRef, MainWorld, Worlds},
     };
+
+    #[derive(ComponentWorld)]
+    struct SubWorld;
 
     #[test]
     #[should_panic]
     fn right_world_get() {
-        let mut world_1 = World::new();
-        let world_2 = World::new();
+        let mut worlds = Worlds::new();
+        worlds.create_world::<SubWorld>();
+        let (world_1, world_2) = worlds.get_2_mut::<MainWorld, SubWorld>();
 
         let mut query_state = world_1.query::<Entity>();
         let _panics = query_state.get(&world_2, Entity::from_raw(0));
@@ -1900,8 +1906,9 @@ mod tests {
     #[test]
     #[should_panic]
     fn right_world_get_many() {
-        let mut world_1 = World::new();
-        let world_2 = World::new();
+        let mut worlds = Worlds::new();
+        worlds.create_world::<SubWorld>();
+        let (world_1, world_2) = worlds.get_2_mut::<MainWorld, SubWorld>();
 
         let mut query_state = world_1.query::<Entity>();
         let _panics = query_state.get_many(&world_2, []);
@@ -1910,11 +1917,12 @@ mod tests {
     #[test]
     #[should_panic]
     fn right_world_get_many_mut() {
-        let mut world_1 = World::new();
-        let mut world_2 = World::new();
+        let mut worlds = Worlds::new();
+        worlds.create_world::<SubWorld>();
+        let (world_1, world_2) = worlds.get_2_mut::<MainWorld, SubWorld>();
 
         let mut query_state = world_1.query::<Entity>();
-        let _panics = query_state.get_many_mut(&mut world_2, []);
+        let _panics = query_state.get_many_mut(world_2, []);
     }
 
     #[derive(Component, PartialEq, Debug)]
@@ -1928,11 +1936,12 @@ mod tests {
 
     #[test]
     fn can_transmute_to_more_general() {
-        let mut world = World::new();
+        let mut worlds = Worlds::new();
+        let world = worlds.get_main_world_mut();
         world.spawn((A(1), B(0)));
 
         let query_state = world.query::<(&A, &B)>();
-        let mut new_query_state = query_state.transmute::<&A>(&world);
+        let mut new_query_state = query_state.transmute::<&A>(&*world);
         assert_eq!(new_query_state.iter(&world).len(), 1);
         let a = new_query_state.single(&world).unwrap();
 
@@ -1941,12 +1950,13 @@ mod tests {
 
     #[test]
     fn cannot_get_data_not_in_original_query() {
-        let mut world = World::new();
+        let mut worlds = Worlds::new();
+        let world = worlds.get_main_world_mut();
         world.spawn((A(0), B(0)));
         world.spawn((A(1), B(0), C(0)));
 
         let query_state = world.query_filtered::<(&A, &B), Without<C>>();
-        let mut new_query_state = query_state.transmute::<&A>(&world);
+        let mut new_query_state = query_state.transmute::<&A>(&*world);
         // even though we change the query to not have Without<C>, we do not get the component with C.
         let a = new_query_state.single(&world).unwrap();
 
@@ -1955,55 +1965,60 @@ mod tests {
 
     #[test]
     fn can_transmute_empty_tuple() {
-        let mut world = World::new();
+        let mut worlds = Worlds::new();
+        let world = worlds.get_main_world_mut();
         world.register_component::<A>();
         let entity = world.spawn(A(10)).id();
 
         let q = world.query::<()>();
-        let mut q = q.transmute::<Entity>(&world);
+        let mut q = q.transmute::<Entity>(&*world);
         assert_eq!(q.single(&world).unwrap(), entity);
     }
 
     #[test]
     fn can_transmute_immut_fetch() {
-        let mut world = World::new();
+        let mut worlds = Worlds::new();
+        let world = worlds.get_main_world_mut();
         world.spawn(A(10));
 
         let q = world.query::<&A>();
-        let mut new_q = q.transmute::<Ref<A>>(&world);
+        let mut new_q = q.transmute::<Ref<A>>(&*world);
         assert!(new_q.single(&world).unwrap().is_added());
 
         let q = world.query::<Ref<A>>();
-        let _ = q.transmute::<&A>(&world);
+        let _ = q.transmute::<&A>(&*world);
     }
 
     #[test]
     fn can_transmute_mut_fetch() {
-        let mut world = World::new();
+        let mut worlds = Worlds::new();
+        let world = worlds.get_main_world_mut();
         world.spawn(A(0));
 
         let q = world.query::<&mut A>();
-        let _ = q.transmute::<Ref<A>>(&world);
-        let _ = q.transmute::<&A>(&world);
+        let _ = q.transmute::<Ref<A>>(&*world);
+        let _ = q.transmute::<&A>(&*world);
     }
 
     #[test]
     fn can_transmute_entity_mut() {
-        let mut world = World::new();
+        let mut worlds = Worlds::new();
+        let world = worlds.get_main_world_mut();
         world.spawn(A(0));
 
         let q: QueryState<EntityMut<'_>> = world.query::<EntityMut>();
-        let _ = q.transmute::<EntityRef>(&world);
+        let _ = q.transmute::<EntityRef>(&*world);
     }
 
     #[test]
     fn can_generalize_with_option() {
-        let mut world = World::new();
+        let mut worlds = Worlds::new();
+        let world = worlds.get_main_world_mut();
         world.spawn((A(0), B(0)));
 
         let query_state = world.query::<(Option<&A>, &B)>();
-        let _ = query_state.transmute::<Option<&A>>(&world);
-        let _ = query_state.transmute::<&B>(&world);
+        let _ = query_state.transmute::<Option<&A>>(&*world);
+        let _ = query_state.transmute::<&B>(&*world);
     }
 
     #[test]
@@ -2011,13 +2026,14 @@ mod tests {
         expected = "Transmuted state for ((&bevy_ecs::query::state::tests::A, &bevy_ecs::query::state::tests::B), ()) attempts to access terms that are not allowed by original state (&bevy_ecs::query::state::tests::A, ())."
     )]
     fn cannot_transmute_to_include_data_not_in_original_query() {
-        let mut world = World::new();
+        let mut worlds = Worlds::new();
+        let world = worlds.get_main_world_mut();
         world.register_component::<A>();
         world.register_component::<B>();
         world.spawn(A(0));
 
         let query_state = world.query::<&A>();
-        let mut _new_query_state = query_state.transmute::<(&A, &B)>(&world);
+        let mut _new_query_state = query_state.transmute::<(&A, &B)>(&*world);
     }
 
     #[test]
@@ -2025,11 +2041,12 @@ mod tests {
         expected = "Transmuted state for (&mut bevy_ecs::query::state::tests::A, ()) attempts to access terms that are not allowed by original state (&bevy_ecs::query::state::tests::A, ())."
     )]
     fn cannot_transmute_immut_to_mut() {
-        let mut world = World::new();
+        let mut worlds = Worlds::new();
+        let world = worlds.get_main_world_mut();
         world.spawn(A(0));
 
         let query_state = world.query::<&A>();
-        let mut _new_query_state = query_state.transmute::<&mut A>(&world);
+        let mut _new_query_state = query_state.transmute::<&mut A>(&*world);
     }
 
     #[test]
@@ -2037,11 +2054,12 @@ mod tests {
         expected = "Transmuted state for (&bevy_ecs::query::state::tests::A, ()) attempts to access terms that are not allowed by original state (core::option::Option<&bevy_ecs::query::state::tests::A>, ())."
     )]
     fn cannot_transmute_option_to_immut() {
-        let mut world = World::new();
+        let mut worlds = Worlds::new();
+        let world = worlds.get_main_world_mut();
         world.spawn(C(0));
 
         let query_state = world.query::<Option<&A>>();
-        let mut new_query_state = query_state.transmute::<&A>(&world);
+        let mut new_query_state = query_state.transmute::<&A>(&*world);
         let x = new_query_state.single(&world).unwrap();
         assert_eq!(x.0, 1234);
     }
@@ -2051,19 +2069,21 @@ mod tests {
         expected = "Transmuted state for (&bevy_ecs::query::state::tests::A, ()) attempts to access terms that are not allowed by original state (bevy_ecs::world::entity_ref::EntityRef, ())."
     )]
     fn cannot_transmute_entity_ref() {
-        let mut world = World::new();
+        let mut worlds = Worlds::new();
+        let world = worlds.get_main_world_mut();
         world.register_component::<A>();
 
         let q = world.query::<EntityRef>();
-        let _ = q.transmute::<&A>(&world);
+        let _ = q.transmute::<&A>(&*world);
     }
 
     #[test]
     fn can_transmute_filtered_entity() {
-        let mut world = World::new();
+        let mut worlds = Worlds::new();
+        let world = worlds.get_main_world_mut();
         let entity = world.spawn((A(0), B(1))).id();
         let query =
-            QueryState::<(Entity, &A, &B)>::new(&mut world).transmute::<FilteredEntityRef>(&world);
+            QueryState::<(Entity, &A, &B)>::new(world).transmute::<FilteredEntityRef>(&*world);
 
         let mut query = query;
         // Our result is completely untyped
@@ -2076,11 +2096,12 @@ mod tests {
 
     #[test]
     fn can_transmute_added() {
-        let mut world = World::new();
+        let mut worlds = Worlds::new();
+        let world = worlds.get_main_world_mut();
         let entity_a = world.spawn(A(0)).id();
 
-        let mut query = QueryState::<(Entity, &A, Has<B>)>::new(&mut world)
-            .transmute_filtered::<(Entity, Has<B>), Added<A>>(&world);
+        let mut query = QueryState::<(Entity, &A, Has<B>)>::new(world)
+            .transmute_filtered::<(Entity, Has<B>), Added<A>>(&*world);
 
         assert_eq!((entity_a, false), query.single(&world).unwrap());
 
@@ -2096,20 +2117,21 @@ mod tests {
 
     #[test]
     fn can_transmute_changed() {
-        let mut world = World::new();
+        let mut worlds = Worlds::new();
+        let world = worlds.get_main_world_mut();
         let entity_a = world.spawn(A(0)).id();
 
-        let mut detection_query = QueryState::<(Entity, &A)>::new(&mut world)
-            .transmute_filtered::<Entity, Changed<A>>(&world);
+        let mut detection_query = QueryState::<(Entity, &A)>::new(world)
+            .transmute_filtered::<Entity, Changed<A>>(&*world);
 
-        let mut change_query = QueryState::<&mut A>::new(&mut world);
+        let mut change_query = QueryState::<&mut A>::new(world);
         assert_eq!(entity_a, detection_query.single(&world).unwrap());
 
         world.clear_trackers();
 
         assert!(detection_query.single(&world).is_err());
 
-        change_query.single_mut(&mut world).unwrap().0 = 1;
+        change_query.single_mut(world).unwrap().0 = 1;
 
         assert_eq!(entity_a, detection_query.single(&world).unwrap());
     }
@@ -2119,11 +2141,12 @@ mod tests {
         expected = "Transmuted state for (bevy_ecs::entity::Entity, bevy_ecs::query::filter::Changed<bevy_ecs::query::state::tests::B>) attempts to access terms that are not allowed by original state (&bevy_ecs::query::state::tests::A, ())."
     )]
     fn cannot_transmute_changed_without_access() {
-        let mut world = World::new();
+        let mut worlds = Worlds::new();
+        let world = worlds.get_main_world_mut();
         world.register_component::<A>();
         world.register_component::<B>();
-        let query = QueryState::<&A>::new(&mut world);
-        let _new_query = query.transmute_filtered::<Entity, Changed<B>>(&world);
+        let query = QueryState::<&A>::new(world);
+        let _new_query = query.transmute_filtered::<Entity, Changed<B>>(&*world);
     }
 
     #[test]
@@ -2131,11 +2154,12 @@ mod tests {
         expected = "Transmuted state for (&mut bevy_ecs::query::state::tests::A, ()) attempts to access terms that are not allowed by original state (&bevy_ecs::query::state::tests::A, ())."
     )]
     fn cannot_transmute_mutable_after_readonly() {
-        let mut world = World::new();
+        let mut worlds = Worlds::new();
+        let world = worlds.get_main_world_mut();
         // Calling this method would mean we had aliasing queries.
-        fn bad(_: Query<&mut A>, _: Query<&A>) {}
+        fn bad(_: Query<&mut A, (), MainWorld>, _: Query<&A, (), MainWorld>) {}
         world
-            .run_system_once(|query: Query<&mut A>| {
+            .run_system_once(|query: Query<&mut A, MainWorld>| {
                 let mut readonly = query.as_readonly();
                 let mut lens: QueryLens<&mut A> = readonly.transmute_lens();
                 bad(lens.query(), query.as_readonly());
@@ -2147,13 +2171,14 @@ mod tests {
     #[test]
     #[should_panic]
     fn transmute_with_different_world() {
-        let mut world = World::new();
-        world.spawn((A(1), B(2)));
+        let mut worlds = Worlds::new();
+        worlds.create_world::<SubWorld>();
+        let (world_1, world_2) = worlds.get_2_mut::<MainWorld, SubWorld>();
 
-        let mut world2 = World::new();
-        world2.register_component::<B>();
+        world_1.spawn((A(1), B(2)));
+        world_2.register_component::<B>();
 
-        world.query::<(&A, &B)>().transmute::<&B>(&world2);
+        world_1.query::<(&A, &B)>().transmute::<&B>(&*world_2);
     }
 
     /// Regression test for issue #14528
@@ -2166,14 +2191,15 @@ mod tests {
         #[component(storage = "SparseSet")]
         struct Sparse;
 
-        let mut world = World::new();
+        let mut worlds = Worlds::new();
+        let world = worlds.get_main_world_mut();
 
         world.spawn(Dense);
         world.spawn((Dense, Sparse));
 
         let mut query = world
             .query_filtered::<&Dense, With<Sparse>>()
-            .transmute::<&Dense>(&world);
+            .transmute::<&Dense>(&*world);
 
         let matched = query.iter(&world).count();
         assert_eq!(matched, 1);
@@ -2187,14 +2213,15 @@ mod tests {
         #[component(storage = "SparseSet")]
         struct Sparse;
 
-        let mut world = World::new();
+        let mut worlds = Worlds::new();
+        let world = worlds.get_main_world_mut();
 
         world.spawn(Dense);
         world.spawn((Dense, Sparse));
 
         let mut query = world
             .query::<&Dense>()
-            .transmute_filtered::<&Dense, With<Sparse>>(&world);
+            .transmute_filtered::<&Dense, With<Sparse>>(&*world);
 
         // Note: `transmute_filtered` is supposed to keep the same matched tables/archetypes,
         // so it doesn't actually filter out those entities without `Sparse` and the iteration
@@ -2205,30 +2232,32 @@ mod tests {
 
     #[test]
     fn join() {
-        let mut world = World::new();
+        let mut worlds = Worlds::new();
+        let world = worlds.get_main_world_mut();
         world.spawn(A(0));
         world.spawn(B(1));
         let entity_ab = world.spawn((A(2), B(3))).id();
         world.spawn((A(4), B(5), C(6)));
 
-        let query_1 = QueryState::<&A, Without<C>>::new(&mut world);
-        let query_2 = QueryState::<&B, Without<C>>::new(&mut world);
-        let mut new_query: QueryState<Entity, ()> = query_1.join_filtered(&world, &query_2);
+        let query_1 = QueryState::<&A, Without<C>>::new(world);
+        let query_2 = QueryState::<&B, Without<C>>::new(world);
+        let mut new_query: QueryState<Entity, ()> = query_1.join_filtered(&*world, &query_2);
 
         assert_eq!(new_query.single(&world).unwrap(), entity_ab);
     }
 
     #[test]
     fn join_with_get() {
-        let mut world = World::new();
+        let mut worlds = Worlds::new();
+        let world = worlds.get_main_world_mut();
         world.spawn(A(0));
         world.spawn(B(1));
         let entity_ab = world.spawn((A(2), B(3))).id();
         let entity_abc = world.spawn((A(4), B(5), C(6))).id();
 
-        let query_1 = QueryState::<&A>::new(&mut world);
-        let query_2 = QueryState::<&B, Without<C>>::new(&mut world);
-        let mut new_query: QueryState<Entity, ()> = query_1.join_filtered(&world, &query_2);
+        let query_1 = QueryState::<&A>::new(world);
+        let query_2 = QueryState::<&B, Without<C>>::new(world);
+        let mut new_query: QueryState<Entity, ()> = query_1.join_filtered(&*world, &query_2);
 
         assert!(new_query.get(&world, entity_ab).is_ok());
         // should not be able to get entity with c.
@@ -2240,11 +2269,12 @@ mod tests {
             attempts to access terms that are not allowed by state \
             (&bevy_ecs::query::state::tests::A, ()) joined with (&bevy_ecs::query::state::tests::B, ()).")]
     fn cannot_join_wrong_fetch() {
-        let mut world = World::new();
+        let mut worlds = Worlds::new();
+        let world = worlds.get_main_world_mut();
         world.register_component::<C>();
-        let query_1 = QueryState::<&A>::new(&mut world);
-        let query_2 = QueryState::<&B>::new(&mut world);
-        let _query: QueryState<&C> = query_1.join(&world, &query_2);
+        let query_1 = QueryState::<&A>::new(world);
+        let query_2 = QueryState::<&B>::new(world);
+        let _query: QueryState<&C> = query_1.join(&*world, &query_2);
     }
 
     #[test]
@@ -2255,10 +2285,11 @@ mod tests {
             joined with (&bevy_ecs::query::state::tests::B, bevy_ecs::query::filter::Without<bevy_ecs::query::state::tests::C>)."
     )]
     fn cannot_join_wrong_filter() {
-        let mut world = World::new();
-        let query_1 = QueryState::<&A, Without<C>>::new(&mut world);
-        let query_2 = QueryState::<&B, Without<C>>::new(&mut world);
-        let _: QueryState<Entity, Changed<C>> = query_1.join_filtered(&world, &query_2);
+        let mut worlds = Worlds::new();
+        let world = worlds.get_main_world_mut();
+        let query_1 = QueryState::<&A, Without<C>>::new(world);
+        let query_2 = QueryState::<&B, Without<C>>::new(world);
+        let _: QueryState<Entity, Changed<C>> = query_1.join_filtered(&*world, &query_2);
     }
 
     #[test]
@@ -2266,35 +2297,40 @@ mod tests {
         expected = "Joined state for ((&mut bevy_ecs::query::state::tests::A, &mut bevy_ecs::query::state::tests::B), ()) attempts to access terms that are not allowed by state (&bevy_ecs::query::state::tests::A, ()) joined with (&mut bevy_ecs::query::state::tests::B, ())."
     )]
     fn cannot_join_mutable_after_readonly() {
-        let mut world = World::new();
+        let mut worlds = Worlds::new();
+        let world = worlds.get_main_world_mut();
         // Calling this method would mean we had aliasing queries.
-        fn bad(_: Query<(&mut A, &mut B)>, _: Query<&A>) {}
+        fn bad(_: Query<MainWorld, (&mut A, &mut B)>, _: Query<MainWorld, &A>) {}
         world
-            .run_system_once(|query_a: Query<&mut A>, mut query_b: Query<&mut B>| {
-                let mut readonly = query_a.as_readonly();
-                let mut lens: QueryLens<(&mut A, &mut B)> = readonly.join(&mut query_b);
-                bad(lens.query(), query_a.as_readonly());
-            })
+            .run_system_once(
+                |query_a: Query<MainWorld, &mut A>, mut query_b: Query<MainWorld, &mut B>| {
+                    let mut readonly = query_a.as_readonly();
+                    let mut lens: QueryLens<(&mut A, &mut B)> = readonly.join(&mut query_b);
+                    bad(lens.query(), query_a.as_readonly());
+                },
+            )
             .unwrap();
     }
 
     #[test]
     fn join_to_filtered_entity_mut() {
-        let mut world = World::new();
+        let mut worlds = Worlds::new();
+        let world = worlds.get_main_world_mut();
         world.spawn((A(2), B(3)));
 
-        let query_1 = QueryState::<&mut A>::new(&mut world);
-        let query_2 = QueryState::<&mut B>::new(&mut world);
-        let mut new_query: QueryState<FilteredEntityMut> = query_1.join(&world, &query_2);
+        let query_1 = QueryState::<&mut A>::new(world);
+        let query_2 = QueryState::<&mut B>::new(world);
+        let mut new_query: QueryState<FilteredEntityMut> = query_1.join(&*world, &query_2);
 
-        let mut entity = new_query.single_mut(&mut world).unwrap();
+        let mut entity = new_query.single_mut(world).unwrap();
         assert!(entity.get_mut::<A>().is_some());
         assert!(entity.get_mut::<B>().is_some());
     }
 
     #[test]
     fn query_respects_default_filters() {
-        let mut world = World::new();
+        let mut worlds = Worlds::new();
+        let world = worlds.get_main_world_mut();
         world.spawn((A(0), B(0)));
         world.spawn((B(0), C(0)));
         world.spawn(C(0));
@@ -2304,19 +2340,19 @@ mod tests {
         world.insert_resource(df);
 
         // Without<C> only matches the first entity
-        let mut query = QueryState::<()>::new(&mut world);
+        let mut query = QueryState::<()>::new(world);
         assert_eq!(1, query.iter(&world).count());
 
         // With<C> matches the last two entities
-        let mut query = QueryState::<(), With<C>>::new(&mut world);
+        let mut query = QueryState::<(), With<C>>::new(world);
         assert_eq!(2, query.iter(&world).count());
 
         // Has should bypass the filter entirely
-        let mut query = QueryState::<Has<C>>::new(&mut world);
+        let mut query = QueryState::<Has<C>>::new(world);
         assert_eq!(3, query.iter(&world).count());
 
         // Other filters should still be respected
-        let mut query = QueryState::<Has<C>, Without<B>>::new(&mut world);
+        let mut query = QueryState::<Has<C>, Without<B>>::new(world);
         assert_eq!(1, query.iter(&world).count());
     }
 
@@ -2329,12 +2365,13 @@ mod tests {
 
     #[test]
     fn query_default_filters_updates_is_dense() {
-        let mut world = World::new();
+        let mut worlds = Worlds::new();
+        let world = worlds.get_main_world_mut();
         world.spawn((Table, Sparse));
         world.spawn(Table);
         world.spawn(Sparse);
 
-        let mut query = QueryState::<()>::new(&mut world);
+        let mut query = QueryState::<()>::new(world);
         // There are no sparse components involved thus the query is dense
         assert!(query.is_dense);
         assert_eq!(3, query.iter(&world).count());
@@ -2343,7 +2380,7 @@ mod tests {
         df.register_disabling_component(world.register_component::<Sparse>());
         world.insert_resource(df);
 
-        let mut query = QueryState::<()>::new(&mut world);
+        let mut query = QueryState::<()>::new(world);
         // The query doesn't ask for sparse components, but the default filters adds
         // a sparse components thus it is NOT dense
         assert!(!query.is_dense);
@@ -2353,12 +2390,12 @@ mod tests {
         df.register_disabling_component(world.register_component::<Table>());
         world.insert_resource(df);
 
-        let mut query = QueryState::<()>::new(&mut world);
+        let mut query = QueryState::<()>::new(world);
         // If the filter is instead a table components, the query can still be dense
         assert!(query.is_dense);
         assert_eq!(1, query.iter(&world).count());
 
-        let mut query = QueryState::<&Sparse>::new(&mut world);
+        let mut query = QueryState::<&Sparse>::new(world);
         // But only if the original query was dense
         assert!(!query.is_dense);
         assert_eq!(1, query.iter(&world).count());

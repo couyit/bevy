@@ -9,7 +9,7 @@ use crate::{
         QueryFilter, QueryIter, QueryManyIter, QueryManyUniqueIter, QueryParIter, QueryParManyIter,
         QueryParManyUniqueIter, QuerySingleError, QueryState, ROQueryItem, ReadOnlyQueryData,
     },
-    world::{unsafe_world_cell::UnsafeWorldCell, ComponentWorld},
+    world::{unsafe_world_cell::UnsafeWorldCell, ComponentWorld, MainWorld},
 };
 use core::{
     marker::PhantomData,
@@ -376,7 +376,7 @@ use core::{
 /// [`Table`]: crate::storage::Table
 /// [`With`]: crate::query::With
 /// [`Without`]: crate::query::Without
-pub struct Query<'world, 'state, W: ComponentWorld, D: QueryData, F: QueryFilter = ()> {
+pub struct Query<'world, 'state, D: QueryData, F: QueryFilter = (), W: ComponentWorld = MainWorld> {
     // SAFETY: Must have access to the components registered in `state`.
     world: UnsafeWorldCell<'world>,
     state: &'state QueryState<D, F>,
@@ -384,15 +384,15 @@ pub struct Query<'world, 'state, W: ComponentWorld, D: QueryData, F: QueryFilter
     this_run: Tick,
 }
 
-impl<W: ComponentWorld, D: ReadOnlyQueryData, F: QueryFilter> Clone for Query<'_, '_, W, D, F> {
+impl<D: ReadOnlyQueryData, F: QueryFilter, W: ComponentWorld> Clone for Query<'_, '_, D, F, W> {
     fn clone(&self) -> Self {
         *self
     }
 }
 
-impl<W: ComponentWorld, D: ReadOnlyQueryData, F: QueryFilter> Copy for Query<'_, '_, W, D, F> {}
+impl<D: ReadOnlyQueryData, F: QueryFilter, W: ComponentWorld> Copy for Query<'_, '_, D, F, W> {}
 
-impl<W: ComponentWorld, D: QueryData, F: QueryFilter> core::fmt::Debug for Query<'_, '_, W, D, F> {
+impl<D: QueryData, F: QueryFilter, W: ComponentWorld> core::fmt::Debug for Query<'_, '_, D, F, W> {
     fn fmt(&self, f: &mut core::fmt::Formatter) -> core::fmt::Result {
         f.debug_struct("Query")
             .field("matched_entities", &self.iter().count())
@@ -404,7 +404,7 @@ impl<W: ComponentWorld, D: QueryData, F: QueryFilter> core::fmt::Debug for Query
     }
 }
 
-impl<'w, 's, W: ComponentWorld, D: QueryData, F: QueryFilter> Query<'w, 's, W, D, F> {
+impl<'w, 's, D: QueryData, F: QueryFilter, W: ComponentWorld> Query<'w, 's, D, F, W> {
     /// Creates a new query.
     ///
     /// # Safety
@@ -436,14 +436,14 @@ impl<'w, 's, W: ComponentWorld, D: QueryData, F: QueryFilter> Query<'w, 's, W, D
     /// # See also
     ///
     /// [`into_readonly`](Self::into_readonly) for a version that consumes the `Query` to return one with the full `'world` lifetime.
-    pub fn as_readonly(&self) -> Query<'_, 's, D::ReadOnly, F> {
+    pub fn as_readonly(&self) -> Query<'_, 's, D::ReadOnly, F, W> {
         // SAFETY: The reborrowed query is converted to read-only, so it cannot perform mutable access,
         // and the original query is held with a shared borrow, so it cannot perform mutable access either.
         unsafe { self.reborrow_unsafe() }.into_readonly()
     }
 
     /// Returns another `Query` from this does not return any data, which can be faster.
-    fn as_nop(&self) -> Query<'_, 's, NopWorldQuery<D>, F> {
+    fn as_nop(&self) -> Query<'_, 's, NopWorldQuery<D>, F, W> {
         let new_state = self.state.as_nop();
         // SAFETY:
         // - The reborrowed query is converted to read-only, so it cannot perform mutable access,
@@ -463,7 +463,7 @@ impl<'w, 's, W: ComponentWorld, D: QueryData, F: QueryFilter> Query<'w, 's, W, D
     /// # See also
     ///
     /// [`as_readonly`](Self::as_readonly) for a version that borrows the `Query` instead of consuming it.
-    pub fn into_readonly(self) -> Query<'w, 's, D::ReadOnly, F> {
+    pub fn into_readonly(self) -> Query<'w, 's, D::ReadOnly, F, W> {
         let new_state = self.state.as_readonly();
         // SAFETY:
         // - This is memory safe because it turns the query immutable.
@@ -495,7 +495,7 @@ impl<'w, 's, W: ComponentWorld, D: QueryData, F: QueryFilter> Query<'w, 's, W, D
     ///     }
     /// }
     /// ```
-    pub fn reborrow(&mut self) -> Query<'_, 's, D, F> {
+    pub fn reborrow(&mut self) -> Query<'_, 's, D, F, W> {
         // SAFETY: this query is exclusively borrowed while the new one exists, so
         // no overlapping access can occur.
         unsafe { self.reborrow_unsafe() }
@@ -512,7 +512,7 @@ impl<'w, 's, W: ComponentWorld, D: QueryData, F: QueryFilter> Query<'w, 's, W, D
     /// # See also
     ///
     /// - [`reborrow`](Self::reborrow) for the safe versions.
-    pub unsafe fn reborrow_unsafe(&self) -> Query<'_, 's, D, F> {
+    pub unsafe fn reborrow_unsafe(&self) -> Query<'_, 's, D, F, W> {
         // SAFETY:
         // - This is memory safe because the caller ensures that there are no conflicting references.
         // - The world matches because it was the same one used to construct self.
@@ -530,7 +530,7 @@ impl<'w, 's, W: ComponentWorld, D: QueryData, F: QueryFilter> Query<'w, 's, W, D
     /// # See also
     ///
     /// - [`reborrow_unsafe`](Self::reborrow_unsafe) for a safer version that constrains the returned `'w` lifetime to the length of the borrow.
-    unsafe fn copy_unsafe(&self) -> Query<'w, 's, D, F> {
+    unsafe fn copy_unsafe(&self) -> Query<'w, 's, D, F, W> {
         // SAFETY:
         // - This is memory safe because the caller ensures that there are no conflicting references.
         // - The world matches because it was the same one used to construct self.
@@ -2458,7 +2458,9 @@ impl<'w, 's, W: ComponentWorld, D: QueryData, F: QueryFilter> Query<'w, 's, W, D
     }
 }
 
-impl<'w, 's, D: QueryData, F: QueryFilter> IntoIterator for Query<'w, 's, D, F> {
+impl<'w, 's, D: QueryData, F: QueryFilter, W: ComponentWorld> IntoIterator
+    for Query<'w, 's, D, F, W>
+{
     type Item = D::Item<'w>;
     type IntoIter = QueryIter<'w, 's, D, F>;
 
@@ -2471,7 +2473,9 @@ impl<'w, 's, D: QueryData, F: QueryFilter> IntoIterator for Query<'w, 's, D, F> 
     }
 }
 
-impl<'w, 's, D: QueryData, F: QueryFilter> IntoIterator for &'w Query<'_, 's, D, F> {
+impl<'w, 's, D: QueryData, F: QueryFilter, W: ComponentWorld> IntoIterator
+    for &'w Query<'_, 's, D, F, W>
+{
     type Item = ROQueryItem<'w, D>;
     type IntoIter = QueryIter<'w, 's, D::ReadOnly, F>;
 
@@ -2480,7 +2484,9 @@ impl<'w, 's, D: QueryData, F: QueryFilter> IntoIterator for &'w Query<'_, 's, D,
     }
 }
 
-impl<'w, 's, D: QueryData, F: QueryFilter> IntoIterator for &'w mut Query<'_, 's, D, F> {
+impl<'w, 's, D: QueryData, F: QueryFilter, W: ComponentWorld> IntoIterator
+    for &'w mut Query<'_, 's, D, F, W>
+{
     type Item = D::Item<'w>;
     type IntoIter = QueryIter<'w, 's, D, F>;
 
@@ -2489,7 +2495,7 @@ impl<'w, 's, D: QueryData, F: QueryFilter> IntoIterator for &'w mut Query<'_, 's
     }
 }
 
-impl<'w, 's, D: ReadOnlyQueryData, F: QueryFilter> Query<'w, 's, D, F> {
+impl<'w, 's, D: ReadOnlyQueryData, F: QueryFilter, W: ComponentWorld> Query<'w, 's, D, F, W> {
     /// Returns an [`Iterator`] over the query items, with the actual "inner" world lifetime.
     ///
     /// This can only return immutable data (mutable data will be cast to an immutable form).
@@ -2581,12 +2587,12 @@ impl<'w, 'q, Q: QueryData, F: QueryFilter> From<&'q mut Query<'w, '_, Q, F>>
 /// See [`Query`] for more details.
 ///
 /// [System parameter]: crate::system::SystemParam
-pub struct Single<'w, W: ComponentWorld, D: QueryData, F: QueryFilter = ()> {
+pub struct Single<'w, D: QueryData, F: QueryFilter = (), W: ComponentWorld = MainWorld> {
     pub(crate) item: D::Item<'w>,
     pub(crate) _filter: PhantomData<(W, F)>,
 }
 
-impl<'w, D: QueryData, F: QueryFilter> Deref for Single<'w, D, F> {
+impl<'w, D: QueryData, F: QueryFilter, W: ComponentWorld> Deref for Single<'w, D, F, W> {
     type Target = D::Item<'w>;
 
     fn deref(&self) -> &Self::Target {
@@ -2594,13 +2600,13 @@ impl<'w, D: QueryData, F: QueryFilter> Deref for Single<'w, D, F> {
     }
 }
 
-impl<'w, D: QueryData, F: QueryFilter> DerefMut for Single<'w, D, F> {
+impl<'w, D: QueryData, F: QueryFilter, W: ComponentWorld> DerefMut for Single<'w, D, F, W> {
     fn deref_mut(&mut self) -> &mut Self::Target {
         &mut self.item
     }
 }
 
-impl<'w, D: QueryData, F: QueryFilter> Single<'w, D, F> {
+impl<'w, D: QueryData, F: QueryFilter, W: ComponentWorld> Single<'w, D, F, W> {
     /// Returns the inner item with ownership.
     pub fn into_inner(self) -> D::Item<'w> {
         self.item
@@ -2619,11 +2625,11 @@ impl<'w, D: QueryData, F: QueryFilter> Single<'w, D, F> {
 /// See [`Query`] for more details.
 ///
 /// [System parameter]: crate::system::SystemParam
-pub struct Populated<'w, 's, W: ComponentWorld, D: QueryData, F: QueryFilter = ()>(
-    pub(crate) Query<'w, 's, W, D, F>,
+pub struct Populated<'w, 's, D: QueryData, F: QueryFilter = (), W: ComponentWorld = MainWorld>(
+    pub(crate) Query<'w, 's, D, F, W>,
 );
 
-impl<'w, 's, D: QueryData, F: QueryFilter> Deref for Populated<'w, 's, D, F> {
+impl<'w, 's, D: QueryData, F: QueryFilter, W: ComponentWorld> Deref for Populated<'w, 's, D, F, W> {
     type Target = Query<'w, 's, D, F>;
 
     fn deref(&self) -> &Self::Target {
@@ -2631,13 +2637,13 @@ impl<'w, 's, D: QueryData, F: QueryFilter> Deref for Populated<'w, 's, D, F> {
     }
 }
 
-impl<D: QueryData, F: QueryFilter> DerefMut for Populated<'_, '_, D, F> {
+impl<D: QueryData, F: QueryFilter, W: ComponentWorld> DerefMut for Populated<'_, '_, D, F, W> {
     fn deref_mut(&mut self) -> &mut Self::Target {
         &mut self.0
     }
 }
 
-impl<'w, 's, D: QueryData, F: QueryFilter> Populated<'w, 's, D, F> {
+impl<'w, 's, D: QueryData, F: QueryFilter, W: ComponentWorld> Populated<'w, 's, D, F, W> {
     /// Returns the inner item with ownership.
     pub fn into_inner(self) -> Query<'w, 's, D, F> {
         self.0
@@ -2646,7 +2652,7 @@ impl<'w, 's, D: QueryData, F: QueryFilter> Populated<'w, 's, D, F> {
 
 #[cfg(test)]
 mod tests {
-    use crate::{prelude::*, query::QueryEntityError};
+    use crate::{prelude::*, query::QueryEntityError, world::Worlds};
     use alloc::vec::Vec;
 
     #[test]
@@ -2663,13 +2669,13 @@ mod tests {
 
         // SAFETY: Query does not access world data.
         assert!(query_state
-            .query_mut(&mut world)
+            .query_mut(world)
             .get_many_mut_inner::<10>(entities.clone().try_into().unwrap())
             .is_ok());
 
         assert_eq!(
             query_state
-                .query_mut(&mut world)
+                .query_mut(world)
                 .get_many_mut_inner([entities[0], entities[0]])
                 .unwrap_err(),
             QueryEntityError::AliasedMutability(entities[0])
@@ -2677,7 +2683,7 @@ mod tests {
 
         assert_eq!(
             query_state
-                .query_mut(&mut world)
+                .query_mut(world)
                 .get_many_mut_inner([entities[0], entities[1], entities[0]])
                 .unwrap_err(),
             QueryEntityError::AliasedMutability(entities[0])
@@ -2685,7 +2691,7 @@ mod tests {
 
         assert_eq!(
             query_state
-                .query_mut(&mut world)
+                .query_mut(world)
                 .get_many_mut_inner([entities[9], entities[9]])
                 .unwrap_err(),
             QueryEntityError::AliasedMutability(entities[9])

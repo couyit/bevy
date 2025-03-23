@@ -153,7 +153,7 @@ pub use system_name::*;
 pub use system_param::*;
 pub use system_registry::*;
 
-use crate::world::World;
+use crate::world::{World, Worlds};
 
 /// Conversion trait to turn something into a [`System`].
 ///
@@ -273,8 +273,8 @@ pub fn assert_is_system<In: SystemInput, Out: 'static, Marker>(
     let mut system = IntoSystem::into_system(system);
 
     // Initialize the system, which will panic if the system has access conflicts.
-    let mut world = World::new();
-    system.initialize(&mut world);
+    let mut worlds = Worlds::new();
+    system.initialize(worlds.get_main_world_mut());
 }
 
 /// Ensure that a given function is a [read-only system](ReadOnlySystem).
@@ -316,10 +316,10 @@ where
 ///
 /// Note: this will run the system on an empty world.
 pub fn assert_system_does_not_conflict<Out, Params, S: IntoSystem<(), Out, Params>>(sys: S) {
-    let mut world = World::new();
+    let mut worlds = Worlds::new();
     let mut system = IntoSystem::into_system(sys);
-    system.initialize(&mut world);
-    system.run((), &mut world);
+    system.initialize(worlds);
+    system.run((), worlds);
 }
 
 #[cfg(test)]

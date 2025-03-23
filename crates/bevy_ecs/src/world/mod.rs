@@ -23,8 +23,8 @@ pub use crate::{
     change_detection::{Mut, Ref, CHECK_TICK_THRESHOLD},
     world::command_queue::CommandQueue,
 };
-use bevy_ecs_macros::impl_many_world_tuple;
 pub use bevy_ecs_macros::FromWorld;
+use bevy_ecs_macros::{impl_many_world_tuple, ComponentWorld};
 use bevy_utils::TypeIdMap;
 pub use component_constants::*;
 pub use deferred_world::DeferredWorld;
@@ -80,7 +80,7 @@ use core::{any::TypeId, fmt, mem::transmute, ptr};
 use log::warn;
 use unsafe_world_cell::{UnsafeEntityCell, UnsafeWorldCell, UnsafeWorldsCell};
 
-#[derive(Clone, Copy, Debug)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct WorldId(usize);
 
 pub struct Worlds {
@@ -184,17 +184,15 @@ impl Worlds {
 pub trait WorldLabel: Send + Sync + 'static {}
 pub trait ComponentWorld: WorldLabel {}
 
+#[derive(ComponentWorld)]
 pub struct MainWorld;
 pub struct ResourceWorld;
 pub struct InvalidWorld;
+#[derive(ComponentWorld)]
 pub struct InvalidComponentWorld;
 
-impl WorldLabel for MainWorld {}
-impl ComponentWorld for MainWorld {}
 impl WorldLabel for ResourceWorld {}
 impl WorldLabel for InvalidWorld {}
-impl WorldLabel for InvalidComponentWorld {}
-impl ComponentWorld for InvalidComponentWorld {}
 
 pub trait ManyWorldLabel {
     type World<'w>;
@@ -265,7 +263,7 @@ pub enum Storage {
 #[repr(C)]
 pub struct World<W: WorldLabel> {
     id: WorldId,
-    pub(crate) components: Components,
+    pub(crate) components: Components<InvalidWorld>,
     pub(crate) component_ids: ComponentIds,
     pub(crate) storage: Storage,
     pub(crate) observers: Observers,

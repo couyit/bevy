@@ -314,18 +314,18 @@ pub unsafe trait ReadOnlySystemParam: SystemParam {}
 pub type SystemParamItem<'w, 's, P> = <P as SystemParam>::Item<'w, 's>;
 
 // SAFETY: QueryState is constrained to read-only fetches, so it only reads World.
-unsafe impl<'w, 's, W: ComponentWorld, D: ReadOnlyQueryData + 'static, F: QueryFilter + 'static>
-    ReadOnlySystemParam for Query<'w, 's, W, D, F>
+unsafe impl<'w, 's, D: ReadOnlyQueryData + 'static, F: QueryFilter + 'static, W: ComponentWorld>
+    ReadOnlySystemParam for Query<'w, 's, D, F, W>
 {
 }
 
 // SAFETY: Relevant query ComponentId and ArchetypeComponentId access is applied to SystemMeta. If
 // this Query conflicts with any prior access, a panic will occur.
-unsafe impl<W: ComponentWorld, D: QueryData + 'static, F: QueryFilter + 'static> SystemParam
-    for Query<'_, '_, W, D, F>
+unsafe impl<D: QueryData + 'static, F: QueryFilter + 'static, W: ComponentWorld> SystemParam
+    for Query<'_, '_, D, F, W>
 {
     type State = QueryState<D, F>;
-    type Item<'w, 's> = Query<'w, 's, W, D, F>;
+    type Item<'w, 's> = Query<'w, 's, D, F, W>;
     type World = W;
 
     fn init_state(world: UnsafeWorldCell, system_meta: &mut SystemMeta) -> Self::State {
@@ -399,15 +399,15 @@ fn assert_component_access_compatibility(
 
 // SAFETY: Relevant query ComponentId and ArchetypeComponentId access is applied to SystemMeta. If
 // this Query conflicts with any prior access, a panic will occur.
-unsafe impl<'a, W: ComponentWorld, D: QueryData + 'static, F: QueryFilter + 'static> SystemParam
-    for Single<'a, W, D, F>
+unsafe impl<'a, D: QueryData + 'static, F: QueryFilter + 'static, W: ComponentWorld> SystemParam
+    for Single<'a, D, F, W>
 {
     type State = QueryState<D, F>;
-    type Item<'w, 's> = Single<'w, W, D, F>;
+    type Item<'w, 's> = Single<'w, D, F, W>;
     type World = W;
 
     fn init_state(world: UnsafeWorldCell, system_meta: &mut SystemMeta) -> Self::State {
-        Query::<W, D, F>::init_state(world, system_meta)
+        Query::<D, F, W>::init_state(world, system_meta)
     }
 
     unsafe fn new_archetype(
@@ -416,7 +416,7 @@ unsafe impl<'a, W: ComponentWorld, D: QueryData + 'static, F: QueryFilter + 'sta
         system_meta: &mut SystemMeta,
     ) {
         // SAFETY: Delegate to existing `SystemParam` implementations.
-        unsafe { Query::<W, D, F>::new_archetype(state, archetype, system_meta) };
+        unsafe { Query::<D, F, W>::new_archetype(state, archetype, system_meta) };
     }
 
     #[inline]
@@ -466,15 +466,15 @@ unsafe impl<'a, W: ComponentWorld, D: QueryData + 'static, F: QueryFilter + 'sta
 
 // SAFETY: Relevant query ComponentId and ArchetypeComponentId access is applied to SystemMeta. If
 // this Query conflicts with any prior access, a panic will occur.
-unsafe impl<'a, W: ComponentWorld, D: QueryData + 'static, F: QueryFilter + 'static> SystemParam
-    for Option<Single<'a, W, D, F>>
+unsafe impl<'a, D: QueryData + 'static, F: QueryFilter + 'static, W: ComponentWorld> SystemParam
+    for Option<Single<'a, D, F, W>>
 {
     type State = QueryState<D, F>;
-    type Item<'w, 's> = Option<Single<'w, W, D, F>>;
+    type Item<'w, 's> = Option<Single<'w, D, F, W>>;
     type World = W;
 
     fn init_state(world: UnsafeWorldCell, system_meta: &mut SystemMeta) -> Self::State {
-        Single::<W, D, F>::init_state(world, system_meta)
+        Single::<D, F, W>::init_state(world, system_meta)
     }
 
     unsafe fn new_archetype(
@@ -483,7 +483,7 @@ unsafe impl<'a, W: ComponentWorld, D: QueryData + 'static, F: QueryFilter + 'sta
         system_meta: &mut SystemMeta,
     ) {
         // SAFETY: Delegate to existing `SystemParam` implementations.
-        unsafe { Single::<W, D, F>::new_archetype(state, archetype, system_meta) };
+        unsafe { Single::<D, F, W>::new_archetype(state, archetype, system_meta) };
     }
 
     #[inline]
@@ -535,28 +535,28 @@ unsafe impl<'a, W: ComponentWorld, D: QueryData + 'static, F: QueryFilter + 'sta
 }
 
 // SAFETY: QueryState is constrained to read-only fetches, so it only reads World.
-unsafe impl<'a, W: ComponentWorld, D: ReadOnlyQueryData + 'static, F: QueryFilter + 'static>
-    ReadOnlySystemParam for Single<'a, W, D, F>
+unsafe impl<'a, D: ReadOnlyQueryData + 'static, F: QueryFilter + 'static, W: ComponentWorld>
+    ReadOnlySystemParam for Single<'a, D, F, W>
 {
 }
 
 // SAFETY: QueryState is constrained to read-only fetches, so it only reads World.
-unsafe impl<'a, W: ComponentWorld, D: ReadOnlyQueryData + 'static, F: QueryFilter + 'static>
-    ReadOnlySystemParam for Option<Single<'a, W, D, F>>
+unsafe impl<'a, D: ReadOnlyQueryData + 'static, F: QueryFilter + 'static, W: ComponentWorld>
+    ReadOnlySystemParam for Option<Single<'a, D, F, W>>
 {
 }
 
 // SAFETY: Relevant query ComponentId and ArchetypeComponentId access is applied to SystemMeta. If
 // this Query conflicts with any prior access, a panic will occur.
-unsafe impl<W: ComponentWorld, D: QueryData + 'static, F: QueryFilter + 'static> SystemParam
-    for Populated<'_, '_, W, D, F>
+unsafe impl<D: QueryData + 'static, F: QueryFilter + 'static, W: ComponentWorld> SystemParam
+    for Populated<'_, '_, D, F, W>
 {
     type State = QueryState<D, F>;
-    type Item<'w, 's> = Populated<'w, 's, W, D, F>;
+    type Item<'w, 's> = Populated<'w, 's, D, F, W>;
     type World = W;
 
     fn init_state(world: UnsafeWorldCell, system_meta: &mut SystemMeta) -> Self::State {
-        Query::<W, D, F>::init_state(world, system_meta)
+        Query::<D, W, F>::init_state(world, system_meta)
     }
 
     unsafe fn new_archetype(
@@ -565,7 +565,7 @@ unsafe impl<W: ComponentWorld, D: QueryData + 'static, F: QueryFilter + 'static>
         system_meta: &mut SystemMeta,
     ) {
         // SAFETY: Delegate to existing `SystemParam` implementations.
-        unsafe { Query::<W, D, F>::new_archetype(state, archetype, system_meta) };
+        unsafe { Query::<D, F, W>::new_archetype(state, archetype, system_meta) };
     }
 
     #[inline]
@@ -576,7 +576,7 @@ unsafe impl<W: ComponentWorld, D: QueryData + 'static, F: QueryFilter + 'static>
         change_tick: Tick,
     ) -> Self::Item<'w, 's> {
         // SAFETY: Delegate to existing `SystemParam` implementations.
-        let query = unsafe { Query::<W, D, F>::get_param(state, system_meta, world, change_tick) };
+        let query = unsafe { Query::<D, F, W>::get_param(state, system_meta, world, change_tick) };
         Populated(query)
     }
 
@@ -601,8 +601,8 @@ unsafe impl<W: ComponentWorld, D: QueryData + 'static, F: QueryFilter + 'static>
 }
 
 // SAFETY: QueryState is constrained to read-only fetches, so it only reads World.
-unsafe impl<'w, 's, W: ComponentWorld, D: ReadOnlyQueryData + 'static, F: QueryFilter + 'static>
-    ReadOnlySystemParam for Populated<'w, 's, W, D, F>
+unsafe impl<'w, 's, D: ReadOnlyQueryData + 'static, F: QueryFilter + 'static, W: ComponentWorld>
+    ReadOnlySystemParam for Populated<'w, 's, D, F, W>
 {
 }
 
@@ -922,7 +922,7 @@ unsafe impl<'a, T: Resource> SystemParam for Option<Res<'a, T>> {
     type Item<'w, 's> = Option<Res<'w, T>>;
     type World = ResourceWorld;
 
-    fn init_state(world: &mut World, system_meta: &mut SystemMeta) -> Self::State {
+    fn init_state(world: UnsafeWorldCell, system_meta: &mut SystemMeta) -> Self::State {
         Res::<T>::init_state(world, system_meta)
     }
 
@@ -2151,7 +2151,7 @@ pub mod lifetimeless {
     use crate::world::{ComponentWorld, WorldLabel};
 
     /// A [`Query`](super::Query) with `'static` lifetimes.
-    pub type SQuery<W: ComponentWorld, D, F = ()> = super::Query<'static, 'static, W, D, F>;
+    pub type SQuery<W: ComponentWorld, D, F = ()> = super::Query<'static, 'static, D, F, W>;
     /// A shorthand for writing `&'static T`.
     pub type Read<T> = &'static T;
     /// A shorthand for writing `&'static mut T`.
@@ -2735,7 +2735,7 @@ mod tests {
             D: QueryData + Send + Sync + 'static,
             F: QueryFilter + Send + Sync + 'static = (),
         > {
-            _query: Query<'w, 's, W, D, F>,
+            _query: Query<'w, 's, D, F, W>,
         }
 
         fn my_system(_: SpecialQuery<MainWorld, (), ()>) {}
