@@ -23,6 +23,7 @@ pub use crate::{
     change_detection::{Mut, Ref, CHECK_TICK_THRESHOLD},
     world::command_queue::CommandQueue,
 };
+use bevy_ecs_macros::impl_many_world_tuple;
 pub use bevy_ecs_macros::FromWorld;
 use bevy_utils::TypeIdMap;
 pub use component_constants::*;
@@ -35,6 +36,7 @@ pub use entity_ref::{
 pub use filtered_resource::*;
 use identifier::WorldsId;
 pub use spawn_batch::*;
+use variadics_please::all_tuples;
 
 #[expect(
     deprecated,
@@ -76,7 +78,7 @@ use bevy_platform_support::sync::atomic::{AtomicU32, Ordering};
 use bevy_ptr::{OwningPtr, Ptr, UnsafeCellDeref};
 use core::{any::TypeId, fmt, mem::transmute, ptr};
 use log::warn;
-use unsafe_world_cell::{UnsafeEntityCell, UnsafeWorldCell};
+use unsafe_world_cell::{UnsafeEntityCell, UnsafeWorldCell, UnsafeWorldsCell};
 
 #[derive(Clone, Copy, Debug)]
 pub struct WorldId(usize);
@@ -85,14 +87,6 @@ pub struct Worlds {
     id: WorldsId,
     pub(crate) indices: TypeIdMap<WorldId>,
     pub(crate) worlds: Vec<World<InvalidWorld>>,
-
-    pub(crate) change_tick: AtomicU32,
-    pub(crate) last_change_tick: Tick,
-
-    pub(crate) components: Components,
-    pub(crate) component_ids: ComponentIds,
-    pub(crate) resources: Resources<true>,
-    pub(crate) non_send_resources: Resources<false>,
 }
 
 impl Default for Worlds {
@@ -101,14 +95,6 @@ impl Default for Worlds {
             id: WorldsId::new().unwrap(),
             indices: TypeIdMap::default(),
             worlds: Vec::with_capacity(2),
-
-            change_tick: AtomicU32::new(1),
-            last_change_tick: Tick::new(0),
-
-            components: Default::default(),
-            component_ids: Default::default(),
-            resources: Default::default(),
-            non_send_resources: Default::default(),
         };
 
         world.create_world::<MainWorld>();
@@ -117,24 +103,13 @@ impl Default for Worlds {
     }
 }
 
-pub trait WorldLabel: Send + Sync + 'static {}
-pub trait ComponentWorld: WorldLabel {}
-
-pub struct MainWorld;
-pub struct ResourceWorld;
-pub struct InvalidWorld;
-pub struct InvalidComponentWorld;
-
-impl WorldLabel for MainWorld {}
-impl ComponentWorld for MainWorld {}
-impl WorldLabel for ResourceWorld {}
-impl WorldLabel for InvalidWorld {}
-impl WorldLabel for InvalidComponentWorld {}
-impl ComponentWorld for InvalidComponentWorld {}
-
 impl Worlds {
     pub fn new() -> Self {
         Self::default()
+    }
+
+    pub fn as_unsafe_cell(&mut self) -> UnsafeWorldsCell<'_> {
+        UnsafeWorldsCell::new_mutable(self)
     }
 
     pub fn create_world<T: ComponentWorld>(&mut self) -> WorldId {
@@ -155,6 +130,14 @@ impl Worlds {
             .push(World::<ResourceWorld>::new(id).as_invalid_world());
 
         id
+    }
+
+    pub fn get_worlds(&self) -> &Vec<World<InvalidWorld>> {
+        &self.worlds
+    }
+
+    pub fn get_worlds_mut(&self) -> &mut Vec<World<InvalidWorld>> {
+        &mut self.worlds
     }
 
     pub fn get_world<T: WorldLabel>(&self) -> &World<T> {
@@ -198,12 +181,60 @@ impl Worlds {
     }
 }
 
+pub trait WorldLabel: Send + Sync + 'static {}
+pub trait ComponentWorld: WorldLabel {}
+
+pub struct MainWorld;
+pub struct ResourceWorld;
+pub struct InvalidWorld;
+pub struct InvalidComponentWorld;
+
+impl WorldLabel for MainWorld {}
+impl ComponentWorld for MainWorld {}
+impl WorldLabel for ResourceWorld {}
+impl WorldLabel for InvalidWorld {}
+impl WorldLabel for InvalidComponentWorld {}
+impl ComponentWorld for InvalidComponentWorld {}
+
+pub trait ManyWorldLabel {
+    type World<'w>;
+
+    // fn get<'w>(worlds: UnsafeWorldsCell<'w>) -> Self::World<'w>;
+    fn get_mut<'w>(worlds: UnsafeWorldsCell<'w>) -> Self::World<'w>;
+}
+
+impl ManyWorldLabel for () {
+    type World<'w> = ();
+
+    fn get_mut<'w>(_worlds: UnsafeWorldsCell<'w>) -> Self::World<'w> {}
+}
+
+impl<W: WorldLabel> ManyWorldLabel for W {
+    type World<'w> = UnsafeWorldCell<'w>;
+
+    fn get_mut<'w>(worlds: UnsafeWorldsCell<'w>) -> Self::World<'w> {
+        unsafe { worlds.get_unsafe_world_cell_mut::<W>() }
+    }
+}
+
+all_tuples!(impl_many_world_tuple, 1, 16, W);
+
+pub struct AllWorlds;
+
+impl ManyWorldLabel for AllWorlds {
+    type World<'w> = UnsafeWorldsCell<'w>;
+
+    fn get_mut<'w>(worlds: UnsafeWorldsCell<'w>) -> Self::World<'w> {
+        worlds
+    }
+}
+
 // TODO: Check if Components takes up more space than Resources.
 pub enum Storage {
     Components {
         entities: Entities<InvalidComponentWorld>,
         archetypes: Archetypes<InvalidComponentWorld>,
-        bundles: Bundles,
+        bundles: Bundles<InvalidComponentWorld>,
         sparse_sets: SparseSets,
         tables: Tables,
     },

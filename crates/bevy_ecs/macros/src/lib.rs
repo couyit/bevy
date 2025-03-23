@@ -15,8 +15,9 @@ use proc_macro::TokenStream;
 use proc_macro2::{Span, TokenStream as TokenStream2};
 use quote::{format_ident, quote};
 use syn::{
-    parse_macro_input, parse_quote, punctuated::Punctuated, spanned::Spanned, token::Comma,
-    ConstParam, Data, DataStruct, DeriveInput, GenericParam, Index, TypeParam,
+    parse::Parse, parse_macro_input, parse_quote, punctuated::Punctuated, spanned::Spanned,
+    token::Comma, ConstParam, Data, DataStruct, DeriveInput, GenericParam, Ident, Index, Token,
+    TypeParam,
 };
 
 enum BundleFieldKind {
@@ -343,31 +344,6 @@ pub fn derive_system_param(input: TokenStream) -> TokenStream {
         }
     }
 
-    if !generics.type_params().any(|ty| {
-        if ty.ident == "W" {
-            ty.bounds.iter().any(|bound| {
-                if let syn::TypeParamBound::Trait(trait_bound) = bound {
-                    trait_bound
-                        .path
-                        .segments
-                        .last()
-                        .is_some_and(|segment| segment.ident == "WorldLabel")
-                } else {
-                    false
-                }
-            })
-        } else {
-            false
-        }
-    }) {
-        return syn::Error::new_spanned(
-            generics,
-            "SystemParam needs W: WorldLabel generics parameter.",
-        )
-        .into_compile_error()
-        .into();
-    }
-
     let (_impl_generics, ty_generics, where_clause) = generics.split_for_impl();
 
     let lifetimeless_generics: Vec<_> = generics
@@ -509,9 +485,9 @@ pub fn derive_system_param(input: TokenStream) -> TokenStream {
             {
                 type State = #state_struct_name<#punctuated_generic_idents>;
                 type Item<'w, 's> = #struct_name #ty_generics;
-                type World = W;
+                type World = <#fields_alias::<'static, 'static, #punctuated_generic_idents> as #path::system::SystemParam>::World;
 
-                fn init_state(world: #path::world::unsafe_world_cell::UnsafeWorldCell, system_meta: &mut #path::system::SystemMeta) -> Self::State {
+                fn init_state<'w>(world: <Self::World as #path::world::ManyWorldLabel>::World<'w>, system_meta: & mut #path::system::SystemMeta) -> Self::State {
                     #state_struct_name {
                         state: #fields_alias::<'_, '_, #punctuated_generic_idents>::init_state(world, system_meta),
                     }
@@ -522,11 +498,11 @@ pub fn derive_system_param(input: TokenStream) -> TokenStream {
                     unsafe { #fields_alias::<'_, '_, #punctuated_generic_idents>::new_archetype(&mut state.state, archetype, system_meta) }
                 }
 
-                fn apply(state: &mut Self::State, system_meta: &#path::system::SystemMeta, world: #path::world::unsafe_world_cell::UnsafeWorldCell) {
+                fn apply<'w, 's>(state: &'s mut Self::State, system_meta: &#path::system::SystemMeta, world: <Self::World as #path::world::ManyWorldLabel>::World<'w>) {
                     #fields_alias::<'_, '_, #punctuated_generic_idents>::apply(&mut state.state, system_meta, world);
                 }
 
-                fn queue(state: &mut Self::State, system_meta: &#path::system::SystemMeta, world: #path::world::DeferredWorld) {
+                fn queue<'w, 's>(state: &'s mut Self::State, system_meta: &#path::system::SystemMeta, world: <Self::World as #path::world::ManyWorldLabel>::World<'w>) {
                     #fields_alias::<'_, '_, #punctuated_generic_idents>::queue(&mut state.state, system_meta, world);
                 }
 
@@ -534,7 +510,7 @@ pub fn derive_system_param(input: TokenStream) -> TokenStream {
                 unsafe fn validate_param<'w, 's>(
                     state: &'s Self::State,
                     system_meta: &#path::system::SystemMeta,
-                    world: #path::world::unsafe_world_cell::UnsafeWorldCell<'w>,
+                    world: <Self::World as #path::world::ManyWorldLabel>::World<'w>,
                 ) -> bool {
                     <(#(#tuple_types,)*)>::validate_param(&state.state, system_meta, world)
                 }
@@ -543,7 +519,7 @@ pub fn derive_system_param(input: TokenStream) -> TokenStream {
                 unsafe fn get_param<'w, 's>(
                     state: &'s mut Self::State,
                     system_meta: &#path::system::SystemMeta,
-                    world: #path::world::unsafe_world_cell::UnsafeWorldCell<'w>,
+                    world: <Self::World as #path::world::ManyWorldLabel>::World<'w>,
                     change_tick: #path::component::Tick,
                 ) -> Self::Item<'w, 's> {
                     let (#(#tuple_patterns,)*) = <(#(#tuple_types,)*)>::get_param(&mut state.state, system_meta, world, change_tick);
@@ -693,4 +669,43 @@ pub fn derive_from_world(input: TokenStream) -> TokenStream {
                 }
             }
     })
+}
+
+struct ManyWorldTupleInput(Punctuated<Ident, Token![,]>);
+
+impl Parse for ManyWorldTupleInput {
+    fn parse(input: syn::parse::ParseStream) -> syn::Result<Self> {
+        Ok(Self(Punctuated::parse_separated_nonempty(input)?))
+    }
+}
+
+#[proc_macro]
+pub fn impl_many_world_tuple(input: TokenStream) -> TokenStream {
+    let bevy_ecs_path = bevy_ecs_path();
+
+    let idents = parse_macro_input!(input as ManyWorldTupleInput);
+    let idents = idents.0.into_iter();
+
+    let type_params = idents.clone();
+    let tuple_types = idents.clone();
+    let get_mut_calls = idents.clone().map(|ident| {
+        quote! { #ident::get_mut(worlds), }
+    });
+    let cells = idents.clone().map(|ident| {
+        quote! {
+            #ident::World<'w>,
+        }
+    });
+
+    let expanded = quote! {
+        impl<#( #type_params: #bevy_ecs_path::world::ManyWorldLabel ),*> #bevy_ecs_path::world::ManyWorldLabel for ( #( #tuple_types, )* ) {
+            type World<'w> = ( #( #cells )* );
+
+            fn get_mut<'w>(worlds: #bevy_ecs_path::world::unsafe_world_cell::UnsafeWorldsCell<'w>) -> Self::World<'w> {
+                ( #( #get_mut_calls )* )
+            }
+        }
+    };
+
+    TokenStream::from(expanded)
 }

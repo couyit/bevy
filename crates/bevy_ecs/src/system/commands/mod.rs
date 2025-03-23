@@ -101,19 +101,19 @@ use crate::{
 /// The [`error`](crate::error) module provides some simple error handlers for convenience.
 ///
 /// [`ApplyDeferred`]: crate::schedule::ApplyDeferred
-pub struct Commands<'w, 's, W: ComponentWorld> {
+pub struct Commands<'w, 's, W: WorldLabel> {
     queue: InternalQueue<'s>,
-    entities: &'w Entities<W>,
+    entities: &'w Entities<InvalidComponentWorld>,
     marker: PhantomData<W>,
 }
 
-pub type TypeErasedCommands<'w, 's> = Commands<'w, 's, InvalidComponentWorld>;
+pub type TypeErasedCommands<'w, 's> = Commands<'w, 's, InvalidWorld>;
 
 // SAFETY: All commands [`Command`] implement [`Send`]
-unsafe impl<W: ComponentWorld> Send for Commands<'_, '_, W> {}
+unsafe impl<W: WorldLabel> Send for Commands<'_, '_, W> {}
 
 // SAFETY: `Commands` never gives access to the inner commands.
-unsafe impl<W: ComponentWorld> Sync for Commands<'_, '_, W> {}
+unsafe impl<W: WorldLabel> Sync for Commands<'_, '_, W> {}
 
 const _: () = {
     type __StructFieldsAlias<'w, 's> = (Deferred<'s, CommandQueue>, &'w Entities);
@@ -122,15 +122,13 @@ const _: () = {
         state: <__StructFieldsAlias<'static, 'static> as bevy_ecs::system::SystemParam>::State,
     }
     // SAFETY: Only reads Entities
-    unsafe impl<W: ComponentWorld> bevy_ecs::system::SystemParam for Commands<'_, '_, W> {
+    unsafe impl<W: WorldLabel> bevy_ecs::system::SystemParam for Commands<'_, '_, W> {
         type State = FetchState;
-
         type Item<'w, 's> = Commands<'w, 's, W>;
-
         type World = W;
 
         fn init_state(
-            world: &mut World,
+            world: UnsafeWorldCell,
             system_meta: &mut bevy_ecs::system::SystemMeta,
         ) -> Self::State {
             FetchState {

@@ -2,7 +2,7 @@
 
 use super::{
     ComponentWorld, InvalidComponentWorld, InvalidWorld, Mut, Ref, ResourceWorld, World, WorldId,
-    WorldLabel,
+    WorldLabel, Worlds,
 };
 use crate::{
     archetype::{Archetype, Archetypes},
@@ -22,6 +22,38 @@ use bevy_platform_support::sync::atomic::Ordering;
 use bevy_ptr::{Ptr, UnsafeCellDeref};
 use core::{any::TypeId, cell::UnsafeCell, fmt::Debug, marker::PhantomData, panic::Location, ptr};
 use thiserror::Error;
+
+#[derive(Copy, Clone)]
+pub struct UnsafeWorldsCell<'w> {
+    ptr: *mut Worlds,
+    _marker: PhantomData<(&'w Worlds, &'w UnsafeCell<Worlds>)>,
+}
+
+unsafe impl Send for UnsafeWorldsCell<'_> {}
+unsafe impl Sync for UnsafeWorldsCell<'_> {}
+
+impl<'w> From<&'w mut Worlds> for UnsafeWorldsCell<'w> {
+    fn from(value: &'w mut Worlds) -> Self {
+        value.as_unsafe_cell()
+    }
+}
+
+impl<'w> UnsafeWorldsCell<'w> {
+    pub(crate) fn new_mutable<W: WorldLabel>(worlds: &'w mut Worlds) -> Self {
+        Self {
+            ptr: ptr::from_mut(worlds),
+            _marker: PhantomData,
+        }
+    }
+
+    pub unsafe fn get_mut(self) -> &'w mut Worlds {
+        unsafe { &mut *self.ptr }
+    }
+
+    pub unsafe fn get_unsafe_world_cell_mut<W: WorldLabel>(self) -> UnsafeWorldCell<'w> {
+        unsafe { self.get_mut().get_world_mut::<W>().as_unsafe_world_cell() }
+    }
+}
 
 /// Variant of the [`World`] where resource and component accesses take `&self`, and the responsibility to avoid
 /// aliasing violations are given to the caller instead of being checked at compile-time by rust's unique XOR shared rule.

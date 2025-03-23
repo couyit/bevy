@@ -16,23 +16,23 @@ use crate::{
     world::{error::EntityMutableFetchError, EntityFetcher, WorldEntityFetch},
 };
 
-use super::{unsafe_world_cell::UnsafeWorldCell, Mut, World, ON_INSERT, ON_REPLACE};
+use super::{unsafe_world_cell::UnsafeWorldCell, Mut, World, WorldLabel, ON_INSERT, ON_REPLACE};
 
 /// A [`World`] reference that disallows structural ECS changes.
 /// This includes initializing resources, registering components or spawning entities.
 ///
 /// This means that in order to add entities, for example, you will need to use commands instead of the world directly.
-pub struct DeferredWorld<'w> {
+pub struct DeferredWorld<'w, W: WorldLabel> {
     // SAFETY: Implementors must not use this reference to make structural changes
     world: UnsafeWorldCell<'w>,
 }
 
-impl<'w> Deref for DeferredWorld<'w> {
-    type Target = World;
+impl<'w, W: WorldLabel> Deref for DeferredWorld<'w, W> {
+    type Target = World<W>;
 
     fn deref(&self) -> &Self::Target {
         // SAFETY: Structural changes cannot be made through &World
-        unsafe { self.world.world() }
+        unsafe { self.world.world().as_world() }
     }
 }
 
@@ -43,29 +43,29 @@ impl<'w> UnsafeWorldCell<'w> {
     /// Caller must ensure there are no outstanding mutable references to world and no
     /// outstanding references to the world's command queue, resource or component data
     #[inline]
-    pub unsafe fn into_deferred(self) -> DeferredWorld<'w> {
+    pub unsafe fn into_deferred<W: WorldLabel>(self) -> DeferredWorld<'w, W> {
         DeferredWorld { world: self }
     }
 }
 
-impl<'w> From<&'w mut World> for DeferredWorld<'w> {
-    fn from(world: &'w mut World) -> DeferredWorld<'w> {
+impl<'w, W: WorldLabel> From<&'w mut World<W>> for DeferredWorld<'w, W> {
+    fn from(world: &'w mut World<W>) -> DeferredWorld<'w, W> {
         DeferredWorld {
             world: world.as_unsafe_world_cell(),
         }
     }
 }
 
-impl<'w> DeferredWorld<'w> {
+impl<'w, W: WorldLabel> DeferredWorld<'w, W> {
     /// Reborrow self as a new instance of [`DeferredWorld`]
     #[inline]
-    pub fn reborrow(&mut self) -> DeferredWorld {
+    pub fn reborrow(&mut self) -> DeferredWorld<W> {
         DeferredWorld { world: self.world }
     }
 
     /// Creates a [`Commands`] instance that pushes to the world's command queue
     #[inline]
-    pub fn commands(&mut self) -> Commands {
+    pub fn commands(&mut self) -> Commands<W> {
         // SAFETY: &mut self ensure that there are no outstanding accesses to the queue
         let command_queue = unsafe { self.world.get_raw_command_queue() };
         // SAFETY: command_queue is stored on world and always valid while the world exists
