@@ -11,7 +11,7 @@ fn main() {
 }
 
 fn setup(
-    mut commands: EntityCommands,
+    mut commands: ComponentCommands,
     asset_server: Res<AssetServer>,
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<StandardMaterial>>,

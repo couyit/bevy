@@ -24,7 +24,7 @@ use bevy_ecs::{
     reflect::ReflectComponent,
     resource::Resource,
     schedule::IntoScheduleConfigs as _,
-    system::{lifetimeless::Read, EntityCommands, Query, Res, ResMut},
+    system::{lifetimeless::Read, ComponentCommands, Query, Res, ResMut},
     world::{FromWorld, World},
 };
 use bevy_image::BevyDefault as _;
@@ -539,7 +539,7 @@ impl FromWorld for DepthOfFieldGlobalBindGroupLayout {
 /// Creates the bind group layouts for the depth of field effect that are
 /// specific to each view.
 pub fn prepare_depth_of_field_view_bind_group_layouts(
-    mut commands: EntityCommands,
+    mut commands: ComponentCommands,
     view_targets: Query<(Entity, &DepthOfField, &Msaa)>,
     render_device: Res<RenderDevice>,
 ) {
@@ -634,7 +634,7 @@ pub fn prepare_depth_of_field_global_bind_group(
 /// Creates the second render target texture that the first pass of the bokeh
 /// effect needs.
 pub fn prepare_auxiliary_depth_of_field_textures(
-    mut commands: EntityCommands,
+    mut commands: ComponentCommands,
     render_device: Res<RenderDevice>,
     mut texture_cache: ResMut<TextureCache>,
     mut view_targets: Query<(Entity, &ViewTarget, &DepthOfField)>,
@@ -667,7 +667,7 @@ pub fn prepare_auxiliary_depth_of_field_textures(
 
 /// Specializes the depth of field pipelines specific to a view.
 pub fn prepare_depth_of_field_pipelines(
-    mut commands: EntityCommands,
+    mut commands: ComponentCommands,
     pipeline_cache: Res<PipelineCache>,
     mut pipelines: ResMut<SpecializedRenderPipelines<DepthOfFieldPipeline>>,
     global_bind_group_layout: Res<DepthOfFieldGlobalBindGroupLayout>,
@@ -817,7 +817,7 @@ impl SpecializedRenderPipeline for DepthOfFieldPipeline {
 
 /// Extracts all [`DepthOfField`] components into the render world.
 fn extract_depth_of_field_settings(
-    mut commands: EntityCommands,
+    mut commands: ComponentCommands,
     mut query: Extract<Query<(RenderEntity, &DepthOfField, &Projection)>>,
 ) {
     if !DEPTH_TEXTURE_SAMPLING_SUPPORTED {

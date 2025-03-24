@@ -49,7 +49,7 @@ fn main() {
 }
 
 fn setup(
-    mut commands: EntityCommands,
+    mut commands: ComponentCommands,
     assets: Res<AssetServer>,
     mut texture_atlases: ResMut<Assets<TextureAtlasLayout>>,
 ) {

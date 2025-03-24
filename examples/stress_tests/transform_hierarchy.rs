@@ -268,7 +268,7 @@ fn set_translation(translation: &mut Vec3, a: f32) {
     translation.y = ops::sin(a) * 32.0;
 }
 
-fn setup(mut commands: EntityCommands, cfg: Res<Cfg>) {
+fn setup(mut commands: ComponentCommands, cfg: Res<Cfg>) {
     warn!(include_str!("warning_string.txt"));
 
     commands.spawn((Camera2d, Transform::from_xyz(0.0, 0.0, 100.0)));
@@ -353,7 +353,7 @@ impl InsertResult {
 /// the parent map must be ordered (parent must exist before child)
 fn spawn_tree(
     parent_map: &[usize],
-    commands: &mut EntityCommands,
+    commands: &mut ComponentCommands,
     update_filter: &UpdateFilter,
     root_transform: Transform,
 ) -> InsertResult {

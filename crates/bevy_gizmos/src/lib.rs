@@ -105,7 +105,7 @@ use {
         query::ROQueryItem,
         system::{
             lifetimeless::{Read, SRes},
-            EntityCommands, SystemParamItem,
+            ComponentCommands, SystemParamItem,
         },
     },
     bevy_math::{Affine3, Affine3A},
@@ -420,7 +420,7 @@ fn update_gizmo_meshes<Config: GizmoConfigGroup>(
 
 #[cfg(feature = "bevy_render")]
 fn extract_gizmo_data(
-    mut commands: EntityCommands,
+    mut commands: ComponentCommands,
     handles: Extract<Res<GizmoHandles>>,
     config: Extract<Res<GizmoConfigStore>>,
 ) {
@@ -607,7 +607,7 @@ struct LineGizmoUniformBindgroup {
 
 #[cfg(feature = "bevy_render")]
 fn prepare_line_gizmo_bind_group(
-    mut commands: EntityCommands,
+    mut commands: ComponentCommands,
     line_gizmo_uniform_layout: Res<LineGizmoUniformBindgroupLayout>,
     render_device: Res<RenderDevice>,
     line_gizmo_uniforms: Res<ComponentUniforms<LineGizmoUniform>>,

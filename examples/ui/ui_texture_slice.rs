@@ -44,7 +44,7 @@ fn button_system(
     }
 }
 
-fn setup(mut commands: EntityCommands, asset_server: Res<AssetServer>) {
+fn setup(mut commands: ComponentCommands, asset_server: Res<AssetServer>) {
     let image = asset_server.load("textures/fantasy_ui_borders/panel-border-010.png");
 
     let slicer = TextureSlicer {

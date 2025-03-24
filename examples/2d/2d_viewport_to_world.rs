@@ -139,7 +139,7 @@ fn controls(
 }
 
 fn setup(
-    mut commands: EntityCommands,
+    mut commands: ComponentCommands,
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<ColorMaterial>>,
     window: Single<&Window>,

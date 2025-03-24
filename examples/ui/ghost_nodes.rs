@@ -23,7 +23,7 @@ fn main() {
 #[derive(Component)]
 struct Counter(i32);
 
-fn setup(mut commands: EntityCommands, asset_server: Res<AssetServer>) {
+fn setup(mut commands: ComponentCommands, asset_server: Res<AssetServer>) {
     let font_handle = asset_server.load("fonts/FiraSans-Bold.ttf");
 
     commands.spawn(Camera2d);

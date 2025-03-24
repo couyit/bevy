@@ -69,7 +69,7 @@ struct ReadbackBuffer(Handle<ShaderStorageBuffer>);
 struct ReadbackImage(Handle<Image>);
 
 fn setup(
-    mut commands: EntityCommands,
+    mut commands: ComponentCommands,
     mut images: ResMut<Assets<Image>>,
     mut buffers: ResMut<Assets<ShaderStorageBuffer>>,
 ) {
@@ -131,7 +131,7 @@ fn setup(
 struct GpuBufferBindGroup(BindGroup);
 
 fn prepare_bind_group(
-    mut commands: EntityCommands,
+    mut commands: ComponentCommands,
     pipeline: Res<ComputePipeline>,
     render_device: Res<RenderDevice>,
     buffer: Res<ReadbackBuffer>,

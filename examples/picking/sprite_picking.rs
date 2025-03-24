@@ -28,7 +28,7 @@ fn move_sprite(
 }
 
 /// Set up a scene that tests all sprite anchor types.
-fn setup(mut commands: EntityCommands, asset_server: Res<AssetServer>) {
+fn setup(mut commands: ComponentCommands, asset_server: Res<AssetServer>) {
     commands.spawn(Camera2d);
 
     let len = 128.0;
@@ -121,7 +121,7 @@ fn animate_sprite(
 }
 
 fn setup_atlas(
-    mut commands: EntityCommands,
+    mut commands: ComponentCommands,
     asset_server: Res<AssetServer>,
     mut texture_atlas_layouts: ResMut<Assets<TextureAtlasLayout>>,
 ) {

@@ -812,7 +812,7 @@ mod tests {
     use crate::{
         prelude::Resource,
         schedule::{ExecutorKind, IntoScheduleConfigs, Schedule},
-        system::EntityCommands,
+        system::ComponentCommands,
         world::World,
     };
 
@@ -828,7 +828,7 @@ mod tests {
             (
                 (|| {}).run_if(|| false),
                 // This system depends on a system that is always skipped.
-                |mut commands: EntityCommands| {
+                |mut commands: ComponentCommands| {
                     commands.insert_resource(R);
                 },
             )
@@ -846,7 +846,7 @@ mod tests {
         let mut world = World::new();
         let mut schedule = Schedule::default();
         schedule.set_executor_kind(ExecutorKind::MultiThreaded);
-        schedule.add_systems(((|_: EntityCommands| {}), |_: EntityCommands| {}).chain());
+        schedule.add_systems(((|_: ComponentCommands| {}), |_: ComponentCommands| {}).chain());
         schedule.run(&mut world);
     }
 }

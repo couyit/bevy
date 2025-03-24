@@ -43,7 +43,7 @@ struct SeededRng(ChaCha8Rng);
 // Setup
 
 fn setup(
-    mut commands: EntityCommands,
+    mut commands: ComponentCommands,
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<StandardMaterial>>,
     asset_server: Res<AssetServer>,

@@ -90,7 +90,7 @@ pub mod prelude {
         },
         spawn::{Spawn, SpawnRelated},
         system::{
-            Command, EntityCommands, Deferred, EntityCommand, EntityCommands, In, InMut, InRef,
+            Command, ComponentCommands, Deferred, EntityCommand, EntityCommands, In, InMut, InRef,
             IntoSystem, Local, NonSend, NonSendMut, ParamSet, Populated, Query, ReadOnlySystem,
             Res, ResMut, Single, System, SystemIn, SystemInput, SystemParamBuilder,
             SystemParamFunction, WithParamWarnPolicy,

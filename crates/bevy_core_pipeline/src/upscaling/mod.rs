@@ -37,7 +37,7 @@ impl Plugin for UpscalingPlugin {
 pub struct ViewUpscalingPipeline(CachedRenderPipelineId);
 
 fn prepare_view_upscaling_pipelines(
-    mut commands: EntityCommands,
+    mut commands: ComponentCommands,
     mut pipeline_cache: ResMut<PipelineCache>,
     mut pipelines: ResMut<SpecializedRenderPipelines<BlitPipeline>>,
     blit_pipeline: Res<BlitPipeline>,

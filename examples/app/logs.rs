@@ -17,7 +17,7 @@ fn main() {
         .run();
 }
 
-fn setup(mut commands: EntityCommands) {
+fn setup(mut commands: ComponentCommands) {
     commands.spawn(Camera2d);
     commands.spawn((
         Text::new("Press P to panic"),

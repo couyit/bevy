@@ -66,7 +66,7 @@ use crate::{
     removal_detection::RemovedComponentEvents,
     resource::Resource,
     schedule::{Schedule, ScheduleLabel, Schedules},
-    system::EntityCommands,
+    system::ComponentCommands,
     world::{
         command_queue::RawCommandQueue,
         error::{
@@ -1013,10 +1013,10 @@ impl<W: ComponentWorld> World<W> {
     /// Creates a new [`Commands`] instance that writes to the world's command queue
     /// Use [`World::flush`] to apply all queued commands
     #[inline]
-    pub fn commands(&mut self) -> EntityCommands<W> {
+    pub fn commands(&mut self) -> ComponentCommands<W> {
         // SAFETY: command_queue is stored on world and always valid while the world exists
         unsafe {
-            EntityCommands::new_raw_from_entities(self.command_queue.clone(), self.entities())
+            ComponentCommands::new_raw_from_entities(self.command_queue.clone(), self.entities())
         }
     }
 
@@ -1454,7 +1454,7 @@ impl<W: ComponentWorld> World<W> {
     /// # assert_eq!(world.get::<TargetedBy>(e1).unwrap().0, eid);
     /// # assert_eq!(world.get::<TargetedBy>(e2).unwrap().0, eid);
     /// ```
-    pub fn entities_and_commands(&mut self) -> (EntityFetcher, EntityCommands<W>) {
+    pub fn entities_and_commands(&mut self) -> (EntityFetcher, ComponentCommands<W>) {
         let cell = self.as_unsafe_world_cell();
         // SAFETY: `&mut self` gives mutable access to the entire world, and prevents simultaneous access.
         let fetcher = unsafe { EntityFetcher::new(cell) };
@@ -1463,7 +1463,8 @@ impl<W: ComponentWorld> World<W> {
         // - Command queue access does not conflict with entity access.
         let raw_queue = unsafe { cell.get_raw_command_queue() };
         // SAFETY: `&mut self` ensures the commands does not outlive the world.
-        let commands = unsafe { EntityCommands::new_raw_from_entities(raw_queue, cell.entities()) };
+        let commands =
+            unsafe { ComponentCommands::new_raw_from_entities(raw_queue, cell.entities()) };
 
         (fetcher, commands)
     }

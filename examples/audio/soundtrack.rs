@@ -44,7 +44,7 @@ struct FadeIn;
 #[derive(Component)]
 struct FadeOut;
 
-fn setup(asset_server: Res<AssetServer>, mut commands: EntityCommands) {
+fn setup(asset_server: Res<AssetServer>, mut commands: ComponentCommands) {
     // Instantiate the game state resources
     commands.insert_resource(GameState::default());
     commands.insert_resource(GameStateTimer(Timer::from_seconds(
@@ -61,7 +61,7 @@ fn setup(asset_server: Res<AssetServer>, mut commands: EntityCommands) {
 
 // Every time the GameState resource changes, this system is run to trigger the song change.
 fn change_track(
-    mut commands: EntityCommands,
+    mut commands: ComponentCommands,
     soundtrack_player: Res<SoundtrackPlayer>,
     soundtrack: Query<Entity, With<AudioSink>>,
     game_state: Res<GameState>,
@@ -109,7 +109,7 @@ const FADE_TIME: f32 = 2.0;
 // Fades in the audio of entities that has the FadeIn component. Removes the FadeIn component once
 // full volume is reached.
 fn fade_in(
-    mut commands: EntityCommands,
+    mut commands: ComponentCommands,
     mut audio_sink: Query<(&mut AudioSink, Entity), With<FadeIn>>,
     time: Res<Time>,
 ) {
@@ -126,7 +126,7 @@ fn fade_in(
 // Fades out the audio of entities that has the FadeOut component. Despawns the entities once audio
 // volume reaches zero.
 fn fade_out(
-    mut commands: EntityCommands,
+    mut commands: ComponentCommands,
     mut audio_sink: Query<(&mut AudioSink, Entity), With<FadeOut>>,
     time: Res<Time>,
 ) {

@@ -37,7 +37,7 @@ struct MyProcGenImage(Handle<Image>);
 #[derive(Resource)]
 struct SeededRng(ChaCha8Rng);
 
-fn setup(mut commands: EntityCommands, mut images: ResMut<Assets<Image>>) {
+fn setup(mut commands: ComponentCommands, mut images: ResMut<Assets<Image>>) {
     commands.spawn(Camera2d);
 
     // Create an image that we are going to draw into

@@ -2063,7 +2063,7 @@ mod tests {
         schedule::{
             tests::ResMut, IntoScheduleConfigs, Schedule, ScheduleBuildSettings, SystemSet,
         },
-        system::EntityCommands,
+        system::ComponentCommands,
         world::World,
     };
 
@@ -2099,7 +2099,7 @@ mod tests {
         let mut world = World::default();
         schedule.add_systems(
             (
-                |mut commands: EntityCommands| commands.insert_resource(Resource1),
+                |mut commands: ComponentCommands| commands.insert_resource(Resource1),
                 |_: Res<Resource1>| {},
             )
                 .chain(),
@@ -2116,7 +2116,7 @@ mod tests {
         let mut world = World::default();
         schedule.add_systems(
             (
-                |mut commands: EntityCommands| commands.insert_resource(Resource1),
+                |mut commands: ComponentCommands| commands.insert_resource(Resource1),
                 |_: Res<Resource1>| {},
             )
                 .chain(),
@@ -2134,7 +2134,7 @@ mod tests {
         let mut world = World::default();
         schedule.add_systems(
             (
-                |mut commands: EntityCommands| commands.insert_resource(Resource1),
+                |mut commands: ComponentCommands| commands.insert_resource(Resource1),
                 |_: Res<Resource1>| {},
             )
                 .chain(),
@@ -2152,7 +2152,7 @@ mod tests {
         let mut world = World::default();
         schedule.add_systems(
             (
-                |mut commands: EntityCommands| commands.insert_resource(Resource1),
+                |mut commands: ComponentCommands| commands.insert_resource(Resource1),
                 |_: Res<Resource1>| {},
             )
                 .chain(),
@@ -2174,7 +2174,7 @@ mod tests {
         schedule.configure_sets(Set.run_if(|| false));
         schedule.add_systems(
             (
-                |mut commands: EntityCommands| commands.insert_resource(Resource1),
+                |mut commands: ComponentCommands| commands.insert_resource(Resource1),
                 |_: Res<Resource1>| {},
             )
                 .chain(),
@@ -2200,7 +2200,7 @@ mod tests {
         schedule.configure_sets(Set1.in_set(Set2));
         schedule.add_systems(
             (
-                |mut commands: EntityCommands| commands.insert_resource(Resource1),
+                |mut commands: ComponentCommands| commands.insert_resource(Resource1),
                 |_: Res<Resource1>| {},
             )
                 .chain(),
@@ -2220,8 +2220,8 @@ mod tests {
         schedule.add_systems(
             (
                 (
-                    |mut commands: EntityCommands| commands.insert_resource(Resource1),
-                    |mut commands: EntityCommands| commands.insert_resource(Resource2),
+                    |mut commands: ComponentCommands| commands.insert_resource(Resource1),
+                    |mut commands: ComponentCommands| commands.insert_resource(Resource2),
                 ),
                 |_: Res<Resource1>, _: Res<Resource2>| {},
             )
@@ -2235,8 +2235,8 @@ mod tests {
         // merges sync points on rebuild
         schedule.add_systems(((
             (
-                |mut commands: EntityCommands| commands.insert_resource(Resource1),
-                |mut commands: EntityCommands| commands.insert_resource(Resource2),
+                |mut commands: ComponentCommands| commands.insert_resource(Resource1),
+                |mut commands: ComponentCommands| commands.insert_resource(Resource2),
             ),
             |_: Res<Resource1>, _: Res<Resource2>| {},
         )
@@ -2253,8 +2253,8 @@ mod tests {
         // insert two consecutive command systems, it should create two sync points
         schedule.add_systems(
             (
-                |mut commands: EntityCommands| commands.insert_resource(Resource1),
-                |mut commands: EntityCommands| commands.insert_resource(Resource2),
+                |mut commands: ComponentCommands| commands.insert_resource(Resource1),
+                |mut commands: ComponentCommands| commands.insert_resource(Resource2),
                 |_: Res<Resource1>, _: Res<Resource2>| {},
             )
                 .chain(),
@@ -2271,15 +2271,15 @@ mod tests {
         // chain_ignore_deferred adds no sync points usually but an exception is made for exclusive systems
         schedule.add_systems(
             (
-                |_: EntityCommands| {},
+                |_: ComponentCommands| {},
                 // <- no sync point is added here because the following system is not exclusive
-                |mut commands: EntityCommands| commands.insert_resource(Resource1),
+                |mut commands: ComponentCommands| commands.insert_resource(Resource1),
                 // <- sync point is added here because the following system is exclusive which expects to see all commands to that point
                 |world: &mut World| assert!(world.contains_resource::<Resource1>()),
                 // <- no sync point is added here because the previous system has no deferred parameters
                 |_: &mut World| {},
                 // <- no sync point is added here because the following system is not exclusive
-                |_: EntityCommands| {},
+                |_: ComponentCommands| {},
             )
                 .chain_ignore_deferred(),
         );
@@ -2295,7 +2295,7 @@ mod tests {
 
         let insert_resource_config = (
             // the first system has deferred commands
-            |mut commands: EntityCommands| commands.insert_resource(Resource1),
+            |mut commands: ComponentCommands| commands.insert_resource(Resource1),
             // the second system has no deferred commands
             || {},
         )
@@ -2331,7 +2331,7 @@ mod tests {
         let mut world = World::default();
         schedule.add_systems(
             (
-                |mut commands: EntityCommands| commands.insert_resource(Resource1),
+                |mut commands: ComponentCommands| commands.insert_resource(Resource1),
                 |res: Option<Res<Resource1>>| assert!(res.is_none()),
             )
                 .chain(),
@@ -2344,7 +2344,7 @@ mod tests {
     mod no_sync_edges {
         use super::*;
 
-        fn insert_resource(mut commands: EntityCommands) {
+        fn insert_resource(mut commands: ComponentCommands) {
             commands.insert_resource(Resource1);
         }
 
@@ -2459,8 +2459,8 @@ mod tests {
                 schedule.add_systems(
                     (
                         (
-                            |mut commands: EntityCommands| commands.insert_resource(Ra),
-                            |mut commands: EntityCommands| commands.insert_resource(Rb),
+                            |mut commands: ComponentCommands| commands.insert_resource(Ra),
+                            |mut commands: ComponentCommands| commands.insert_resource(Rb),
                         ),
                         (
                             |res_a: Option<Res<Ra>>, res_b: Option<Res<Rb>>| {
@@ -2481,8 +2481,8 @@ mod tests {
                 schedule.add_systems(
                     (
                         (
-                            |mut commands: EntityCommands| commands.insert_resource(Ra),
-                            |mut commands: EntityCommands| commands.insert_resource(Rb),
+                            |mut commands: ComponentCommands| commands.insert_resource(Ra),
+                            |mut commands: ComponentCommands| commands.insert_resource(Rb),
                         ),
                         (
                             |res_a: Option<Res<Ra>>, res_b: Option<Res<Rb>>| {
@@ -2506,8 +2506,8 @@ mod tests {
                 schedule.add_systems(
                     (
                         (
-                            |mut commands: EntityCommands| commands.insert_resource(Ra),
-                            |mut commands: EntityCommands, res_a: Option<Res<Ra>>| {
+                            |mut commands: ComponentCommands| commands.insert_resource(Ra),
+                            |mut commands: ComponentCommands, res_a: Option<Res<Ra>>| {
                                 commands.insert_resource(Rb);
                                 assert!(res_a.is_some());
                             },
@@ -2532,8 +2532,8 @@ mod tests {
                 schedule.add_systems(
                     (
                         (
-                            |mut commands: EntityCommands| commands.insert_resource(Ra),
-                            |mut commands: EntityCommands, res_a: Option<Res<Ra>>| {
+                            |mut commands: ComponentCommands| commands.insert_resource(Ra),
+                            |mut commands: ComponentCommands, res_a: Option<Res<Ra>>| {
                                 commands.insert_resource(Rb);
                                 assert!(res_a.is_some());
                             },
@@ -2561,11 +2561,11 @@ mod tests {
                 schedule.add_systems(
                     (
                         (
-                            |mut commands: EntityCommands| commands.insert_resource(Ra),
-                            |mut commands: EntityCommands| commands.insert_resource(Rb),
+                            |mut commands: ComponentCommands| commands.insert_resource(Ra),
+                            |mut commands: ComponentCommands| commands.insert_resource(Rb),
                         ),
                         (
-                            |mut commands: EntityCommands,
+                            |mut commands: ComponentCommands,
                              res_a: Option<Res<Ra>>,
                              res_b: Option<Res<Rb>>| {
                                 commands.insert_resource(Rc);
@@ -2590,11 +2590,11 @@ mod tests {
                 schedule.add_systems(
                     (
                         (
-                            |mut commands: EntityCommands| commands.insert_resource(Ra),
-                            |mut commands: EntityCommands| commands.insert_resource(Rb),
+                            |mut commands: ComponentCommands| commands.insert_resource(Ra),
+                            |mut commands: ComponentCommands| commands.insert_resource(Rb),
                         ),
                         (
-                            |mut commands: EntityCommands,
+                            |mut commands: ComponentCommands,
                              res_a: Option<Res<Ra>>,
                              res_b: Option<Res<Rb>>| {
                                 commands.insert_resource(Rc);
@@ -2622,15 +2622,15 @@ mod tests {
                 schedule.add_systems(
                     (
                         (
-                            |mut commands: EntityCommands| commands.insert_resource(Ra),
-                            |mut commands: EntityCommands, res_a: Option<Res<Ra>>| {
+                            |mut commands: ComponentCommands| commands.insert_resource(Ra),
+                            |mut commands: ComponentCommands, res_a: Option<Res<Ra>>| {
                                 commands.insert_resource(Rb);
                                 assert!(res_a.is_some());
                             },
                         )
                             .chain(),
                         (
-                            |mut commands: EntityCommands,
+                            |mut commands: ComponentCommands,
                              res_a: Option<Res<Ra>>,
                              res_b: Option<Res<Rb>>| {
                                 commands.insert_resource(Rc);
@@ -2655,15 +2655,15 @@ mod tests {
                 schedule.add_systems(
                     (
                         (
-                            |mut commands: EntityCommands| commands.insert_resource(Ra),
-                            |mut commands: EntityCommands, res_a: Option<Res<Ra>>| {
+                            |mut commands: ComponentCommands| commands.insert_resource(Ra),
+                            |mut commands: ComponentCommands, res_a: Option<Res<Ra>>| {
                                 commands.insert_resource(Rb);
                                 assert!(res_a.is_some());
                             },
                         )
                             .chain(),
                         (
-                            |mut commands: EntityCommands,
+                            |mut commands: ComponentCommands,
                              res_a: Option<Res<Ra>>,
                              res_b: Option<Res<Rb>>| {
                                 commands.insert_resource(Rc);

@@ -15,7 +15,7 @@ fn main() {
 #[derive(Component)]
 struct MovedScene;
 
-fn setup(mut commands: EntityCommands, asset_server: Res<AssetServer>) {
+fn setup(mut commands: ComponentCommands, asset_server: Res<AssetServer>) {
     commands.spawn((
         Transform::from_xyz(4.0, 25.0, 8.0).looking_at(Vec3::ZERO, Vec3::Y),
         DirectionalLight {

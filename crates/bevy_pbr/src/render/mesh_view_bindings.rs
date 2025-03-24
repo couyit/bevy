@@ -13,7 +13,7 @@ use bevy_ecs::{
     entity::Entity,
     query::Has,
     resource::Resource,
-    system::{EntityCommands, Query, Res},
+    system::{ComponentCommands, Query, Res},
     world::{FromWorld, World},
 };
 use bevy_image::BevyDefault as _;
@@ -502,7 +502,7 @@ pub struct MeshViewBindGroup {
 }
 
 pub fn prepare_mesh_view_bind_groups(
-    mut commands: EntityCommands,
+    mut commands: ComponentCommands,
     (render_device, render_adapter): (Res<RenderDevice>, Res<RenderAdapter>),
     mesh_pipeline: Res<MeshPipeline>,
     shadow_samplers: Res<ShadowSamplers>,

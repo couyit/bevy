@@ -1,7 +1,7 @@
 use bevy_ecs::{
     event::{EventReader, EventWriter},
     schedule::{IntoScheduleConfigs, Schedule},
-    system::{EntityCommands, IntoSystem, Res, ResMut},
+    system::{ComponentCommands, IntoSystem, Res, ResMut},
 };
 use variadics_please::all_tuples;
 
@@ -97,7 +97,7 @@ impl<S: InnerStateSet> StateSet for S {
         let apply_state_transition =
             |mut parent_changed: EventReader<StateTransitionEvent<S::RawState>>,
              event: EventWriter<StateTransitionEvent<T>>,
-             commands: EntityCommands,
+             commands: ComponentCommands,
              current_state: Option<ResMut<State<T>>>,
              state_set: Option<Res<State<S::RawState>>>| {
                 if parent_changed.is_empty() {
@@ -168,7 +168,7 @@ impl<S: InnerStateSet> StateSet for S {
         let apply_state_transition =
             |mut parent_changed: EventReader<StateTransitionEvent<S::RawState>>,
              event: EventWriter<StateTransitionEvent<T>>,
-             commands: EntityCommands,
+             commands: ComponentCommands,
              current_state_res: Option<ResMut<State<T>>>,
              next_state_res: Option<ResMut<NextState<T>>>,
              state_set: Option<Res<State<S::RawState>>>| {

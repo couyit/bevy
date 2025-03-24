@@ -81,7 +81,7 @@ const SHOWCASE_TIMER_SECS: f32 = 3.0;
 const CONTRIBUTORS_LIST: &[&str] = &["Carter Anderson", "And Many More"];
 
 fn setup_contributor_selection(
-    mut commands: EntityCommands,
+    mut commands: ComponentCommands,
     asset_server: Res<AssetServer>,
     mut rng: ResMut<SharedRng>,
 ) {
@@ -135,7 +135,7 @@ fn setup_contributor_selection(
     commands.insert_resource(contributor_selection);
 }
 
-fn setup(mut commands: EntityCommands, asset_server: Res<AssetServer>) {
+fn setup(mut commands: ComponentCommands, asset_server: Res<AssetServer>) {
     commands.spawn(Camera2d);
 
     let text_style = TextFont {

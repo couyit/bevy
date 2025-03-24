@@ -6,7 +6,7 @@ use bevy_app::{App, Plugin, SubApp};
 pub use bevy_asset::RenderAssetUsages;
 use bevy_asset::{Asset, AssetEvent, AssetId, Assets};
 use bevy_ecs::{
-    prelude::{EntityCommands, EventReader, IntoScheduleConfigs, ResMut, Resource},
+    prelude::{ComponentCommands, EventReader, IntoScheduleConfigs, ResMut, Resource},
     schedule::{ScheduleConfigs, SystemSet},
     system::{ScheduleSystem, StaticSystemParam, SystemParam, SystemParamItem, SystemState},
     world::{FromWorld, Mut},
@@ -228,7 +228,7 @@ impl<A: RenderAsset> FromWorld for CachedExtractRenderAssetSystemState<A> {
 /// This system extracts all created or modified assets of the corresponding [`RenderAsset::SourceAsset`] type
 /// into the "render world".
 pub(crate) fn extract_render_asset<A: RenderAsset>(
-    mut commands: EntityCommands,
+    mut commands: ComponentCommands,
     mut main_world: ResMut<MainWorld>,
 ) {
     main_world.resource_scope(

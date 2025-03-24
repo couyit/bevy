@@ -2718,7 +2718,7 @@ impl MeshBindGroupPair {
 
 /// Creates the per-mesh bind groups for each type of mesh and each phase.
 pub fn prepare_mesh_bind_groups(
-    mut commands: EntityCommands,
+    mut commands: ComponentCommands,
     meshes: Res<RenderAssets<RenderMesh>>,
     mesh_pipeline: Res<MeshPipeline>,
     render_device: Res<RenderDevice>,

@@ -74,7 +74,7 @@ impl TargetUpdate for Target<Visibility> {
     }
 }
 
-fn setup(mut commands: EntityCommands, asset_server: Res<AssetServer>) {
+fn setup(mut commands: ComponentCommands, asset_server: Res<AssetServer>) {
     let palette: [Color; 4] = PALETTE.map(|hex| Srgba::hex(hex).unwrap().into());
 
     let text_font = TextFont {

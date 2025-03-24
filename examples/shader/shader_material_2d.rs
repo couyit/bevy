@@ -22,7 +22,7 @@ fn main() {
 
 // Setup a simple 2d scene
 fn setup(
-    mut commands: EntityCommands,
+    mut commands: ComponentCommands,
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<CustomMaterial>>,
     asset_server: Res<AssetServer>,

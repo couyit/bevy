@@ -91,7 +91,7 @@ fn main() {
     .add_systems(Update, (button_system, set_text_colors_changed));
 
     if !args.no_camera {
-        app.add_systems(Startup, |mut commands: EntityCommands| {
+        app.add_systems(Startup, |mut commands: ComponentCommands| {
             commands.spawn(Camera2d);
         });
     }
@@ -152,7 +152,7 @@ fn button_system(
     }
 }
 
-fn setup_flex(mut commands: EntityCommands, asset_server: Res<AssetServer>, args: Res<Args>) {
+fn setup_flex(mut commands: ComponentCommands, asset_server: Res<AssetServer>, args: Res<Args>) {
     let image = if 0 < args.image_freq {
         Some(asset_server.load("branding/icon.png"))
     } else {
@@ -207,7 +207,7 @@ fn setup_flex(mut commands: EntityCommands, asset_server: Res<AssetServer>, args
         });
 }
 
-fn setup_grid(mut commands: EntityCommands, asset_server: Res<AssetServer>, args: Res<Args>) {
+fn setup_grid(mut commands: ComponentCommands, asset_server: Res<AssetServer>, args: Res<Args>) {
     let image = if 0 < args.image_freq {
         Some(asset_server.load("branding/icon.png"))
     } else {
@@ -317,11 +317,11 @@ fn spawn_button(
     }
 }
 
-fn despawn_ui(mut commands: EntityCommands, root_node: Single<Entity, (With<Node>, Without<ChildOf>)>) {
+fn despawn_ui(mut commands: ComponentCommands, root_node: Single<Entity, (With<Node>, Without<ChildOf>)>) {
     commands.entity(*root_node).despawn();
 }
 
-fn setup_many_cameras(mut commands: EntityCommands, asset_server: Res<AssetServer>, args: Res<Args>) {
+fn setup_many_cameras(mut commands: ComponentCommands, asset_server: Res<AssetServer>, args: Res<Args>) {
     let image = if 0 < args.image_freq {
         Some(asset_server.load("branding/icon.png"))
     } else {

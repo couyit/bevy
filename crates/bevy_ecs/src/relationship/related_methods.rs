@@ -4,7 +4,7 @@ use crate::{
     relationship::{
         Relationship, RelationshipHookMode, RelationshipSourceCollection, RelationshipTarget,
     },
-    system::{EntityCommands, EntityCommands},
+    system::{ComponentCommands, EntityCommands},
     world::{EntityWorldMut, World},
 };
 use bevy_platform_support::prelude::{Box, Vec};
@@ -421,13 +421,13 @@ impl<'w, R: Relationship> RelatedSpawner<'w, R> {
 /// a specific entity.
 pub struct RelatedSpawnerCommands<'w, R: Relationship> {
     target: Entity,
-    commands: EntityCommands<'w, 'w>,
+    commands: ComponentCommands<'w, 'w>,
     _marker: PhantomData<R>,
 }
 
 impl<'w, R: Relationship> RelatedSpawnerCommands<'w, R> {
     /// Creates a new instance that will spawn entities targeting the `target` entity.
-    pub fn new(commands: EntityCommands<'w, 'w>, target: Entity) -> Self {
+    pub fn new(commands: ComponentCommands<'w, 'w>, target: Entity) -> Self {
         Self {
             commands,
             target,
@@ -453,12 +453,12 @@ impl<'w, R: Relationship> RelatedSpawnerCommands<'w, R> {
     }
 
     /// Returns the underlying [`Commands`].
-    pub fn commands(&mut self) -> EntityCommands {
+    pub fn commands(&mut self) -> ComponentCommands {
         self.commands.reborrow()
     }
 
     /// Returns a mutable reference to the underlying [`Commands`].
-    pub fn commands_mut(&mut self) -> &mut EntityCommands<'w, 'w> {
+    pub fn commands_mut(&mut self) -> &mut ComponentCommands<'w, 'w> {
         &mut self.commands
     }
 }

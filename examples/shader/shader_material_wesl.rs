@@ -47,7 +47,7 @@ impl Plugin for CustomMaterialPlugin {
 
 /// set up a simple 3D scene
 fn setup(
-    mut commands: EntityCommands,
+    mut commands: ComponentCommands,
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<CustomMaterial>>,
 ) {

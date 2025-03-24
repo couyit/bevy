@@ -34,7 +34,7 @@ fn main() {
         .run();
 }
 
-fn setup(mut commands: EntityCommands) {
+fn setup(mut commands: ComponentCommands) {
     commands.spawn(Camera2d);
 
     // The color spaces `Oklaba`, `Laba`, `LinearRgba`, `Srgba` and `Xyza` all are either perceptually or physically linear.
@@ -68,7 +68,7 @@ fn setup(mut commands: EntityCommands) {
     spawn_mixed_sprite(&mut commands, -275., colors.map(Oklcha::from));
 }
 
-fn spawn_curve_sprite<T: CurveColor>(commands: &mut EntityCommands, y: f32, points: [T; 4]) {
+fn spawn_curve_sprite<T: CurveColor>(commands: &mut ComponentCommands, y: f32, points: [T; 4]) {
     commands.spawn((
         Sprite::sized(Vec2::new(75., 75.)),
         Transform::from_xyz(0., y, 0.),
@@ -76,7 +76,7 @@ fn spawn_curve_sprite<T: CurveColor>(commands: &mut EntityCommands, y: f32, poin
     ));
 }
 
-fn spawn_mixed_sprite<T: MixedColor>(commands: &mut EntityCommands, y: f32, colors: [T; 4]) {
+fn spawn_mixed_sprite<T: MixedColor>(commands: &mut ComponentCommands, y: f32, colors: [T; 4]) {
     commands.spawn((
         Transform::from_xyz(0., y, 0.),
         Sprite::sized(Vec2::new(75., 75.)),

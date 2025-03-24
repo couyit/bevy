@@ -54,7 +54,7 @@ fn main() {
 }
 
 /// Spawns the objects in the scene.
-fn setup(mut commands: EntityCommands, mut meshes: ResMut<Assets<Mesh>>) {
+fn setup(mut commands: ComponentCommands, mut meshes: ResMut<Assets<Mesh>>) {
     // Build a custom triangle mesh with colors
     // We define a custom mesh because the examples only uses a limited
     // set of vertex attributes for simplicity

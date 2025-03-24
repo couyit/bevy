@@ -45,11 +45,11 @@ const NORMAL_BUTTON: Color = Color::srgb(0.15, 0.15, 0.15);
 const HOVERED_BUTTON: Color = Color::srgb(0.25, 0.25, 0.25);
 const PRESSED_BUTTON: Color = Color::srgb(0.35, 0.75, 0.35);
 
-fn setup(mut commands: EntityCommands) {
+fn setup(mut commands: ComponentCommands) {
     commands.spawn(Camera2d);
 }
 
-fn setup_menu(mut commands: EntityCommands) {
+fn setup_menu(mut commands: ComponentCommands) {
     let button_entity = commands
         .spawn((
             Node {
@@ -109,11 +109,11 @@ fn menu(
     }
 }
 
-fn cleanup_menu(mut commands: EntityCommands, menu_data: Res<MenuData>) {
+fn cleanup_menu(mut commands: ComponentCommands, menu_data: Res<MenuData>) {
     commands.entity(menu_data.button_entity).despawn();
 }
 
-fn setup_game(mut commands: EntityCommands, asset_server: Res<AssetServer>) {
+fn setup_game(mut commands: ComponentCommands, asset_server: Res<AssetServer>) {
     commands.spawn(Sprite::from_image(asset_server.load("branding/icon.png")));
 }
 

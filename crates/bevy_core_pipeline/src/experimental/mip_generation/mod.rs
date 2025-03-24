@@ -17,7 +17,7 @@ use bevy_ecs::{
     query::{Or, QueryState, With},
     resource::Resource,
     schedule::IntoScheduleConfigs as _,
-    system::{lifetimeless::Read, EntityCommands, Local, Query, Res, ResMut},
+    system::{lifetimeless::Read, ComponentCommands, Local, Query, Res, ResMut},
     world::{FromWorld, World},
 };
 use bevy_math::{uvec2, UVec2, Vec4Swizzles as _};
@@ -340,7 +340,7 @@ fn supports_compute_shaders(device: &RenderDevice, adapter: &RenderAdapter) -> b
 /// Creates the [`DownsampleDepthPipelines`] if downsampling is supported on the
 /// current platform.
 fn create_downsample_depth_pipelines(
-    mut commands: EntityCommands,
+    mut commands: ComponentCommands,
     render_device: Res<RenderDevice>,
     render_adapter: Res<RenderAdapter>,
     pipeline_cache: Res<PipelineCache>,
@@ -714,7 +714,7 @@ impl ViewDepthPyramid {
 
 /// Creates depth pyramids for views that have occlusion culling enabled.
 pub fn prepare_view_depth_pyramids(
-    mut commands: EntityCommands,
+    mut commands: ComponentCommands,
     render_device: Res<RenderDevice>,
     mut texture_cache: ResMut<TextureCache>,
     depth_pyramid_dummy_texture: Res<DepthPyramidDummyTexture>,
@@ -742,7 +742,7 @@ pub struct ViewDownsampleDepthBindGroup(BindGroup);
 /// Creates the [`ViewDownsampleDepthBindGroup`]s for all views with occlusion
 /// culling enabled.
 fn prepare_downsample_depth_view_bind_groups(
-    mut commands: EntityCommands,
+    mut commands: ComponentCommands,
     render_device: Res<RenderDevice>,
     downsample_depth_pipelines: Res<DownsampleDepthPipelines>,
     view_depth_textures: Query<

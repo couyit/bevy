@@ -18,7 +18,7 @@ const COLS: usize = 12;
 const EXTENT: Vec2 = Vec2::new(1172.0, 520.0);
 const PLOT_SIZE: Vec2 = Vec2::splat(80.0);
 
-fn setup(mut commands: EntityCommands) {
+fn setup(mut commands: ComponentCommands) {
     commands.spawn(Camera2d);
 
     let text_font = TextFont {

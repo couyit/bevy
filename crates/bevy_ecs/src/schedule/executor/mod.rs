@@ -314,7 +314,7 @@ mod tests {
     use crate::{
         prelude::{IntoScheduleConfigs, Resource, Schedule, SystemSet},
         schedule::ExecutorKind,
-        system::{EntityCommands, Res, WithParamWarnPolicy},
+        system::{ComponentCommands, Res, WithParamWarnPolicy},
         world::World,
     };
 
@@ -344,7 +344,7 @@ mod tests {
         schedule.add_systems(
             (
                 // This system depends on a system that is always skipped.
-                (|mut commands: EntityCommands| {
+                (|mut commands: ComponentCommands| {
                     commands.insert_resource(R2);
                 })
                 .warn_param_missing(),
@@ -373,13 +373,13 @@ mod tests {
         schedule.configure_sets(S1.run_if((|_: Res<R1>| true).warn_param_missing()));
         schedule.add_systems((
             // System gets skipped if system set run conditions fail validation.
-            (|mut commands: EntityCommands| {
+            (|mut commands: ComponentCommands| {
                 commands.insert_resource(R1);
             })
             .warn_param_missing()
             .in_set(S1),
             // System gets skipped if run conditions fail validation.
-            (|mut commands: EntityCommands| {
+            (|mut commands: ComponentCommands| {
                 commands.insert_resource(R2);
             })
             .warn_param_missing()

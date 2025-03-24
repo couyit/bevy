@@ -14,7 +14,7 @@ use bevy_ecs::{
     entity::Entity,
     prelude::{ReflectComponent, With},
     query::{Changed, Without},
-    system::{EntityCommands, Local, Query, Res, ResMut},
+    system::{ComponentCommands, Local, Query, Res, ResMut},
 };
 use bevy_image::prelude::*;
 use bevy_math::Vec2;
@@ -134,7 +134,7 @@ pub type Text2dWriter<'w, 's> = TextWriter<'w, 's, Text2d>;
 /// This system extracts the sprites from the 2D text components and adds them to the
 /// "render world".
 pub fn extract_text2d_sprite(
-    mut commands: EntityCommands,
+    mut commands: ComponentCommands,
     mut extracted_sprites: ResMut<ExtractedSprites>,
     texture_atlases: Extract<Res<Assets<TextureAtlasLayout>>>,
     windows: Extract<Query<&Window, With<PrimaryWindow>>>,
@@ -324,7 +324,7 @@ pub fn scale_value(value: f32, factor: f32) -> f32 {
 ///
 /// Used in system set [`VisibilitySystems::CalculateBounds`](bevy_render::view::VisibilitySystems::CalculateBounds).
 pub fn calculate_bounds_text2d(
-    mut commands: EntityCommands,
+    mut commands: ComponentCommands,
     mut text_to_update_aabb: Query<
         (
             Entity,

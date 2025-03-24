@@ -13,11 +13,11 @@ fn main() {
         .run();
 }
 
-fn setup_camera(mut commands: EntityCommands) {
+fn setup_camera(mut commands: ComponentCommands) {
     commands.spawn(Camera2d);
 }
 
-fn setup_sprites(mut commands: EntityCommands, asset_server: Res<AssetServer>) {
+fn setup_sprites(mut commands: ComponentCommands, asset_server: Res<AssetServer>) {
     let square = asset_server.load("textures/slice_square_2.png");
     let banner = asset_server.load("branding/banner.png");
 
@@ -139,7 +139,7 @@ fn setup_sprites(mut commands: EntityCommands, asset_server: Res<AssetServer>) {
 }
 
 fn setup_texture_atlas(
-    mut commands: EntityCommands,
+    mut commands: ComponentCommands,
     asset_server: Res<AssetServer>,
     mut texture_atlas_layouts: ResMut<Assets<TextureAtlasLayout>>,
 ) {

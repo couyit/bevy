@@ -35,7 +35,7 @@ impl Default for Countdown {
     }
 }
 
-fn setup(mut commands: EntityCommands) {
+fn setup(mut commands: ComponentCommands) {
     // Add an entity to the world with a timer
     commands.spawn(PrintOnCompletionTimer(Timer::from_seconds(
         5.0,

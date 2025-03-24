@@ -46,7 +46,7 @@ fn main() {
         .run();
 }
 
-fn setup(mut commands: EntityCommands, mut meshes: ResMut<Assets<Mesh>>) {
+fn setup(mut commands: ComponentCommands, mut meshes: ResMut<Assets<Mesh>>) {
     commands.spawn((
         Mesh3d(meshes.add(Cuboid::new(0.5, 0.5, 0.5))),
         InstanceMaterialData(
@@ -179,7 +179,7 @@ struct InstanceBuffer {
 }
 
 fn prepare_instance_buffers(
-    mut commands: EntityCommands,
+    mut commands: ComponentCommands,
     query: Query<(Entity, &InstanceMaterialData)>,
     render_device: Res<RenderDevice>,
 ) {

@@ -18,7 +18,7 @@ use bevy_ecs::{
     reflect::ReflectComponent,
     resource::Resource,
     schedule::IntoScheduleConfigs as _,
-    system::{lifetimeless::Read, EntityCommands, Query, Res, ResMut},
+    system::{lifetimeless::Read, ComponentCommands, Query, Res, ResMut},
     world::{FromWorld, World},
 };
 use bevy_image::BevyDefault as _;
@@ -410,7 +410,7 @@ impl FromWorld for ScreenSpaceReflectionsPipeline {
 
 /// Sets up screen space reflection pipelines for each applicable view.
 pub fn prepare_ssr_pipelines(
-    mut commands: EntityCommands,
+    mut commands: ComponentCommands,
     pipeline_cache: Res<PipelineCache>,
     mut pipelines: ResMut<SpecializedRenderPipelines<ScreenSpaceReflectionsPipeline>>,
     ssr_pipeline: Res<ScreenSpaceReflectionsPipeline>,
@@ -472,7 +472,7 @@ pub fn prepare_ssr_pipelines(
 /// Gathers up screen space reflection settings for each applicable view and
 /// writes them into a GPU buffer.
 pub fn prepare_ssr_settings(
-    mut commands: EntityCommands,
+    mut commands: ComponentCommands,
     views: Query<(Entity, Option<&ScreenSpaceReflectionsUniform>), With<ExtractedView>>,
     mut ssr_settings_buffer: ResMut<ScreenSpaceReflectionsBuffer>,
     render_device: Res<RenderDevice>,

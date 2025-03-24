@@ -47,7 +47,7 @@ fn modify_aa(
         ),
         With<Camera>,
     >,
-    mut commands: EntityCommands,
+    mut commands: ComponentCommands,
 ) {
     let (camera_entity, fxaa, smaa, taa, mut msaa) = camera.into_inner();
     let mut camera = commands.entity(camera_entity);
@@ -250,7 +250,7 @@ fn update_ui(
 
 /// Set up a simple 3D scene
 fn setup(
-    mut commands: EntityCommands,
+    mut commands: ComponentCommands,
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<StandardMaterial>>,
     mut images: ResMut<Assets<Image>>,

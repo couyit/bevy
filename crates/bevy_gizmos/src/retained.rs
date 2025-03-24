@@ -12,7 +12,7 @@ use {
     crate::{config::GizmoLineJoint, LineGizmoUniform},
     bevy_ecs::{
         entity::Entity,
-        system::{EntityCommands, Local, Query},
+        system::{ComponentCommands, Local, Query},
     },
     bevy_render::{view::RenderLayers, Extract},
     bevy_transform::components::GlobalTransform,
@@ -97,7 +97,7 @@ pub struct Gizmo {
 
 #[cfg(feature = "bevy_render")]
 pub(crate) fn extract_linegizmos(
-    mut commands: EntityCommands,
+    mut commands: ComponentCommands,
     mut previous_len: Local<usize>,
     query: Extract<Query<(Entity, &Gizmo, &GlobalTransform, Option<&RenderLayers>)>>,
 ) {

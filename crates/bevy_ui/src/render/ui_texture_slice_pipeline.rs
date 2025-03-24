@@ -245,7 +245,7 @@ pub struct ExtractedUiTextureSlices {
 }
 
 pub fn extract_ui_texture_slices(
-    mut commands: EntityCommands,
+    mut commands: ComponentCommands,
     mut extracted_ui_slicers: ResMut<ExtractedUiTextureSlices>,
     texture_atlases: Extract<Res<Assets<TextureAtlasLayout>>>,
     slicers_query: Extract<
@@ -384,7 +384,7 @@ pub fn queue_ui_slices(
 }
 
 pub fn prepare_ui_slices(
-    mut commands: EntityCommands,
+    mut commands: ComponentCommands,
     render_device: Res<RenderDevice>,
     render_queue: Res<RenderQueue>,
     mut ui_meta: ResMut<UiTextureSliceMeta>,

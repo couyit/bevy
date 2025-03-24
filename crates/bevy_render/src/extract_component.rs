@@ -126,7 +126,7 @@ impl<C: Component + ShaderType> Default for ComponentUniforms<C> {
 /// This system prepares all components of the corresponding component type.
 /// They are transformed into uniforms and stored in the [`ComponentUniforms`] resource.
 fn prepare_uniform_components<C>(
-    mut commands: EntityCommands,
+    mut commands: ComponentCommands,
     render_device: Res<RenderDevice>,
     render_queue: Res<RenderQueue>,
     mut component_uniforms: ResMut<ComponentUniforms<C>>,
@@ -199,7 +199,7 @@ impl<C: ExtractComponent> Plugin for ExtractComponentPlugin<C> {
 
 /// This system extracts all components of the corresponding [`ExtractComponent`], for entities that are synced via [`crate::sync_world::SyncToRenderWorld`].
 fn extract_components<C: ExtractComponent>(
-    mut commands: EntityCommands,
+    mut commands: ComponentCommands,
     mut previous_len: Local<usize>,
     query: Extract<Query<(RenderEntity, C::QueryData), C::QueryFilter>>,
 ) {
@@ -217,7 +217,7 @@ fn extract_components<C: ExtractComponent>(
 
 /// This system extracts all components of the corresponding [`ExtractComponent`], for entities that are visible and synced via [`crate::sync_world::SyncToRenderWorld`].
 fn extract_visible_components<C: ExtractComponent>(
-    mut commands: EntityCommands,
+    mut commands: ComponentCommands,
     mut previous_len: Local<usize>,
     query: Extract<Query<(RenderEntity, &ViewVisibility, C::QueryData), C::QueryFilter>>,
 ) {

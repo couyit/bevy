@@ -35,11 +35,11 @@ impl Plugin for GlobalsPlugin {
     }
 }
 
-fn extract_frame_count(mut commands: EntityCommands, frame_count: Extract<Res<FrameCount>>) {
+fn extract_frame_count(mut commands: ComponentCommands, frame_count: Extract<Res<FrameCount>>) {
     commands.insert_resource(**frame_count);
 }
 
-fn extract_time(mut commands: EntityCommands, time: Extract<Res<Time>>) {
+fn extract_time(mut commands: ComponentCommands, time: Extract<Res<Time>>) {
     commands.insert_resource(**time);
 }
 

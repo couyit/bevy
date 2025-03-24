@@ -25,7 +25,7 @@ struct FpsText;
 #[derive(Component)]
 struct AnimatedText;
 
-fn setup(mut commands: EntityCommands, asset_server: Res<AssetServer>) {
+fn setup(mut commands: ComponentCommands, asset_server: Res<AssetServer>) {
     // UI camera
     commands.spawn(Camera2d);
     // Text with one section

@@ -35,7 +35,7 @@ fn edit_message(
 }
 
 fn setup(
-    mut commands: EntityCommands,
+    mut commands: ComponentCommands,
     mut animations: ResMut<Assets<AnimationClip>>,
     mut graphs: ResMut<Assets<AnimationGraph>>,
 ) {

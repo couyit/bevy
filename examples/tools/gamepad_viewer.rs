@@ -127,7 +127,7 @@ fn main() {
         .run();
 }
 
-fn setup(mut commands: EntityCommands, meshes: Res<ButtonMeshes>, materials: Res<ButtonMaterials>) {
+fn setup(mut commands: ComponentCommands, meshes: Res<ButtonMeshes>, materials: Res<ButtonMaterials>) {
     commands.spawn(Camera2d);
 
     // Buttons
@@ -245,7 +245,7 @@ fn setup(mut commands: EntityCommands, meshes: Res<ButtonMeshes>, materials: Res
 }
 
 fn setup_sticks(
-    mut commands: EntityCommands,
+    mut commands: ComponentCommands,
     meshes: Res<ButtonMeshes>,
     materials: Res<ButtonMaterials>,
 ) {
@@ -327,7 +327,7 @@ fn setup_sticks(
 }
 
 fn setup_triggers(
-    mut commands: EntityCommands,
+    mut commands: ComponentCommands,
     meshes: Res<ButtonMeshes>,
     materials: Res<ButtonMaterials>,
 ) {
@@ -356,7 +356,7 @@ fn setup_triggers(
     spawn_trigger(BUTTONS_X, BUTTONS_Y + 145., GamepadButton::RightTrigger2);
 }
 
-fn setup_connected(mut commands: EntityCommands) {
+fn setup_connected(mut commands: ComponentCommands) {
     // This is UI text, unlike other text in this example which is 2d.
     commands.spawn((
         Text::new("Connected Gamepads:\n"),

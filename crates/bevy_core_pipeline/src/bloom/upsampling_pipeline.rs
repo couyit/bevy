@@ -6,7 +6,7 @@ use crate::fullscreen_vertex_shader::fullscreen_shader_vertex_state;
 use bevy_ecs::{
     prelude::{Component, Entity},
     resource::Resource,
-    system::{EntityCommands, Query, Res, ResMut},
+    system::{ComponentCommands, Query, Res, ResMut},
     world::{FromWorld, World},
 };
 use bevy_render::{
@@ -131,7 +131,7 @@ impl SpecializedRenderPipeline for BloomUpsamplingPipeline {
 }
 
 pub fn prepare_upsampling_pipeline(
-    mut commands: EntityCommands,
+    mut commands: ComponentCommands,
     pipeline_cache: Res<PipelineCache>,
     mut pipelines: ResMut<SpecializedRenderPipelines<BloomUpsamplingPipeline>>,
     pipeline: Res<BloomUpsamplingPipeline>,

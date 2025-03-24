@@ -18,7 +18,7 @@ use bevy_derive::{Deref, DerefMut};
 use bevy_ecs::{
     change_detection::ResMut,
     prelude::{Changed, Component, Without},
-    system::{EntityCommands, Query},
+    system::{ComponentCommands, Query},
 };
 /// Triggered on a scene's parent entity when [`crate::SceneInstance`] becomes ready to use.
 ///
@@ -490,7 +490,7 @@ pub struct SceneInstance(pub(crate) InstanceId);
 
 /// System that will spawn scenes from the [`SceneRoot`] and [`DynamicSceneRoot`] components.
 pub fn scene_spawner(
-    mut commands: EntityCommands,
+    mut commands: ComponentCommands,
     mut scene_to_spawn: Query<
         (Entity, &SceneRoot, Option<&mut SceneInstance>),
         (Changed<SceneRoot>, Without<DynamicSceneRoot>),
@@ -531,7 +531,7 @@ mod tests {
         observer::Trigger,
         prelude::ReflectComponent,
         query::With,
-        system::{EntityCommands, Query, Res, ResMut, RunSystemOnce},
+        system::{ComponentCommands, Query, Res, ResMut, RunSystemOnce},
     };
     use bevy_reflect::Reflect;
 
@@ -792,7 +792,7 @@ mod tests {
         let (scene_id, scene_entity) = app
             .world_mut()
             .run_system_once(
-                move |mut commands: EntityCommands<'_, '_>,
+                move |mut commands: ComponentCommands<'_, '_>,
                       mut scene_spawner: ResMut<'_, SceneSpawner>| {
                     let entity = commands.spawn_empty().id();
                     let id = scene_spawner.spawn_as_child(scene.clone(), entity);
@@ -816,7 +816,7 @@ mod tests {
         let (scene_id, scene_entity) = app
             .world_mut()
             .run_system_once(
-                move |mut commands: EntityCommands<'_, '_>,
+                move |mut commands: ComponentCommands<'_, '_>,
                       mut scene_spawner: ResMut<'_, SceneSpawner>| {
                     let entity = commands.spawn_empty().id();
                     let id = scene_spawner.spawn_dynamic_as_child(scene.clone(), entity);
@@ -863,7 +863,7 @@ mod tests {
         // Despawn scene.
         app.world_mut()
             .run_system_once(
-                |mut commands: EntityCommands, query: Query<Entity, With<ComponentF>>| {
+                |mut commands: ComponentCommands, query: Query<Entity, With<ComponentF>>| {
                     for entity in query.iter() {
                         commands.entity(entity).despawn();
                     }

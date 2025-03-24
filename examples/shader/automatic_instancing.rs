@@ -28,7 +28,7 @@ fn main() {
 /// external data in a custom material. For example, here we use the "index" of each cube to
 /// determine the texel coordinate to sample from the image in the shader.
 fn setup(
-    mut commands: EntityCommands,
+    mut commands: ComponentCommands,
     assets: Res<AssetServer>,
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<CustomMaterial>>,

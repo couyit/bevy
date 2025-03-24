@@ -121,7 +121,7 @@ struct ExampleAnimationWeights {
 
 /// Initializes the scene.
 fn setup_assets(
-    mut commands: EntityCommands,
+    mut commands: ComponentCommands,
     mut asset_server: ResMut<AssetServer>,
     mut animation_graphs: ResMut<Assets<AnimationGraph>>,
     args: Res<Args>,
@@ -139,7 +139,7 @@ fn setup_assets(
     }
 }
 
-fn setup_ui(mut commands: EntityCommands) {
+fn setup_ui(mut commands: ComponentCommands) {
     setup_help_text(&mut commands);
     setup_node_rects(&mut commands);
     setup_node_lines(&mut commands);
@@ -149,7 +149,7 @@ fn setup_ui(mut commands: EntityCommands) {
 /// Optionally saves them to disk if `save` is present (corresponding to the
 /// `--save` option).
 fn setup_assets_programmatically(
-    commands: &mut EntityCommands,
+    commands: &mut ComponentCommands,
     asset_server: &mut AssetServer,
     animation_graphs: &mut Assets<AnimationGraph>,
     _save: bool,
@@ -203,7 +203,7 @@ fn setup_assets_programmatically(
 }
 
 fn setup_assets_via_serialized_animation_graph(
-    commands: &mut EntityCommands,
+    commands: &mut ComponentCommands,
     asset_server: &mut AssetServer,
 ) {
     commands.insert_resource(ExampleAnimationGraph(
@@ -213,7 +213,7 @@ fn setup_assets_via_serialized_animation_graph(
 
 /// Spawns the animated fox.
 fn setup_scene(
-    mut commands: EntityCommands,
+    mut commands: ComponentCommands,
     asset_server: Res<AssetServer>,
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<StandardMaterial>>,
@@ -249,7 +249,7 @@ fn setup_scene(
 }
 
 /// Places the help text at the top left of the window.
-fn setup_help_text(commands: &mut EntityCommands) {
+fn setup_help_text(commands: &mut ComponentCommands) {
     commands.spawn((
         Text::new(HELP_TEXT),
         Node {
@@ -262,7 +262,7 @@ fn setup_help_text(commands: &mut EntityCommands) {
 }
 
 /// Initializes the node UI widgets.
-fn setup_node_rects(commands: &mut EntityCommands) {
+fn setup_node_rects(commands: &mut ComponentCommands) {
     for (node_rect, node_type) in NODE_RECTS.iter().zip(NODE_TYPES.iter()) {
         let node_string = match *node_type {
             NodeType::Clip(ref clip) => clip.text,
@@ -337,7 +337,7 @@ fn setup_node_rects(commands: &mut EntityCommands) {
 ///
 /// This is a bit hacky: it uses 1-pixel-wide and 1-pixel-high boxes to draw
 /// vertical and horizontal lines, respectively.
-fn setup_node_lines(commands: &mut EntityCommands) {
+fn setup_node_lines(commands: &mut ComponentCommands) {
     for line in &HORIZONTAL_LINES {
         commands.spawn((
             Node {
@@ -371,7 +371,7 @@ fn setup_node_lines(commands: &mut EntityCommands) {
 
 /// Attaches the animation graph to the scene, and plays all three animations.
 fn init_animations(
-    mut commands: EntityCommands,
+    mut commands: ComponentCommands,
     mut query: Query<(Entity, &mut AnimationPlayer)>,
     animation_graph: Res<ExampleAnimationGraph>,
     mut done: Local<bool>,

@@ -148,7 +148,7 @@ pub fn log_pointer_event_trace<E: Debug + Clone + Reflect>(
 
 /// Adds [`PointerDebug`] to pointers automatically.
 pub fn add_pointer_debug(
-    mut commands: EntityCommands,
+    mut commands: ComponentCommands,
     pointers: Query<Entity, (With<PointerId>, Without<PointerDebug>)>,
 ) {
     for entity in &pointers {
@@ -242,7 +242,7 @@ pub fn update_debug_data(
 
 /// Draw text on each cursor with debug info
 pub fn debug_draw(
-    mut commands: EntityCommands,
+    mut commands: ComponentCommands,
     camera_query: Query<(Entity, &Camera)>,
     primary_window: Query<Entity, With<bevy_window::PrimaryWindow>>,
     pointers: Query<(Entity, &PointerId, &PointerDebug)>,

@@ -55,7 +55,7 @@ fn main() {
         .run();
 }
 
-fn setup(mut commands: EntityCommands, assets: Res<AssetServer>, color_tint: Res<ColorTint>) {
+fn setup(mut commands: ComponentCommands, assets: Res<AssetServer>, color_tint: Res<ColorTint>) {
     warn!(include_str!("warning_string.txt"));
 
     let mut rng = rand::thread_rng();

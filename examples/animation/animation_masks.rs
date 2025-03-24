@@ -117,7 +117,7 @@ fn main() {
 // Spawns the 3D objects in the scene, and loads the fox animation from the glTF
 // file.
 fn setup_scene(
-    mut commands: EntityCommands,
+    mut commands: ComponentCommands,
     asset_server: Res<AssetServer>,
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<StandardMaterial>>,
@@ -155,7 +155,7 @@ fn setup_scene(
 }
 
 // Creates the UI.
-fn setup_ui(mut commands: EntityCommands) {
+fn setup_ui(mut commands: ComponentCommands) {
     // Add help text.
     commands.spawn((
         Text::new("Click on a button to toggle animations for its associated bones"),
@@ -349,7 +349,7 @@ fn add_mask_group_control(
 // Builds up the animation graph, including the mask groups, and adds it to the
 // entity with the `AnimationPlayer` that the glTF loader created.
 fn setup_animation_graph_once_loaded(
-    mut commands: EntityCommands,
+    mut commands: ComponentCommands,
     asset_server: Res<AssetServer>,
     mut animation_graphs: ResMut<Assets<AnimationGraph>>,
     mut players: Query<(Entity, &mut AnimationPlayer), Added<AnimationPlayer>>,

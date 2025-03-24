@@ -183,14 +183,14 @@ pub fn save_to_disk(path: impl AsRef<Path>) -> impl FnMut(Trigger<ScreenshotCapt
     }
 }
 
-fn clear_screenshots(mut commands: EntityCommands, screenshots: Query<Entity, With<Captured>>) {
+fn clear_screenshots(mut commands: ComponentCommands, screenshots: Query<Entity, With<Captured>>) {
     for entity in screenshots.iter() {
         commands.entity(entity).despawn();
     }
 }
 
 pub fn trigger_screenshots(
-    mut commands: EntityCommands,
+    mut commands: ComponentCommands,
     captured_screenshots: ResMut<CapturedScreenshots>,
 ) {
     let captured_screenshots = captured_screenshots.lock().unwrap();
@@ -206,7 +206,7 @@ fn extract_screenshots(
     mut system_state: Local<
         Option<
             SystemState<(
-                EntityCommands,
+                ComponentCommands,
                 Query<Entity, With<PrimaryWindow>>,
                 Query<(Entity, &Screenshot), Without<Capturing>>,
             )>,

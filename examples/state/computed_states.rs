@@ -330,11 +330,11 @@ mod ui {
     pub const HOVERED_ACTIVE_BUTTON: Color = Color::srgb(0.25, 0.55, 0.25);
     pub const PRESSED_ACTIVE_BUTTON: Color = Color::srgb(0.35, 0.95, 0.35);
 
-    pub fn setup(mut commands: EntityCommands) {
+    pub fn setup(mut commands: ComponentCommands) {
         commands.spawn(Camera2d);
     }
 
-    pub fn setup_menu(mut commands: EntityCommands, tutorial_state: Res<State<TutorialState>>) {
+    pub fn setup_menu(mut commands: ComponentCommands, tutorial_state: Res<State<TutorialState>>) {
         let button_entity = commands
             .spawn((
                 Node {
@@ -403,11 +403,11 @@ mod ui {
         });
     }
 
-    pub fn cleanup_menu(mut commands: EntityCommands, menu_data: Res<MenuData>) {
+    pub fn cleanup_menu(mut commands: ComponentCommands, menu_data: Res<MenuData>) {
         commands.entity(menu_data.root_entity).despawn();
     }
 
-    pub fn setup_game(mut commands: EntityCommands, asset_server: Res<AssetServer>) {
+    pub fn setup_game(mut commands: ComponentCommands, asset_server: Res<AssetServer>) {
         commands.spawn((
             StateScoped(InGame),
             Sprite::from_image(asset_server.load("branding/icon.png")),
@@ -446,7 +446,7 @@ mod ui {
         }
     }
 
-    pub fn setup_paused_screen(mut commands: EntityCommands) {
+    pub fn setup_paused_screen(mut commands: ComponentCommands) {
         info!("Printing Pause");
         commands.spawn((
             StateScoped(IsPaused::Paused),
@@ -485,7 +485,7 @@ mod ui {
         ));
     }
 
-    pub fn setup_turbo_text(mut commands: EntityCommands) {
+    pub fn setup_turbo_text(mut commands: ComponentCommands) {
         commands.spawn((
             StateScoped(TurboMode),
             Node {
@@ -521,7 +521,7 @@ mod ui {
         }
     }
 
-    pub fn movement_instructions(mut commands: EntityCommands) {
+    pub fn movement_instructions(mut commands: ComponentCommands) {
         commands.spawn((
             StateScoped(Tutorial::MovementInstructions),
             Node {
@@ -572,7 +572,7 @@ mod ui {
         ));
     }
 
-    pub fn pause_instructions(mut commands: EntityCommands) {
+    pub fn pause_instructions(mut commands: ComponentCommands) {
         commands.spawn((
             StateScoped(Tutorial::PauseInstructions),
             Node {

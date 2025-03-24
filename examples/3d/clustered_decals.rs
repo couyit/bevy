@@ -155,7 +155,7 @@ fn main() {
 
 /// Creates the scene.
 fn setup(
-    mut commands: EntityCommands,
+    mut commands: ComponentCommands,
     asset_server: Res<AssetServer>,
     app_status: Res<AppStatus>,
     render_device: Res<RenderDevice>,
@@ -179,7 +179,7 @@ fn setup(
 
 /// Spawns the cube onto which the decals are projected.
 fn spawn_cube(
-    commands: &mut EntityCommands,
+    commands: &mut ComponentCommands,
     meshes: &mut Assets<Mesh>,
     materials: &mut Assets<ExtendedMaterial<StandardMaterial, CustomDecalExtension>>,
 ) {
@@ -201,7 +201,7 @@ fn spawn_cube(
 }
 
 /// Spawns the directional light.
-fn spawn_light(commands: &mut EntityCommands) {
+fn spawn_light(commands: &mut ComponentCommands) {
     commands.spawn((
         DirectionalLight::default(),
         Transform::from_xyz(4.0, 8.0, 4.0).looking_at(Vec3::ZERO, Vec3::Y),
@@ -209,7 +209,7 @@ fn spawn_light(commands: &mut EntityCommands) {
 }
 
 /// Spawns the camera.
-fn spawn_camera(commands: &mut EntityCommands) {
+fn spawn_camera(commands: &mut ComponentCommands) {
     commands
         .spawn(Camera3d::default())
         .insert(Transform::from_xyz(0.0, 2.5, 9.0).looking_at(Vec3::ZERO, Vec3::Y))
@@ -218,7 +218,7 @@ fn spawn_camera(commands: &mut EntityCommands) {
 }
 
 /// Spawns the actual clustered decals.
-fn spawn_decals(commands: &mut EntityCommands, asset_server: &AssetServer) {
+fn spawn_decals(commands: &mut ComponentCommands, asset_server: &AssetServer) {
     let image = asset_server.load("branding/icon.png");
 
     commands.spawn((
@@ -243,7 +243,7 @@ fn spawn_decals(commands: &mut EntityCommands, asset_server: &AssetServer) {
 }
 
 /// Spawns the buttons at the bottom of the screen.
-fn spawn_buttons(commands: &mut EntityCommands) {
+fn spawn_buttons(commands: &mut ComponentCommands) {
     // Spawn the radio buttons that allow the user to select an object to
     // control.
     commands
@@ -302,7 +302,7 @@ fn spawn_drag_button<'a>(
 }
 
 /// Spawns the help text at the top of the screen.
-fn spawn_help_text(commands: &mut EntityCommands, app_status: &AppStatus) {
+fn spawn_help_text(commands: &mut ComponentCommands, app_status: &AppStatus) {
     commands.spawn((
         Text::new(create_help_string(app_status)),
         Node {
@@ -497,7 +497,7 @@ fn create_help_string(app_status: &AppStatus) -> String {
 /// If the user is hovering over no such button, this system changes the drag
 /// mode back to its default value of [`DragMode::Move`].
 fn switch_drag_mode(
-    mut commands: EntityCommands,
+    mut commands: ComponentCommands,
     mut interactions: Query<(&Interaction, &DragMode)>,
     mut windows: Query<Entity, With<Window>>,
     mouse_buttons: Res<ButtonInput<MouseButton>>,

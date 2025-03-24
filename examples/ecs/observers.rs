@@ -19,7 +19,7 @@ fn main() {
             |trigger: Trigger<ExplodeMines>,
              mines: Query<&Mine>,
              index: Res<SpatialIndex>,
-             mut commands: EntityCommands| {
+             mut commands: ComponentCommands| {
                 // You can access the trigger data via the `Observer`
                 let event = trigger.event();
                 // Access resources
@@ -69,7 +69,7 @@ struct ExplodeMines {
 #[derive(Event)]
 struct Explode;
 
-fn setup(mut commands: EntityCommands) {
+fn setup(mut commands: ComponentCommands) {
     commands.spawn(Camera2d);
     commands.spawn((
         Text::new(
@@ -141,7 +141,7 @@ fn on_remove_mine(
     });
 }
 
-fn explode_mine(trigger: Trigger<Explode>, query: Query<&Mine>, mut commands: EntityCommands) {
+fn explode_mine(trigger: Trigger<Explode>, query: Query<&Mine>, mut commands: ComponentCommands) {
     // If a triggered event is targeting a specific entity you can access it with `.target()`
     let id = trigger.target();
     let Ok(mut entity) = commands.get_entity(id) else {
@@ -173,7 +173,7 @@ fn handle_click(
     mouse_button_input: Res<ButtonInput<MouseButton>>,
     camera: Single<(&Camera, &GlobalTransform)>,
     windows: Query<&Window>,
-    mut commands: EntityCommands,
+    mut commands: ComponentCommands,
 ) {
     let Ok(windows) = windows.single() else {
         return;

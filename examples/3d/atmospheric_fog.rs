@@ -23,7 +23,7 @@ fn main() {
         .run();
 }
 
-fn setup_camera_fog(mut commands: EntityCommands) {
+fn setup_camera_fog(mut commands: ComponentCommands) {
     commands.spawn((
         Camera3d::default(),
         Transform::from_xyz(-1.0, 0.1, 1.0).looking_at(Vec3::new(0.0, 0.0, 0.0), Vec3::Y),
@@ -41,7 +41,7 @@ fn setup_camera_fog(mut commands: EntityCommands) {
 }
 
 fn setup_terrain_scene(
-    mut commands: EntityCommands,
+    mut commands: ComponentCommands,
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<StandardMaterial>>,
     asset_server: Res<AssetServer>,
@@ -84,7 +84,7 @@ fn setup_terrain_scene(
     ));
 }
 
-fn setup_instructions(mut commands: EntityCommands) {
+fn setup_instructions(mut commands: ComponentCommands) {
     commands.spawn((Text::new("Press Spacebar to Toggle Atmospheric Fog.\nPress S to Toggle Directional Light Fog Influence."),
         Node {
             position_type: PositionType::Absolute,

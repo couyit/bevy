@@ -10,7 +10,7 @@ use bevy_ecs::{
     prelude::{DetectChanges, Entity},
     query::{Changed, Without},
     schedule::IntoScheduleConfigs,
-    system::{EntityCommands, Query},
+    system::{ComponentCommands, Query},
     world::Ref,
 };
 use bevy_render::{camera::CameraUpdateSystem, prelude::Camera};
@@ -63,7 +63,7 @@ fn calc_bounds(
 }
 
 fn button_changed(
-    mut commands: EntityCommands,
+    mut commands: ComponentCommands,
     mut query: Query<(Entity, Option<&mut AccessibilityNode>), Changed<Button>>,
     ui_children: UiChildren,
     mut text_reader: TextUiReader,
@@ -90,7 +90,7 @@ fn button_changed(
 }
 
 fn image_changed(
-    mut commands: EntityCommands,
+    mut commands: ComponentCommands,
     mut query: Query<
         (Entity, Option<&mut AccessibilityNode>),
         (Changed<ImageNode>, Without<Button>),
@@ -120,7 +120,7 @@ fn image_changed(
 }
 
 fn label_changed(
-    mut commands: EntityCommands,
+    mut commands: ComponentCommands,
     mut query: Query<(Entity, Option<&mut AccessibilityNode>), Changed<Label>>,
     mut text_reader: TextUiReader,
 ) {

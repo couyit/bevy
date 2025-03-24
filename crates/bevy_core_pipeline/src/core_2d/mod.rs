@@ -451,7 +451,7 @@ pub fn extract_core_2d_camera_phases(
 }
 
 pub fn prepare_core_2d_depth_textures(
-    mut commands: EntityCommands,
+    mut commands: ComponentCommands,
     mut texture_cache: ResMut<TextureCache>,
     render_device: Res<RenderDevice>,
     transparent_2d_phases: Res<ViewSortedRenderPhases<Transparent2d>>,

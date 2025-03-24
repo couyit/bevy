@@ -366,7 +366,7 @@ pub fn extract_sprite_events(
 }
 
 pub fn extract_sprites(
-    mut commands: EntityCommands,
+    mut commands: ComponentCommands,
     mut extracted_sprites: ResMut<ExtractedSprites>,
     texture_atlases: Extract<Res<Assets<TextureAtlasLayout>>>,
     sprite_query: Extract<
@@ -582,7 +582,7 @@ pub fn queue_sprites(
 }
 
 pub fn prepare_sprite_view_bind_groups(
-    mut commands: EntityCommands,
+    mut commands: ComponentCommands,
     render_device: Res<RenderDevice>,
     sprite_pipeline: Res<SpritePipeline>,
     view_uniforms: Res<ViewUniforms>,

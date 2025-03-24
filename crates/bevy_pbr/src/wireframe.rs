@@ -105,7 +105,7 @@ struct GlobalWireframeMaterial {
 }
 
 fn setup_global_wireframe_material(
-    mut commands: EntityCommands,
+    mut commands: ComponentCommands,
     mut materials: ResMut<Assets<WireframeMaterial>>,
     config: Res<WireframeConfig>,
 ) {
@@ -146,7 +146,7 @@ fn wireframe_color_changed(
 /// Applies or remove the wireframe material to any mesh with a [`Wireframe`] component, and removes it
 /// for any mesh with a [`NoWireframe`] component.
 fn apply_wireframe_material(
-    mut commands: EntityCommands,
+    mut commands: ComponentCommands,
     mut materials: ResMut<Assets<WireframeMaterial>>,
     wireframes: Query<
         (Entity, Option<&WireframeColor>),
@@ -174,7 +174,7 @@ type WireframeFilter = (With<Mesh3d>, Without<Wireframe>, Without<NoWireframe>);
 
 /// Applies or removes a wireframe material on any mesh without a [`Wireframe`] or [`NoWireframe`] component.
 fn apply_global_wireframe_material(
-    mut commands: EntityCommands,
+    mut commands: ComponentCommands,
     config: Res<WireframeConfig>,
     meshes_without_material: Query<
         (Entity, Option<&WireframeColor>),

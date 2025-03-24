@@ -40,7 +40,7 @@ struct FollowingSphere;
 struct RandomSource(ChaCha8Rng);
 
 fn setup(
-    mut commands: EntityCommands,
+    mut commands: ComponentCommands,
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<StandardMaterial>>,
 ) {

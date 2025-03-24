@@ -235,7 +235,7 @@ fn update_morphs(
 }
 
 fn detect_morphs(
-    mut commands: EntityCommands,
+    mut commands: ComponentCommands,
     morphs: Query<(Entity, &MorphWeights, Option<&Name>)>,
     meshes: Res<Assets<Mesh>>,
     scene_handle: Res<SceneHandle>,

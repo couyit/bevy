@@ -41,7 +41,7 @@ fn main() {
         .run();
 }
 
-fn setup(mut commands: EntityCommands) {
+fn setup(mut commands: ComponentCommands) {
     commands.spawn(Camera2d);
 }
 
@@ -70,7 +70,7 @@ mod splash {
     #[derive(Resource, Deref, DerefMut)]
     struct SplashTimer(Timer);
 
-    fn splash_setup(mut commands: EntityCommands, asset_server: Res<AssetServer>) {
+    fn splash_setup(mut commands: ComponentCommands, asset_server: Res<AssetServer>) {
         let icon = asset_server.load("branding/icon.png");
         // Display the logo
         commands.spawn((
@@ -131,7 +131,7 @@ mod game {
     struct GameTimer(Timer);
 
     fn game_setup(
-        mut commands: EntityCommands,
+        mut commands: ComponentCommands,
         display_quality: Res<DisplayQuality>,
         volume: Res<Volume>,
     ) {
@@ -351,7 +351,7 @@ mod menu {
     fn setting_button<T: Resource + Component + PartialEq + Copy>(
         interaction_query: Query<(&Interaction, &T, Entity), (Changed<Interaction>, With<Button>)>,
         selected_query: Single<(Entity, &mut BackgroundColor), With<SelectedOption>>,
-        mut commands: EntityCommands,
+        mut commands: ComponentCommands,
         mut setting: ResMut<T>,
     ) {
         let (previous_button, mut previous_button_color) = selected_query.into_inner();
@@ -369,7 +369,7 @@ mod menu {
         menu_state.set(MenuState::Main);
     }
 
-    fn main_menu_setup(mut commands: EntityCommands, asset_server: Res<AssetServer>) {
+    fn main_menu_setup(mut commands: ComponentCommands, asset_server: Res<AssetServer>) {
         // Common style for all buttons on the screen
         let button_node = Node {
             width: Val::Px(300.0),
@@ -473,7 +473,7 @@ mod menu {
         ));
     }
 
-    fn settings_menu_setup(mut commands: EntityCommands) {
+    fn settings_menu_setup(mut commands: ComponentCommands) {
         let button_node = Node {
             width: Val::Px(200.0),
             height: Val::Px(65.0),
@@ -528,7 +528,7 @@ mod menu {
         ));
     }
 
-    fn display_settings_menu_setup(mut commands: EntityCommands, display_quality: Res<DisplayQuality>) {
+    fn display_settings_menu_setup(mut commands: ComponentCommands, display_quality: Res<DisplayQuality>) {
         fn button_node() -> Node {
             Node {
                 width: Val::Px(200.0),
@@ -618,7 +618,7 @@ mod menu {
         ));
     }
 
-    fn sound_settings_menu_setup(mut commands: EntityCommands, volume: Res<Volume>) {
+    fn sound_settings_menu_setup(mut commands: ComponentCommands, volume: Res<Volume>) {
         let button_node = Node {
             width: Val::Px(200.0),
             height: Val::Px(65.0),
@@ -730,7 +730,7 @@ mod menu {
 }
 
 // Generic system that takes a component as a parameter, and will despawn all entities with that component
-fn despawn_screen<T: Component>(to_despawn: Query<Entity, With<T>>, mut commands: EntityCommands) {
+fn despawn_screen<T: Component>(to_despawn: Query<Entity, With<T>>, mut commands: ComponentCommands) {
     for entity in &to_despawn {
         commands.entity(entity).despawn();
     }

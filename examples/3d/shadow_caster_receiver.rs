@@ -24,7 +24,7 @@ fn main() {
 
 /// set up a 3D scene to test shadow biases and perspective projections
 fn setup(
-    mut commands: EntityCommands,
+    mut commands: ComponentCommands,
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<StandardMaterial>>,
 ) {
@@ -130,7 +130,7 @@ fn toggle_light(
 }
 
 fn toggle_shadows(
-    mut commands: EntityCommands,
+    mut commands: ComponentCommands,
     input: Res<ButtonInput<KeyCode>>,
     mut queries: ParamSet<(
         Query<Entity, (With<Mesh3d>, With<NotShadowCaster>)>,

@@ -26,7 +26,7 @@ fn main() {
 }
 
 fn setup(
-    mut commands: EntityCommands,
+    mut commands: ComponentCommands,
     asset_server: Res<AssetServer>,
     mut materials: ResMut<Assets<StandardMaterial>>,
     mut meshes: ResMut<Assets<Mesh>>,
@@ -214,7 +214,7 @@ fn animate_light_direction(
 }
 
 fn setup_parallax(
-    mut commands: EntityCommands,
+    mut commands: ComponentCommands,
     mut materials: ResMut<Assets<StandardMaterial>>,
     mut meshes: ResMut<Assets<Mesh>>,
     asset_server: Res<AssetServer>,
@@ -280,7 +280,7 @@ enum DefaultRenderMode {
 
 fn switch_mode(
     mut text: Single<&mut Text>,
-    mut commands: EntityCommands,
+    mut commands: ComponentCommands,
     keys: Res<ButtonInput<KeyCode>>,
     mut default_opaque_renderer_method: ResMut<DefaultOpaqueRendererMethod>,
     mut materials: ResMut<Assets<StandardMaterial>>,

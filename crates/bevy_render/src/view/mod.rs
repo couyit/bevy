@@ -886,7 +886,7 @@ impl ViewDepthTexture {
 }
 
 pub fn prepare_view_uniforms(
-    mut commands: EntityCommands,
+    mut commands: ComponentCommands,
     render_device: Res<RenderDevice>,
     render_queue: Res<RenderQueue>,
     mut view_uniforms: ResMut<ViewUniforms>,
@@ -1007,7 +1007,7 @@ pub fn clear_view_attachments(mut view_target_attachments: ResMut<ViewTargetAtta
 }
 
 pub fn prepare_view_targets(
-    mut commands: EntityCommands,
+    mut commands: ComponentCommands,
     clear_color_global: Res<ClearColor>,
     render_device: Res<RenderDevice>,
     mut texture_cache: ResMut<TextureCache>,

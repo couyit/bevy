@@ -23,7 +23,7 @@ fn main() {
 }
 
 fn setup(
-    mut commands: EntityCommands,
+    mut commands: ComponentCommands,
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<StandardMaterial>>,
 ) {
@@ -81,7 +81,7 @@ fn move_cube(mut query: Query<&mut Transform, With<Cube>>, time: Res<Time>) {
     }
 }
 
-fn remove(mut commands: EntityCommands, cube_entity: Single<Entity, With<Cube>>) {
+fn remove(mut commands: ComponentCommands, cube_entity: Single<Entity, With<Cube>>) {
     commands.entity(*cube_entity).remove::<Cube>();
 }
 

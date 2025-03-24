@@ -27,7 +27,7 @@ fn main() {
         .run();
 }
 
-fn setup_scene(mut commands: EntityCommands, asset_server: Res<AssetServer>) {
+fn setup_scene(mut commands: ComponentCommands, asset_server: Res<AssetServer>) {
     commands.spawn(Camera2d);
 
     // The default font has a limited number of glyphs, so use the full version for
@@ -89,7 +89,7 @@ struct Bubble {
 }
 
 fn bubbling_text(
-    mut commands: EntityCommands,
+    mut commands: ComponentCommands,
     mut bubbles: Query<(Entity, &mut Transform, &mut Bubble)>,
     time: Res<Time>,
 ) {
@@ -130,7 +130,7 @@ fn listen_ime_events(
 }
 
 fn listen_keyboard_input_events(
-    mut commands: EntityCommands,
+    mut commands: ComponentCommands,
     mut events: EventReader<KeyboardInput>,
     edit_text: Single<(&mut Text2d, &TextFont), (Without<Node>, Without<Bubble>)>,
 ) {

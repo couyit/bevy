@@ -9,6 +9,6 @@ fn main() {
         .run();
 }
 
-fn setup_system(mut commands: EntityCommands) {
+fn setup_system(mut commands: ComponentCommands) {
     commands.spawn(Camera3d::default());
 }

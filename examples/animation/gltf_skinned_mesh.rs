@@ -17,7 +17,7 @@ fn main() {
         .run();
 }
 
-fn setup(mut commands: EntityCommands, asset_server: Res<AssetServer>) {
+fn setup(mut commands: ComponentCommands, asset_server: Res<AssetServer>) {
     // Create a camera
     commands.spawn((
         Camera3d::default(),

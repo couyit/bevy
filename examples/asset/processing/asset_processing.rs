@@ -234,7 +234,7 @@ struct TextAssets {
     e: Handle<Text>,
 }
 
-fn setup(mut commands: EntityCommands, assets: Res<AssetServer>) {
+fn setup(mut commands: ComponentCommands, assets: Res<AssetServer>) {
     // This the final processed versions of `assets/a.cool.ron` and `assets/foo.c.cool.ron`
     // Check out their counterparts in `imported_assets` to see what the outputs look like.
     commands.insert_resource(TextAssets {
