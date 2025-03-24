@@ -1,5 +1,5 @@
 use crate::{
-    system::{ComponentCommand, SystemBuffer, SystemMeta},
+    system::{Command, SystemBuffer, SystemMeta},
     world::{DeferredWorld, World},
 };
 use alloc::{boxed::Box, vec::Vec};
@@ -72,7 +72,7 @@ unsafe impl Sync for CommandQueue {}
 impl CommandQueue {
     /// Push a [`Command`] onto the queue.
     #[inline]
-    pub fn push(&mut self, command: impl ComponentCommand) {
+    pub fn push(&mut self, command: impl Command) {
         // SAFETY: self is guaranteed to live for the lifetime of this method
         unsafe {
             self.get_raw().push(command);
@@ -148,12 +148,12 @@ impl RawCommandQueue {
     ///
     /// * Caller ensures that `self` has not outlived the underlying queue
     #[inline]
-    pub unsafe fn push<C: ComponentCommand>(&mut self, command: C) {
+    pub unsafe fn push<C: Command>(&mut self, command: C) {
         // Stores a command alongside its metadata.
         // `repr(C)` prevents the compiler from reordering the fields,
         // while `repr(packed)` prevents the compiler from inserting padding bytes.
         #[repr(C, packed)]
-        struct Packed<C: ComponentCommand> {
+        struct Packed<C: Command> {
             meta: CommandMeta,
             command: C,
         }
@@ -360,7 +360,7 @@ mod test {
         }
     }
 
-    impl ComponentCommand for DropCheck {
+    impl Command for DropCheck {
         fn apply(self, _: &mut World) {}
     }
 
@@ -407,7 +407,7 @@ mod test {
 
     struct SpawnCommand;
 
-    impl ComponentCommand for SpawnCommand {
+    impl Command for SpawnCommand {
         fn apply(self, world: &mut World) {
             world.spawn_empty();
         }
@@ -436,7 +436,7 @@ mod test {
         reason = "The inner string is used to ensure that, when the PanicCommand gets pushed to the queue, some data is written to the `bytes` vector."
     )]
     struct PanicCommand(String);
-    impl ComponentCommand for PanicCommand {
+    impl Command for PanicCommand {
         fn apply(self, _: &mut World) {
             panic!("command is panicking");
         }
@@ -475,7 +475,7 @@ mod test {
         let mut world = World::new();
         world.init_resource::<Order>();
 
-        fn add_index(index: usize) -> impl ComponentCommand {
+        fn add_index(index: usize) -> impl Command {
             move |world: &mut World| world.resource_mut::<Order>().0.push(index)
         }
         world.commands().queue(add_index(1));
@@ -501,7 +501,7 @@ mod test {
     // should be reworked.
     // This test asserts that Command types are send.
     fn assert_is_send_impl(_: impl Send) {}
-    fn assert_is_send(command: impl ComponentCommand) {
+    fn assert_is_send(command: impl Command) {
         assert_is_send_impl(command);
     }
 
@@ -515,7 +515,7 @@ mod test {
         reason = "This struct is used to test how the CommandQueue reacts to padding added by rust's compiler."
     )]
     struct CommandWithPadding(u8, u16);
-    impl ComponentCommand for CommandWithPadding {
+    impl Command for CommandWithPadding {
         fn apply(self, _: &mut World) {}
     }
 
