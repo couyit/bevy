@@ -176,7 +176,7 @@ pub struct DeferredLightingIdDepthTexture {
 }
 
 fn prepare_deferred_lighting_id_textures(
-    mut commands: Commands,
+    mut commands: ComponentCommands,
     mut texture_cache: ResMut<TextureCache>,
     render_device: Res<RenderDevice>,
     views: Query<(Entity, &ExtractedCamera), With<DeferredPrepass>>,

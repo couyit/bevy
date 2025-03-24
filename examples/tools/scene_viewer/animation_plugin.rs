@@ -43,7 +43,7 @@ fn assign_clips(
     gltf_assets: Res<Assets<Gltf>>,
     assets: Res<AssetServer>,
     mut graphs: ResMut<Assets<AnimationGraph>>,
-    mut commands: Commands,
+    mut commands: ComponentCommands,
     mut setup: Local<bool>,
 ) {
     if scene_handle.is_loaded && !*setup {

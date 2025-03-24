@@ -68,7 +68,7 @@ struct LevelData {
     level_2_id: SystemId,
 }
 
-fn setup(mut commands: Commands) {
+fn setup(mut commands: ComponentCommands) {
     let level_data = LevelData {
         unload_level_id: commands.register_system(unload_current_level),
         level_1_id: commands.register_system(load_level_1),
@@ -95,7 +95,7 @@ fn setup(mut commands: Commands) {
 
 // Selects the level you want to load.
 fn level_selection(
-    mut commands: Commands,
+    mut commands: ComponentCommands,
     keyboard: Res<ButtonInput<KeyCode>>,
     level_data: Res<LevelData>,
     loading_state: Res<LoadingState>,
@@ -118,7 +118,7 @@ struct LevelComponents;
 
 // Removes all currently loaded level assets from the game World.
 fn unload_current_level(
-    mut commands: Commands,
+    mut commands: ComponentCommands,
     mut loading_state: ResMut<LoadingState>,
     entities: Query<Entity, With<LevelComponents>>,
 ) {
@@ -129,7 +129,7 @@ fn unload_current_level(
 }
 
 fn load_level_1(
-    mut commands: Commands,
+    mut commands: ComponentCommands,
     mut loading_data: ResMut<LoadingData>,
     asset_server: Res<AssetServer>,
 ) {
@@ -162,7 +162,7 @@ fn load_level_1(
 }
 
 fn load_level_2(
-    mut commands: Commands,
+    mut commands: ComponentCommands,
     mut loading_data: ResMut<LoadingData>,
     asset_server: Res<AssetServer>,
 ) {
@@ -227,7 +227,7 @@ fn update_loading_data(
 struct LoadingScreen;
 
 // Spawns the necessary components for the loading screen.
-fn load_loading_screen(mut commands: Commands) {
+fn load_loading_screen(mut commands: ComponentCommands) {
     let text_style = TextFont {
         font_size: 67.0,
         ..default()

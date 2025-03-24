@@ -101,30 +101,27 @@ use crate::{
 /// The [`error`](crate::error) module provides some simple error handlers for convenience.
 ///
 /// [`ApplyDeferred`]: crate::schedule::ApplyDeferred
-pub struct Commands<'w, 's, W: WorldLabel> {
+pub struct ComponentCommands<'w, 's, W: ComponentWorld> {
     queue: InternalQueue<'s>,
-    entities: &'w Entities<InvalidComponentWorld>,
-    marker: PhantomData<W>,
+    entities: &'w Entities<W>,
 }
 
-pub type TypeErasedCommands<'w, 's> = Commands<'w, 's, InvalidWorld>;
-
 // SAFETY: All commands [`Command`] implement [`Send`]
-unsafe impl<W: WorldLabel> Send for Commands<'_, '_, W> {}
+unsafe impl<W: ComponentWorld> Send for ComponentCommands<'_, '_, W> {}
 
 // SAFETY: `Commands` never gives access to the inner commands.
-unsafe impl<W: WorldLabel> Sync for Commands<'_, '_, W> {}
+unsafe impl<W: ComponentWorld> Sync for ComponentCommands<'_, '_, W> {}
 
 const _: () = {
-    type __StructFieldsAlias<'w, 's> = (Deferred<'s, CommandQueue>, &'w Entities);
+    type __StructFieldsAlias<'w, 's, W> = (Deferred<'s, CommandQueue>, &'w Entities<W>);
     #[doc(hidden)]
-    pub struct FetchState {
-        state: <__StructFieldsAlias<'static, 'static> as bevy_ecs::system::SystemParam>::State,
+    pub struct FetchState<W: ComponentWorld> {
+        state: <__StructFieldsAlias<'static, 'static, W> as bevy_ecs::system::SystemParam>::State,
     }
     // SAFETY: Only reads Entities
-    unsafe impl<W: WorldLabel> bevy_ecs::system::SystemParam for Commands<'_, '_, W> {
-        type State = FetchState;
-        type Item<'w, 's> = Commands<'w, 's, W>;
+    unsafe impl<W: ComponentWorld> bevy_ecs::system::SystemParam for ComponentCommands<'_, '_, W> {
+        type State = FetchState<W>;
+        type Item<'w, 's> = ComponentCommands<'w, 's, W>;
         type World = W;
 
         fn init_state(
@@ -132,10 +129,11 @@ const _: () = {
             system_meta: &mut bevy_ecs::system::SystemMeta,
         ) -> Self::State {
             FetchState {
-                state: <__StructFieldsAlias<'_, '_> as bevy_ecs::system::SystemParam>::init_state(
-                    world,
-                    system_meta,
-                ),
+                state:
+                    <__StructFieldsAlias<'_, '_, W> as bevy_ecs::system::SystemParam>::init_state(
+                        (world, world),
+                        system_meta,
+                    ),
             }
         }
 
@@ -146,7 +144,7 @@ const _: () = {
         ) {
             // SAFETY: Caller guarantees the archetype is from the world used in `init_state`
             unsafe {
-                <__StructFieldsAlias<'_, '_> as bevy_ecs::system::SystemParam>::new_archetype(
+                <__StructFieldsAlias<'_, '_, W> as bevy_ecs::system::SystemParam>::new_archetype(
                     &mut state.state,
                     archetype,
                     system_meta,
@@ -157,9 +155,9 @@ const _: () = {
         fn apply(
             state: &mut Self::State,
             system_meta: &bevy_ecs::system::SystemMeta,
-            world: &mut World,
+            world: UnsafeWorldCell,
         ) {
-            <__StructFieldsAlias<'_, '_> as bevy_ecs::system::SystemParam>::apply(
+            <__StructFieldsAlias<'_, '_, W> as bevy_ecs::system::SystemParam>::apply(
                 &mut state.state,
                 system_meta,
                 world,
@@ -169,9 +167,9 @@ const _: () = {
         fn queue(
             state: &mut Self::State,
             system_meta: &bevy_ecs::system::SystemMeta,
-            world: bevy_ecs::world::DeferredWorld,
+            world: UnsafeWorldCell,
         ) {
-            <__StructFieldsAlias<'_, '_> as bevy_ecs::system::SystemParam>::queue(
+            <__StructFieldsAlias<'_, '_, W> as bevy_ecs::system::SystemParam>::queue(
                 &mut state.state,
                 system_meta,
                 world,
@@ -184,7 +182,7 @@ const _: () = {
             system_meta: &bevy_ecs::system::SystemMeta,
             world: UnsafeWorldCell,
         ) -> bool {
-            <(Deferred<CommandQueue>, &Entities) as bevy_ecs::system::SystemParam>::validate_param(
+            <(Deferred<CommandQueue>, &Entities<W>) as bevy_ecs::system::SystemParam>::validate_param(
                 &state.state,
                 system_meta,
                 world,
@@ -199,7 +197,7 @@ const _: () = {
             change_tick: bevy_ecs::component::Tick,
         ) -> Self::Item<'w, 's> {
             let(f0, f1) =  <(Deferred<'s, CommandQueue>, &'w Entities) as bevy_ecs::system::SystemParam>::get_param(&mut state.state, system_meta, world, change_tick);
-            Commands {
+            ComponentCommands {
                 queue: InternalQueue::CommandQueue(f0),
                 entities: f1,
                 marker: PhantomData,
@@ -207,7 +205,8 @@ const _: () = {
         }
     }
     // SAFETY: Only reads Entities
-    unsafe impl<'w, 's, W: WorldLabel> bevy_ecs::system::ReadOnlySystemParam for Commands<'w, 's, W>
+    unsafe impl<'w, 's, W: WorldLabel> bevy_ecs::system::ReadOnlySystemParam
+        for ComponentCommands<'w, 's, W>
     where
         Deferred<'s, CommandQueue>: bevy_ecs::system::ReadOnlySystemParam,
         &'w Entities: bevy_ecs::system::ReadOnlySystemParam,
@@ -220,7 +219,7 @@ enum InternalQueue<'s> {
     RawCommandQueue(RawCommandQueue),
 }
 
-impl<'w, 's, W: ComponentWorld> Commands<'w, 's, W> {
+impl<'w, 's, W: ComponentWorld> ComponentCommands<'w, 's, W> {
     /// Returns a new `Commands` instance from a [`CommandQueue`] and a [`World`].
     ///
     /// It is not required to call this constructor when using `Commands` as a [system parameter].
@@ -279,8 +278,8 @@ impl<'w, 's, W: ComponentWorld> Commands<'w, 's, W> {
     /// #
     /// # fn do_initialization(_: Commands) {}
     /// ```
-    pub fn reborrow(&mut self) -> Commands<'w, '_, W> {
-        Commands {
+    pub fn reborrow(&mut self) -> ComponentCommands<'w, '_, W> {
+        ComponentCommands {
             queue: match &mut self.queue {
                 InternalQueue::CommandQueue(queue) => InternalQueue::CommandQueue(queue.reborrow()),
                 InternalQueue::RawCommandQueue(queue) => {
@@ -1171,7 +1170,7 @@ impl<'w, 's, W: ComponentWorld> Commands<'w, 's, W> {
 /// The [`error`](crate::error) module provides some simple error handlers for convenience.
 pub struct EntityCommands<'a> {
     pub(crate) entity: Entity,
-    pub(crate) commands: Commands<'a, 'a>,
+    pub(crate) commands: ComponentCommands<'a, 'a>,
 }
 
 impl<'a> EntityCommands<'a> {
@@ -1904,12 +1903,12 @@ impl<'a> EntityCommands<'a> {
     }
 
     /// Returns the underlying [`Commands`].
-    pub fn commands(&mut self) -> Commands {
+    pub fn commands(&mut self) -> ComponentCommands {
         self.commands.reborrow()
     }
 
     /// Returns a mutable reference to the underlying [`Commands`].
-    pub fn commands_mut(&mut self) -> &mut Commands<'a, 'a> {
+    pub fn commands_mut(&mut self) -> &mut ComponentCommands<'a, 'a> {
         &mut self.commands
     }
 
@@ -2221,7 +2220,7 @@ mod tests {
     use crate::{
         component::Component,
         resource::Resource,
-        system::Commands,
+        system::ComponentCommands,
         world::{CommandQueue, FromWorld, World},
     };
     use alloc::{string::String, sync::Arc, vec, vec::Vec};
@@ -2271,7 +2270,7 @@ mod tests {
     fn entity_commands_entry() {
         let mut world = World::default();
         let mut queue = CommandQueue::default();
-        let mut commands = Commands::new(&mut queue, &world);
+        let mut commands = ComponentCommands::new(&mut queue, &world);
         let entity = commands.spawn_empty().id();
         commands
             .entity(entity)
@@ -2279,7 +2278,7 @@ mod tests {
             .and_modify(|_| unreachable!());
         queue.apply(&mut world);
         assert!(!world.entity(entity).contains::<W<u32>>());
-        let mut commands = Commands::new(&mut queue, &world);
+        let mut commands = ComponentCommands::new(&mut queue, &world);
         commands
             .entity(entity)
             .entry::<W<u32>>()
@@ -2289,7 +2288,7 @@ mod tests {
             });
         queue.apply(&mut world);
         assert_eq!(21, world.get::<W<u32>>(entity).unwrap().0);
-        let mut commands = Commands::new(&mut queue, &world);
+        let mut commands = ComponentCommands::new(&mut queue, &world);
         commands
             .entity(entity)
             .entry::<W<u64>>()
@@ -2298,11 +2297,11 @@ mod tests {
         queue.apply(&mut world);
         assert_eq!(42, world.get::<W<u64>>(entity).unwrap().0);
         world.insert_resource(W(5_usize));
-        let mut commands = Commands::new(&mut queue, &world);
+        let mut commands = ComponentCommands::new(&mut queue, &world);
         commands.entity(entity).entry::<W<String>>().or_from_world();
         queue.apply(&mut world);
         assert_eq!("*****", &world.get::<W<String>>(entity).unwrap().0);
-        let mut commands = Commands::new(&mut queue, &world);
+        let mut commands = ComponentCommands::new(&mut queue, &world);
         let id = commands.entity(entity).entry::<W<u64>>().entity().id();
         queue.apply(&mut world);
         assert_eq!(id, entity);
@@ -2312,7 +2311,7 @@ mod tests {
     fn commands() {
         let mut world = World::default();
         let mut command_queue = CommandQueue::default();
-        let entity = Commands::new(&mut command_queue, &world)
+        let entity = ComponentCommands::new(&mut command_queue, &world)
             .spawn((W(1u32), W(2u64)))
             .id();
         command_queue.apply(&mut world);
@@ -2325,7 +2324,7 @@ mod tests {
         assert_eq!(results, vec![(1u32, 2u64)]);
         // test entity despawn
         {
-            let mut commands = Commands::new(&mut command_queue, &world);
+            let mut commands = ComponentCommands::new(&mut command_queue, &world);
             commands.entity(entity).despawn();
             commands.entity(entity).despawn(); // double despawn shouldn't panic
         }
@@ -2339,7 +2338,7 @@ mod tests {
 
         // test adding simple (FnOnce) commands
         {
-            let mut commands = Commands::new(&mut command_queue, &world);
+            let mut commands = ComponentCommands::new(&mut command_queue, &world);
 
             // set up a simple command using a closure that adds one additional entity
             commands.queue(|world: &mut World| {
@@ -2365,7 +2364,7 @@ mod tests {
         let mut command_queue1 = CommandQueue::default();
 
         // insert components
-        let entity = Commands::new(&mut command_queue1, &world)
+        let entity = ComponentCommands::new(&mut command_queue1, &world)
             .spawn(())
             .insert_if(W(1u8), || true)
             .insert_if(W(2u8), || false)
@@ -2386,12 +2385,12 @@ mod tests {
 
         // try to insert components after despawning entity
         // in another command queue
-        Commands::new(&mut command_queue1, &world)
+        ComponentCommands::new(&mut command_queue1, &world)
             .entity(entity)
             .try_insert_if_new_and(W(1u64), || true);
 
         let mut command_queue2 = CommandQueue::default();
-        Commands::new(&mut command_queue2, &world)
+        ComponentCommands::new(&mut command_queue2, &world)
             .entity(entity)
             .despawn();
         command_queue2.apply(&mut world);
@@ -2407,7 +2406,7 @@ mod tests {
         let (sparse_dropck, sparse_is_dropped) = DropCk::new_pair();
         let sparse_dropck = SparseDropCk(sparse_dropck);
 
-        let entity = Commands::new(&mut command_queue, &world)
+        let entity = ComponentCommands::new(&mut command_queue, &world)
             .spawn((W(1u32), W(2u64), dense_dropck, sparse_dropck))
             .id();
         command_queue.apply(&mut world);
@@ -2419,7 +2418,7 @@ mod tests {
         assert_eq!(results_before, vec![(1u32, 2u64)]);
 
         // test component removal
-        Commands::new(&mut command_queue, &world)
+        ComponentCommands::new(&mut command_queue, &world)
             .entity(entity)
             .remove::<W<u32>>()
             .remove::<(W<u32>, W<u64>, SparseDropCk, DropCk)>();
@@ -2453,7 +2452,7 @@ mod tests {
         let (sparse_dropck, sparse_is_dropped) = DropCk::new_pair();
         let sparse_dropck = SparseDropCk(sparse_dropck);
 
-        let entity = Commands::new(&mut command_queue, &world)
+        let entity = ComponentCommands::new(&mut command_queue, &world)
             .spawn((W(1u32), W(2u64), dense_dropck, sparse_dropck))
             .id();
         command_queue.apply(&mut world);
@@ -2465,7 +2464,7 @@ mod tests {
         assert_eq!(results_before, vec![(1u32, 2u64)]);
 
         // test component removal
-        Commands::new(&mut command_queue, &world)
+        ComponentCommands::new(&mut command_queue, &world)
             .entity(entity)
             .remove_by_id(world.components().get_id(TypeId::of::<W<u32>>()).unwrap())
             .remove_by_id(world.components().get_id(TypeId::of::<W<u64>>()).unwrap())
@@ -2502,7 +2501,7 @@ mod tests {
         let mut world = World::default();
         let mut queue = CommandQueue::default();
         {
-            let mut commands = Commands::new(&mut queue, &world);
+            let mut commands = ComponentCommands::new(&mut queue, &world);
             commands.insert_resource(W(123i32));
             commands.insert_resource(W(456.0f64));
         }
@@ -2512,7 +2511,7 @@ mod tests {
         assert!(world.contains_resource::<W<f64>>());
 
         {
-            let mut commands = Commands::new(&mut queue, &world);
+            let mut commands = ComponentCommands::new(&mut queue, &world);
             // test resource removal
             commands.remove_resource::<W<i32>>();
         }
@@ -2536,7 +2535,7 @@ mod tests {
         let mut world = World::default();
         let mut queue = CommandQueue::default();
         let e = {
-            let mut commands = Commands::new(&mut queue, &world);
+            let mut commands = ComponentCommands::new(&mut queue, &world);
             commands.spawn((X, Z)).id()
         };
         queue.apply(&mut world);
@@ -2546,7 +2545,7 @@ mod tests {
         assert!(world.get::<Z>(e).is_some());
 
         {
-            let mut commands = Commands::new(&mut queue, &world);
+            let mut commands = ComponentCommands::new(&mut queue, &world);
             commands.entity(e).remove_with_requires::<X>();
         }
         queue.apply(&mut world);
@@ -2569,7 +2568,7 @@ mod tests {
         assert_eq!(world.iter_resources().count(), resources + 1);
         assert!(world.get_entity(id.entity).is_ok());
 
-        let mut commands = Commands::new(&mut queue, &world);
+        let mut commands = ComponentCommands::new(&mut queue, &world);
         commands.unregister_system_cached(nothing);
         queue.apply(&mut world);
         assert_eq!(world.iter_resources().count(), resources);
@@ -2581,8 +2580,8 @@ mod tests {
 
     #[test]
     fn test_commands_are_send_and_sync() {
-        is_send::<Commands>();
-        is_sync::<Commands>();
+        is_send::<ComponentCommands>();
+        is_sync::<ComponentCommands>();
     }
 
     #[test]
@@ -2590,12 +2589,12 @@ mod tests {
         let mut world = World::default();
         let mut queue_1 = CommandQueue::default();
         {
-            let mut commands = Commands::new(&mut queue_1, &world);
+            let mut commands = ComponentCommands::new(&mut queue_1, &world);
             commands.insert_resource(W(123i32));
         }
         let mut queue_2 = CommandQueue::default();
         {
-            let mut commands = Commands::new(&mut queue_2, &world);
+            let mut commands = ComponentCommands::new(&mut queue_2, &world);
             commands.insert_resource(W(456.0f64));
         }
         queue_1.append(&mut queue_2);

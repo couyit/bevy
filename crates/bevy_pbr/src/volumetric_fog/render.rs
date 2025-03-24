@@ -14,7 +14,7 @@ use bevy_ecs::{
     entity::Entity,
     query::{Has, QueryItem, With},
     resource::Resource,
-    system::{lifetimeless::Read, Commands, Local, Query, Res, ResMut},
+    system::{lifetimeless::Read, ComponentCommands, Local, Query, Res, ResMut},
     world::{FromWorld, World},
 };
 use bevy_image::{BevyDefault, Image};
@@ -273,7 +273,7 @@ impl FromWorld for VolumetricFogPipeline {
 /// Extracts [`VolumetricFog`], [`FogVolume`], and [`VolumetricLight`]s
 /// from the main world to the render world.
 pub fn extract_volumetric_fog(
-    mut commands: Commands,
+    mut commands: ComponentCommands,
     view_targets: Extract<Query<(RenderEntity, &VolumetricFog)>>,
     fog_volumes: Extract<Query<(RenderEntity, &FogVolume, &GlobalTransform)>>,
     volumetric_lights: Extract<Query<(RenderEntity, &VolumetricLight)>>,
@@ -610,7 +610,7 @@ impl SpecializedRenderPipeline for VolumetricFogPipeline {
 
 /// Specializes volumetric fog pipelines for all views with that effect enabled.
 pub fn prepare_volumetric_fog_pipelines(
-    mut commands: Commands,
+    mut commands: ComponentCommands,
     pipeline_cache: Res<PipelineCache>,
     mut pipelines: ResMut<SpecializedRenderPipelines<VolumetricFogPipeline>>,
     volumetric_lighting_pipeline: Res<VolumetricFogPipeline>,
@@ -689,7 +689,7 @@ pub fn prepare_volumetric_fog_pipelines(
 
 /// A system that converts [`VolumetricFog`] into [`VolumetricFogUniform`]s.
 pub fn prepare_volumetric_fog_uniforms(
-    mut commands: Commands,
+    mut commands: ComponentCommands,
     mut volumetric_lighting_uniform_buffer: ResMut<VolumetricFogUniformBuffer>,
     view_targets: Query<(Entity, &ExtractedView, &VolumetricFog)>,
     fog_volumes: Query<(Entity, &FogVolume, &GlobalTransform)>,

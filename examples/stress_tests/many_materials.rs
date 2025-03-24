@@ -44,7 +44,7 @@ fn main() {
 }
 
 fn setup(
-    mut commands: Commands,
+    mut commands: ComponentCommands,
     args: Res<Args>,
     mesh_assets: ResMut<Assets<Mesh>>,
     material_assets: ResMut<Assets<StandardMaterial>>,

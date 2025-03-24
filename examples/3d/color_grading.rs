@@ -115,7 +115,7 @@ fn main() {
 }
 
 fn setup(
-    mut commands: Commands,
+    mut commands: ComponentCommands,
     currently_selected_option: Res<SelectedColorGradingOption>,
     asset_server: Res<AssetServer>,
 ) {
@@ -135,7 +135,7 @@ fn setup(
 }
 
 /// Adds all the buttons on the bottom of the scene.
-fn add_buttons(commands: &mut Commands, font: &Handle<Font>, color_grading: &ColorGrading) {
+fn add_buttons(commands: &mut ComponentCommands, font: &Handle<Font>, color_grading: &ColorGrading) {
     // Spawn the parent node that contains all the buttons.
     commands
         .spawn(Node {
@@ -293,7 +293,7 @@ fn add_button_for_value(
 
 /// Creates the help text at the top of the screen.
 fn add_help_text(
-    commands: &mut Commands,
+    commands: &mut ComponentCommands,
     font: &Handle<Font>,
     currently_selected_option: &SelectedColorGradingOption,
 ) {
@@ -331,7 +331,7 @@ fn add_text<'a>(
     ))
 }
 
-fn add_camera(commands: &mut Commands, asset_server: &AssetServer, color_grading: ColorGrading) {
+fn add_camera(commands: &mut ComponentCommands, asset_server: &AssetServer, color_grading: ColorGrading) {
     commands.spawn((
         Camera3d::default(),
         Camera {
@@ -357,7 +357,7 @@ fn add_camera(commands: &mut Commands, asset_server: &AssetServer, color_grading
     ));
 }
 
-fn add_basic_scene(commands: &mut Commands, asset_server: &AssetServer) {
+fn add_basic_scene(commands: &mut ComponentCommands, asset_server: &AssetServer) {
     // Spawn the main scene.
     commands.spawn(SceneRoot(asset_server.load(
         GltfAssetLabel::Scene(0).from_asset("models/TonemappingTest/TonemappingTest.gltf"),

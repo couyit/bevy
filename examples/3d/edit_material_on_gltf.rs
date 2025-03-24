@@ -8,7 +8,7 @@ use bevy::{
     gltf::GltfAssetLabel,
     math::{Dir3, Vec3},
     pbr::{DirectionalLight, MeshMaterial3d, StandardMaterial},
-    prelude::{Camera3d, Children, Commands, Component, Query, Res, ResMut, Transform, Trigger},
+    prelude::{Camera3d, Children, ComponentCommands, Component, Query, Res, ResMut, Transform, Trigger},
     scene::{SceneInstanceReady, SceneRoot},
     DefaultPlugins,
 };
@@ -26,7 +26,7 @@ fn main() {
 #[derive(Component)]
 struct ColorOverride(Color);
 
-fn setup_scene(mut commands: Commands, asset_server: Res<AssetServer>) {
+fn setup_scene(mut commands: ComponentCommands, asset_server: Res<AssetServer>) {
     commands.spawn((
         Camera3d::default(),
         Transform::from_xyz(0., 1., 2.5).looking_at(Vec3::new(0., 0.25, 0.), Dir3::Y),
@@ -58,7 +58,7 @@ fn setup_scene(mut commands: Commands, asset_server: Res<AssetServer>) {
 
 fn change_material(
     trigger: Trigger<SceneInstanceReady>,
-    mut commands: Commands,
+    mut commands: ComponentCommands,
     children: Query<&Children>,
     color_override: Query<&ColorOverride>,
     mesh_materials: Query<&MeshMaterial3d<StandardMaterial>>,

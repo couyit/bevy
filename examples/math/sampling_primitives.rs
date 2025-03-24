@@ -272,7 +272,7 @@ struct CameraRig {
 }
 
 fn setup(
-    mut commands: Commands,
+    mut commands: ComponentCommands,
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<StandardMaterial>>,
     shapes: Res<SampledShapes>,
@@ -414,7 +414,7 @@ fn setup(
 
 // Handle user inputs from the keyboard:
 fn handle_keypress(
-    mut commands: Commands,
+    mut commands: ComponentCommands,
     keyboard: Res<ButtonInput<KeyCode>>,
     mut mode: ResMut<SamplingMode>,
     mut spawn_mode: ResMut<SpawningMode>,
@@ -546,7 +546,7 @@ fn handle_mouse(
 }
 
 fn spawn_points(
-    mut commands: Commands,
+    mut commands: ComponentCommands,
     mode: ResMut<SamplingMode>,
     shapes: Res<SampledShapes>,
     mut random_source: ResMut<RandomSource>,
@@ -598,7 +598,7 @@ fn spawn_points(
 }
 
 fn despawn_points(
-    mut commands: Commands,
+    mut commands: ComponentCommands,
     samples: Query<Entity, With<SamplePoint>>,
     spawn_mode: Res<SpawningMode>,
     mut counter: ResMut<PointCounter>,
@@ -632,7 +632,7 @@ fn despawn_points(
 }
 
 fn animate_spawning(
-    mut commands: Commands,
+    mut commands: ComponentCommands,
     time: Res<Time>,
     mut samples: Query<(Entity, &mut Transform, &mut SpawningPoint)>,
 ) {
@@ -648,7 +648,7 @@ fn animate_spawning(
 }
 
 fn animate_despawning(
-    mut commands: Commands,
+    mut commands: ComponentCommands,
     time: Res<Time>,
     mut samples: Query<(Entity, &mut Transform, &mut DespawningPoint)>,
 ) {

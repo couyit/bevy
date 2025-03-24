@@ -51,7 +51,7 @@ fn button_system(
     }
 }
 
-fn setup(mut commands: Commands, assets: Res<AssetServer>) {
+fn setup(mut commands: ComponentCommands, assets: Res<AssetServer>) {
     // ui camera
     commands.spawn(Camera2d);
     commands.spawn(button(&assets));

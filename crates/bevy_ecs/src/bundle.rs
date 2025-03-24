@@ -21,14 +21,14 @@ use crate::{
     storage::{SparseSetIndex, SparseSets, Table, TableRow, Tables},
     world::{
         unsafe_world_cell::UnsafeWorldCell, ComponentWorld, EntityWorldMut, InvalidComponentWorld,
-        Storage, ON_ADD, ON_INSERT, ON_REPLACE,
+        InvalidWorld, Storage, ON_ADD, ON_INSERT, ON_REPLACE,
     },
 };
 use alloc::{boxed::Box, vec, vec::Vec};
 use bevy_platform_support::collections::{HashMap, HashSet};
 use bevy_ptr::{ConstNonNull, OwningPtr};
 use bevy_utils::TypeIdMap;
-use core::{any::TypeId, ptr::NonNull};
+use core::{any::TypeId, marker::PhantomData, ptr::NonNull};
 use variadics_please::all_tuples;
 
 /// The `Bundle` trait enables insertion and removal of [`Component`]s from an entity.
@@ -156,7 +156,10 @@ pub unsafe trait Bundle: DynamicBundle + Send + Sync + 'static {
     fn component_ids(components: &mut ComponentsRegistrator, ids: &mut impl FnMut(ComponentId));
 
     /// Gets this [`Bundle`]'s component ids. This will be [`None`] if the component has not been registered.
-    fn get_component_ids(components: &Components, ids: &mut impl FnMut(Option<ComponentId>));
+    fn get_component_ids(
+        components: &Components<InvalidWorld>,
+        ids: &mut impl FnMut(Option<ComponentId>),
+    );
 
     /// Registers components that are required by the components in this [`Bundle`].
     fn register_required_components(
@@ -243,7 +246,10 @@ unsafe impl<C: Component> Bundle for C {
         );
     }
 
-    fn get_component_ids(components: &Components, ids: &mut impl FnMut(Option<ComponentId>)) {
+    fn get_component_ids(
+        components: &Components<InvalidWorld>,
+        ids: &mut impl FnMut(Option<ComponentId>),
+    ) {
         ids(components.get_id(TypeId::of::<C>()));
     }
 }
@@ -294,7 +300,7 @@ macro_rules! tuple_impl {
                 $(<$name as Bundle>::component_ids(components, ids);)*
             }
 
-            fn get_component_ids(components: &Components, ids: &mut impl FnMut(Option<ComponentId>)){
+            fn get_component_ids(components: &Components<InvalidWorld>, ids: &mut impl FnMut(Option<ComponentId>)){
                 $(<$name as Bundle>::get_component_ids(components, ids);)*
             }
 
@@ -476,7 +482,7 @@ impl BundleInfo {
     unsafe fn new(
         bundle_type_name: &'static str,
         sparse_sets: &mut SparseSets,
-        components: &Components,
+        components: &Components<InvalidWorld>,
         mut component_ids: Vec<ComponentId>,
         id: BundleId,
     ) -> BundleInfo {
@@ -733,7 +739,7 @@ impl BundleInfo {
         &self,
         archetypes: &mut Archetypes<InvalidComponentWorld>,
         tables: &mut Tables,
-        components: &Components,
+        components: &Components<InvalidWorld>,
         observers: &Observers,
         archetype_id: ArchetypeId,
     ) -> ArchetypeId {
@@ -869,7 +875,7 @@ impl BundleInfo {
         &self,
         archetypes: &mut Archetypes<InvalidComponentWorld>,
         tables: &mut Tables,
-        components: &Components,
+        components: &Components<InvalidWorld>,
         observers: &Observers,
         archetype_id: ArchetypeId,
         intersection: bool,
@@ -1598,6 +1604,7 @@ pub struct Bundles<W: ComponentWorld> {
     /// Cache optimized dynamic [`BundleId`] with single component
     dynamic_component_bundle_ids: HashMap<ComponentId, BundleId>,
     dynamic_component_storages: HashMap<BundleId, StorageType>,
+    marker: PhantomData<W>,
 }
 
 impl<W: ComponentWorld> Bundles<W> {
@@ -1722,7 +1729,7 @@ impl<W: ComponentWorld> Bundles<W> {
     pub(crate) fn init_dynamic_info(
         &mut self,
         sparse_sets: &mut SparseSets,
-        components: &Components,
+        components: &Components<W>,
         component_ids: &[ComponentId],
     ) -> BundleId {
         let bundle_infos = &mut self.bundle_infos;
@@ -1757,7 +1764,7 @@ impl<W: ComponentWorld> Bundles<W> {
     pub(crate) fn init_component_info(
         &mut self,
         sparse_sets: &mut SparseSets,
-        components: &Components,
+        components: &Components<W>,
         component_id: ComponentId,
     ) -> BundleId {
         let bundle_infos = &mut self.bundle_infos;
@@ -1783,7 +1790,7 @@ impl<W: ComponentWorld> Bundles<W> {
 fn initialize_dynamic_bundle(
     bundle_infos: &mut Vec<BundleInfo>,
     sparse_sets: &mut SparseSets,
-    components: &Components,
+    components: &Components<InvalidWorld>,
     component_ids: Vec<ComponentId>,
 ) -> (BundleId, Vec<StorageType>) {
     // Assert component existence
@@ -1835,19 +1842,19 @@ mod tests {
     #[component(on_add = a_on_add, on_insert = a_on_insert, on_replace = a_on_replace, on_remove = a_on_remove)]
     struct AMacroHooks;
 
-    fn a_on_add(mut world: DeferredWorld, _: HookContext) {
+    fn a_on_add(mut world: DeferredWorld<ResourceWorld>, _: In<HookContext>) {
         world.resource_mut::<R>().assert_order(0);
     }
 
-    fn a_on_insert(mut world: DeferredWorld, _: HookContext) {
+    fn a_on_insert(mut world: DeferredWorld<ResourceWorld>, _: In<HookContext>) {
         world.resource_mut::<R>().assert_order(1);
     }
 
-    fn a_on_replace(mut world: DeferredWorld, _: HookContext) {
+    fn a_on_replace(mut world: DeferredWorld<ResourceWorld>, _: In<HookContext>) {
         world.resource_mut::<R>().assert_order(2);
     }
 
-    fn a_on_remove(mut world: DeferredWorld, _: HookContext) {
+    fn a_on_remove(mut world: DeferredWorld<ResourceWorld>, _: In<HookContext>) {
         world.resource_mut::<R>().assert_order(3);
     }
 
@@ -1877,6 +1884,7 @@ mod tests {
     #[test]
     fn component_hook_order_spawn_despawn() {
         let mut worlds = Worlds::new();
+
         let (world, resource_world) = worlds.get_2_mut::<MainWorld, ResourceWorld>();
         resource_world.init_resource::<R>();
         world

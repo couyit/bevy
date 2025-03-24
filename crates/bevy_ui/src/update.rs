@@ -12,7 +12,7 @@ use bevy_ecs::{
     entity::{hash_set::EntityHashSet, Entity},
     hierarchy::ChildOf,
     query::{Changed, With},
-    system::{Commands, Local, Query, Res},
+    system::{ComponentCommands, Local, Query, Res},
 };
 use bevy_math::{Rect, UVec2};
 use bevy_render::camera::Camera;
@@ -21,7 +21,7 @@ use bevy_transform::components::GlobalTransform;
 
 /// Updates clipping for all nodes
 pub fn update_clipping_system(
-    mut commands: Commands,
+    mut commands: ComponentCommands,
     root_nodes: UiRootNodes,
     mut node_query: Query<(
         &Node,
@@ -43,7 +43,7 @@ pub fn update_clipping_system(
 }
 
 fn update_clipping(
-    commands: &mut Commands,
+    commands: &mut ComponentCommands,
     ui_children: &UiChildren,
     node_query: &mut Query<(
         &Node,

@@ -11,7 +11,7 @@ use bevy_ecs::{
     reflect::ReflectComponent,
     resource::Resource,
     schedule::IntoScheduleConfigs,
-    system::{Commands, Local, Query, Res, ResMut},
+    system::{ComponentCommands, Local, Query, Res, ResMut},
 };
 use bevy_image::Image;
 use bevy_math::{Affine3A, FloatOrd, Mat4, Vec3A, Vec4};
@@ -394,7 +394,7 @@ impl Plugin for LightProbePlugin {
 /// if one does not already exist.
 fn gather_environment_map_uniform(
     view_query: Extract<Query<(RenderEntity, Option<&EnvironmentMapLight>), With<Camera3d>>>,
-    mut commands: Commands,
+    mut commands: ComponentCommands,
 ) {
     for (view_entity, environment_map_light) in view_query.iter() {
         let environment_map_uniform = if let Some(environment_map_light) = environment_map_light {
@@ -423,7 +423,7 @@ fn gather_light_probes<C>(
     >,
     mut reflection_probes: Local<Vec<LightProbeInfo<C>>>,
     mut view_reflection_probes: Local<Vec<LightProbeInfo<C>>>,
-    mut commands: Commands,
+    mut commands: ComponentCommands,
 ) where
     C: LightProbeComponent,
 {
@@ -476,7 +476,7 @@ fn gather_light_probes<C>(
 /// Gathers up environment map settings for each applicable view and
 /// writes them into a GPU buffer.
 pub fn prepare_environment_uniform_buffer(
-    mut commands: Commands,
+    mut commands: ComponentCommands,
     views: Query<(Entity, Option<&EnvironmentMapUniform>), With<ExtractedView>>,
     mut environment_uniform_buffer: ResMut<EnvironmentMapUniformBuffer>,
     render_device: Res<RenderDevice>,
@@ -506,7 +506,7 @@ pub fn prepare_environment_uniform_buffer(
 // the type of light probe. It collects light probes of all types together into
 // a single structure, ready to be passed to the shader.
 fn upload_light_probes(
-    mut commands: Commands,
+    mut commands: ComponentCommands,
     views: Query<Entity, With<ExtractedView>>,
     mut light_probes_buffer: ResMut<LightProbesBuffer>,
     mut view_light_probes_query: Query<(

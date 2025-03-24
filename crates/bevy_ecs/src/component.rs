@@ -9,8 +9,8 @@ use crate::{
     relationship::RelationshipHookMode,
     resource::Resource,
     storage::{SparseSetIndex, SparseSets, Table, TableRow},
-    system::{Local, SystemParam, TypeErasedCommands},
-    world::{DeferredWorld, FromWorld, World, WorldLabel},
+    system::{In, IntoSystem, Local, SystemId, SystemParam, TypeErasedCommands},
+    world::{DeferredWorld, FromWorld, InvalidWorld, World, WorldLabel},
 };
 use alloc::boxed::Box;
 use alloc::{borrow::Cow, format, vec::Vec};
@@ -571,9 +571,6 @@ pub enum StorageType {
     SparseSet,
 }
 
-/// The type used for [`Component`] lifecycle hooks such as `on_add`, `on_insert` or `on_remove`.
-pub type ComponentHook = for<'w> fn(DeferredWorld<'w>, HookContext);
-
 /// Context provided to a [`ComponentHook`].
 #[derive(Clone, Copy, Debug)]
 pub struct HookContext {
@@ -642,11 +639,11 @@ pub struct HookContext {
 /// ```
 #[derive(Debug, Clone, Default)]
 pub struct ComponentHooks {
-    pub(crate) on_add: Option<ComponentHook>,
-    pub(crate) on_insert: Option<ComponentHook>,
-    pub(crate) on_replace: Option<ComponentHook>,
-    pub(crate) on_remove: Option<ComponentHook>,
-    pub(crate) on_despawn: Option<ComponentHook>,
+    pub(crate) on_add: Option<SystemId<In<HookContext>>>,
+    pub(crate) on_insert: Option<SystemId<In<HookContext>>>,
+    pub(crate) on_replace: Option<SystemId<In<HookContext>>>,
+    pub(crate) on_remove: Option<SystemId<In<HookContext>>>,
+    pub(crate) on_despawn: Option<SystemId<In<HookContext>>>,
 }
 
 impl ComponentHooks {
@@ -677,7 +674,7 @@ impl ComponentHooks {
     /// # Panics
     ///
     /// Will panic if the component already has an `on_add` hook
-    pub fn on_add(&mut self, hook: ComponentHook) -> &mut Self {
+    pub fn on_add(&mut self, hook: SystemId<In<HookContext>>) -> &mut Self {
         self.try_on_add(hook)
             .expect("Component already has an on_add hook")
     }
@@ -695,7 +692,7 @@ impl ComponentHooks {
     /// # Panics
     ///
     /// Will panic if the component already has an `on_insert` hook
-    pub fn on_insert(&mut self, hook: ComponentHook) -> &mut Self {
+    pub fn on_insert(&mut self, hook: SystemId<In<HookContext>>) -> &mut Self {
         self.try_on_insert(hook)
             .expect("Component already has an on_insert hook")
     }
@@ -717,7 +714,7 @@ impl ComponentHooks {
     /// # Panics
     ///
     /// Will panic if the component already has an `on_replace` hook
-    pub fn on_replace(&mut self, hook: ComponentHook) -> &mut Self {
+    pub fn on_replace(&mut self, hook: SystemId<In<HookContext>>) -> &mut Self {
         self.try_on_replace(hook)
             .expect("Component already has an on_replace hook")
     }
@@ -728,7 +725,7 @@ impl ComponentHooks {
     /// # Panics
     ///
     /// Will panic if the component already has an `on_remove` hook
-    pub fn on_remove(&mut self, hook: ComponentHook) -> &mut Self {
+    pub fn on_remove(&mut self, hook: SystemId<In<HookContext>>) -> &mut Self {
         self.try_on_remove(hook)
             .expect("Component already has an on_remove hook")
     }
@@ -738,7 +735,7 @@ impl ComponentHooks {
     /// # Panics
     ///
     /// Will panic if the component already has an `on_despawn` hook
-    pub fn on_despawn(&mut self, hook: ComponentHook) -> &mut Self {
+    pub fn on_despawn(&mut self, hook: SystemId<In<HookContext>>) -> &mut Self {
         self.try_on_despawn(hook)
             .expect("Component already has an on_despawn hook")
     }
@@ -748,7 +745,7 @@ impl ComponentHooks {
     /// This is a fallible version of [`Self::on_add`].
     ///
     /// Returns `None` if the component already has an `on_add` hook.
-    pub fn try_on_add(&mut self, hook: ComponentHook) -> Option<&mut Self> {
+    pub fn try_on_add(&mut self, hook: SystemId<In<HookContext>>) -> Option<&mut Self> {
         if self.on_add.is_some() {
             return None;
         }
@@ -761,7 +758,7 @@ impl ComponentHooks {
     /// This is a fallible version of [`Self::on_insert`].
     ///
     /// Returns `None` if the component already has an `on_insert` hook.
-    pub fn try_on_insert(&mut self, hook: ComponentHook) -> Option<&mut Self> {
+    pub fn try_on_insert(&mut self, hook: SystemId<In<HookContext>>) -> Option<&mut Self> {
         if self.on_insert.is_some() {
             return None;
         }
@@ -774,7 +771,7 @@ impl ComponentHooks {
     /// This is a fallible version of [`Self::on_replace`].
     ///
     /// Returns `None` if the component already has an `on_replace` hook.
-    pub fn try_on_replace(&mut self, hook: ComponentHook) -> Option<&mut Self> {
+    pub fn try_on_replace(&mut self, hook: SystemId<In<HookContext>>) -> Option<&mut Self> {
         if self.on_replace.is_some() {
             return None;
         }
@@ -787,7 +784,7 @@ impl ComponentHooks {
     /// This is a fallible version of [`Self::on_remove`].
     ///
     /// Returns `None` if the component already has an `on_remove` hook.
-    pub fn try_on_remove(&mut self, hook: ComponentHook) -> Option<&mut Self> {
+    pub fn try_on_remove(&mut self, hook: SystemId<In<HookContext>>) -> Option<&mut Self> {
         if self.on_remove.is_some() {
             return None;
         }
@@ -800,7 +797,7 @@ impl ComponentHooks {
     /// This is a fallible version of [`Self::on_despawn`].
     ///
     /// Returns `None` if the component already has an `on_despawn` hook.
-    pub fn try_on_despawn(&mut self, hook: ComponentHook) -> Option<&mut Self> {
+    pub fn try_on_despawn(&mut self, hook: SystemId<In<HookContext>>) -> Option<&mut Self> {
         if self.on_despawn.is_some() {
             return None;
         }
@@ -1295,12 +1292,12 @@ impl ComponentIds {
 /// As a rule of thumb, if you have mutable access to [`ComponentsRegistrator`], prefer to use that instead.
 /// Use this only if you need to know the id of a component but do not need to modify the contents of the world based on that id.
 pub struct ComponentsQueuedRegistrator<'w> {
-    components: &'w Components,
+    components: &'w Components<InvalidWorld>,
     ids: &'w ComponentIds,
 }
 
 impl Deref for ComponentsQueuedRegistrator<'_> {
-    type Target = Components;
+    type Target = Components<InvalidWorld>;
 
     fn deref(&self) -> &Self::Target {
         self.components
@@ -1314,7 +1311,7 @@ impl<'w> ComponentsQueuedRegistrator<'w> {
     ///
     /// The [`Components`] and [`ComponentIds`] must match.
     /// For example, they must be from the same world.
-    pub unsafe fn new(components: &'w Components, ids: &'w ComponentIds) -> Self {
+    pub unsafe fn new(components: &'w Components<InvalidWorld>, ids: &'w ComponentIds) -> Self {
         Self { components, ids }
     }
 
@@ -1509,12 +1506,12 @@ impl<'w> ComponentsQueuedRegistrator<'w> {
 
 /// A [`Components`] wrapper that enables additional features, like registration.
 pub struct ComponentsRegistrator<'w> {
-    components: &'w mut Components,
+    components: &'w mut Components<InvalidWorld>,
     ids: &'w mut ComponentIds,
 }
 
 impl Deref for ComponentsRegistrator<'_> {
-    type Target = Components;
+    type Target = Components<InvalidWorld>;
 
     fn deref(&self) -> &Self::Target {
         self.components
@@ -1534,7 +1531,10 @@ impl<'w> ComponentsRegistrator<'w> {
     ///
     /// The [`Components`] and [`ComponentIds`] must match.
     /// For example, they must be from the same world.
-    pub unsafe fn new(components: &'w mut Components, ids: &'w mut ComponentIds) -> Self {
+    pub unsafe fn new(
+        components: &'w mut Components<InvalidWorld>,
+        ids: &'w mut ComponentIds,
+    ) -> Self {
         Self { components, ids }
     }
 

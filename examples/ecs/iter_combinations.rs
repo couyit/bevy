@@ -37,7 +37,7 @@ struct BodyBundle {
 
 fn generate_bodies(
     time: Res<Time<Fixed>>,
-    mut commands: Commands,
+    mut commands: ComponentCommands,
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<StandardMaterial>>,
 ) {

@@ -40,7 +40,7 @@ fn animate_sprite(
 }
 
 fn setup(
-    mut commands: Commands,
+    mut commands: ComponentCommands,
     asset_server: Res<AssetServer>,
     mut texture_atlas_layouts: ResMut<Assets<TextureAtlasLayout>>,
 ) {

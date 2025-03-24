@@ -25,7 +25,7 @@ use crate::{
     entity::{Entity, EntityLocation},
     observer::Observers,
     storage::{ImmutableSparseSet, SparseArray, SparseSet, SparseSetIndex, TableId, TableRow},
-    world::ComponentWorld,
+    world::{ComponentWorld, InvalidWorld},
 };
 use alloc::{boxed::Box, vec::Vec};
 use bevy_platform_support::collections::HashMap;
@@ -383,7 +383,7 @@ pub struct Archetype {
 impl Archetype {
     /// `table_components` and `sparse_set_components` must be sorted
     pub(crate) fn new(
-        components: &Components,
+        components: &Components<InvalidWorld>,
         component_index: &mut ComponentIndex,
         observers: &Observers,
         id: ArchetypeId,
@@ -932,7 +932,7 @@ impl<W: ComponentWorld> Archetypes<W> {
     /// `table_components` and `sparse_set_components` must exist in `components`
     pub(crate) unsafe fn get_id_or_insert(
         &mut self,
-        components: &Components,
+        components: &Components<InvalidWorld>,
         observers: &Observers,
         table_id: TableId,
         table_components: Vec<ComponentId>,

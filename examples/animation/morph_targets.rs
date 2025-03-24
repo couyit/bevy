@@ -34,7 +34,7 @@ struct MorphData {
     mesh: Handle<Mesh>,
 }
 
-fn setup(asset_server: Res<AssetServer>, mut commands: Commands) {
+fn setup(asset_server: Res<AssetServer>, mut commands: ComponentCommands) {
     commands.insert_resource(MorphData {
         the_wave: asset_server
             .load(GltfAssetLabel::Animation(2).from_asset("models/animated/MorphStressTest.gltf")),
@@ -62,7 +62,7 @@ fn setup(asset_server: Res<AssetServer>, mut commands: Commands) {
 /// Plays an [`AnimationClip`] from the loaded [`Gltf`] on the [`AnimationPlayer`] created by the spawned scene.
 fn setup_animations(
     mut has_setup: Local<bool>,
-    mut commands: Commands,
+    mut commands: ComponentCommands,
     mut players: Query<(Entity, &Name, &mut AnimationPlayer)>,
     morph_data: Res<MorphData>,
     mut graphs: ResMut<Assets<AnimationGraph>>,

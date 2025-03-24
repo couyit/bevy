@@ -32,7 +32,7 @@ fn main() {
         .run();
 }
 
-fn setup_camera_fog(mut commands: Commands) {
+fn setup_camera_fog(mut commands: ComponentCommands) {
     commands.spawn((
         Camera3d::default(),
         DistanceFog {
@@ -47,7 +47,7 @@ fn setup_camera_fog(mut commands: Commands) {
 }
 
 fn setup_pyramid_scene(
-    mut commands: Commands,
+    mut commands: ComponentCommands,
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<StandardMaterial>>,
 ) {
@@ -115,7 +115,7 @@ fn setup_pyramid_scene(
     ));
 }
 
-fn setup_instructions(mut commands: Commands) {
+fn setup_instructions(mut commands: ComponentCommands) {
     commands.spawn((
         Text::default(),
         Node {

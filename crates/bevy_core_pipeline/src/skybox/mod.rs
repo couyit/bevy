@@ -6,7 +6,7 @@ use bevy_ecs::{
     reflect::ReflectComponent,
     resource::Resource,
     schedule::IntoScheduleConfigs,
-    system::{Commands, Query, Res, ResMut},
+    system::{ComponentCommands, Query, Res, ResMut},
 };
 use bevy_image::{BevyDefault, Image};
 use bevy_math::{Mat4, Quat};
@@ -247,7 +247,7 @@ impl SpecializedRenderPipeline for SkyboxPipeline {
 pub struct SkyboxPipelineId(pub CachedRenderPipelineId);
 
 fn prepare_skybox_pipelines(
-    mut commands: Commands,
+    mut commands: ComponentCommands,
     pipeline_cache: Res<PipelineCache>,
     mut pipelines: ResMut<SpecializedRenderPipelines<SkyboxPipeline>>,
     pipeline: Res<SkyboxPipeline>,
@@ -274,7 +274,7 @@ fn prepare_skybox_pipelines(
 pub struct SkyboxBindGroup(pub (BindGroup, u32));
 
 fn prepare_skybox_bind_groups(
-    mut commands: Commands,
+    mut commands: ComponentCommands,
     pipeline: Res<SkyboxPipeline>,
     view_uniforms: Res<ViewUniforms>,
     skybox_uniforms: Res<ComponentUniforms<SkyboxUniforms>>,

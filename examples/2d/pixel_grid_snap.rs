@@ -50,7 +50,7 @@ struct OuterCamera;
 #[derive(Component)]
 struct Rotate;
 
-fn setup_sprite(mut commands: Commands, asset_server: Res<AssetServer>) {
+fn setup_sprite(mut commands: ComponentCommands, asset_server: Res<AssetServer>) {
     // The sample sprite that will be rendered to the pixel-perfect canvas
     commands.spawn((
         Sprite::from_image(asset_server.load("pixel/bevy_pixel_dark.png")),
@@ -70,7 +70,7 @@ fn setup_sprite(mut commands: Commands, asset_server: Res<AssetServer>) {
 
 /// Spawns a capsule mesh on the pixel-perfect layer.
 fn setup_mesh(
-    mut commands: Commands,
+    mut commands: ComponentCommands,
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<ColorMaterial>>,
 ) {
@@ -83,7 +83,7 @@ fn setup_mesh(
     ));
 }
 
-fn setup_camera(mut commands: Commands, mut images: ResMut<Assets<Image>>) {
+fn setup_camera(mut commands: ComponentCommands, mut images: ResMut<Assets<Image>>) {
     let canvas_size = Extent3d {
         width: RES_WIDTH,
         height: RES_HEIGHT,

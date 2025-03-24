@@ -1,40 +1,40 @@
-#[cfg(feature = "bevy_reflect")]
-use crate::reflect::ReflectComponent;
 use crate::{
-    change_detection::Mut,
-    entity::Entity,
+    storage::{SparseSet, SparseSetIndex},
     system::{input::SystemInput, BoxedSystem, IntoSystem},
-    world::World,
+    world::Worlds,
 };
 use alloc::boxed::Box;
-use bevy_ecs_macros::{Component, Resource};
-#[cfg(feature = "bevy_reflect")]
-use bevy_reflect::{std_traits::ReflectDefault, Reflect};
-use core::marker::PhantomData;
+use bevy_utils::TypeIdMap;
+use core::any::{Any, TypeId};
 use thiserror::Error;
 
-/// A small wrapper for [`BoxedSystem`] that also keeps track whether or not the system has been initialized.
-#[derive(Component)]
-#[require(SystemIdMarker)]
-pub(crate) struct RegisteredSystem<I, O> {
-    initialized: bool,
-    system: BoxedSystem<I, O>,
+use super::System;
+
+#[derive(Default)]
+pub struct Systems {
+    current: usize,
+    systems: SparseSet<SystemId, RegisteredSystem>,
+    cached: TypeIdMap<SystemId>,
 }
 
-impl<I, O> RegisteredSystem<I, O> {
-    pub fn new(system: BoxedSystem<I, O>) -> Self {
+/// A small wrapper for [`BoxedSystem`] that also keeps track whether or not the system has been initialized.
+pub(crate) struct RegisteredSystem {
+    initialized: bool,
+    system: Box<dyn Any>,
+}
+
+impl RegisteredSystem {
+    pub fn new<I, O>(system: BoxedSystem<I, O>) -> Self
+    where
+        I: SystemInput + 'static,
+        O: 'static,
+    {
         RegisteredSystem {
             initialized: false,
-            system,
+            system: Box::new(system),
         }
     }
 }
-
-/// Marker [`Component`](bevy_ecs::component::Component) for identifying [`SystemId`] [`Entity`]s.
-#[derive(Component, Default)]
-#[cfg_attr(feature = "bevy_reflect", derive(Reflect))]
-#[cfg_attr(feature = "bevy_reflect", reflect(Component, Default))]
-pub struct SystemIdMarker;
 
 /// A system that has been removed from the registry.
 /// It contains the system and whether or not it has been initialized.
@@ -62,87 +62,20 @@ impl<I, O> RemovedSystem<I, O> {
 ///
 /// These are opaque identifiers, keyed to a specific [`World`],
 /// and are created via [`World::register_system`].
-pub struct SystemId<I: SystemInput = (), O = ()> {
-    pub(crate) entity: Entity,
-    pub(crate) marker: PhantomData<fn(I) -> O>,
-}
+#[derive(PartialEq, Eq, Clone, Copy, Hash, Debug)]
+pub struct SystemId(usize);
 
-impl<I: SystemInput, O> SystemId<I, O> {
-    /// Transforms a [`SystemId`] into the [`Entity`] that holds the one-shot system's state.
-    ///
-    /// It's trivial to convert [`SystemId`] into an [`Entity`] since a one-shot system
-    /// is really an entity with associated handler function.
-    ///
-    /// For example, this is useful if you want to assign a name label to a system.
-    pub fn entity(self) -> Entity {
-        self.entity
+impl SparseSetIndex for SystemId {
+    fn sparse_set_index(&self) -> usize {
+        self.0
     }
 
-    /// Create [`SystemId`] from an [`Entity`]. Useful when you only have entity handles to avoid
-    /// adding extra components that have a [`SystemId`] everywhere. To run a system with this ID
-    ///  - The entity must be a system
-    ///  - The `I` + `O` types must be correct
-    pub fn from_entity(entity: Entity) -> Self {
-        Self {
-            entity,
-            marker: PhantomData,
-        }
+    fn get_sparse_set_index(value: usize) -> Self {
+        Self(value)
     }
 }
 
-impl<I: SystemInput, O> Eq for SystemId<I, O> {}
-
-// A manual impl is used because the trait bounds should ignore the `I` and `O` phantom parameters.
-impl<I: SystemInput, O> Copy for SystemId<I, O> {}
-
-// A manual impl is used because the trait bounds should ignore the `I` and `O` phantom parameters.
-impl<I: SystemInput, O> Clone for SystemId<I, O> {
-    fn clone(&self) -> Self {
-        *self
-    }
-}
-
-// A manual impl is used because the trait bounds should ignore the `I` and `O` phantom parameters.
-impl<I: SystemInput, O> PartialEq for SystemId<I, O> {
-    fn eq(&self, other: &Self) -> bool {
-        self.entity == other.entity && self.marker == other.marker
-    }
-}
-
-// A manual impl is used because the trait bounds should ignore the `I` and `O` phantom parameters.
-impl<I: SystemInput, O> core::hash::Hash for SystemId<I, O> {
-    fn hash<H: core::hash::Hasher>(&self, state: &mut H) {
-        self.entity.hash(state);
-    }
-}
-
-impl<I: SystemInput, O> core::fmt::Debug for SystemId<I, O> {
-    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
-        f.debug_tuple("SystemId").field(&self.entity).finish()
-    }
-}
-
-/// A cached [`SystemId`] distinguished by the unique function type of its system.
-///
-/// This resource is inserted by [`World::register_system_cached`].
-#[derive(Resource)]
-pub struct CachedSystemId<S> {
-    /// The cached `SystemId` as an `Entity`.
-    pub entity: Entity,
-    _marker: PhantomData<fn() -> S>,
-}
-
-impl<S> CachedSystemId<S> {
-    /// Creates a new `CachedSystemId` struct given a `SystemId`.
-    pub fn new<I: SystemInput, O>(id: SystemId<I, O>) -> Self {
-        Self {
-            entity: id.entity(),
-            _marker: PhantomData,
-        }
-    }
-}
-
-impl World {
+impl Worlds {
     /// Registers a system and returns a [`SystemId`] so it can later be called by [`World::run_system`].
     ///
     /// It's possible to register multiple copies of the same system by calling this function
@@ -157,7 +90,7 @@ impl World {
     pub fn register_system<I, O, M>(
         &mut self,
         system: impl IntoSystem<I, O, M> + 'static,
-    ) -> SystemId<I, O>
+    ) -> SystemId
     where
         I: SystemInput + 'static,
         O: 'static,
@@ -169,13 +102,17 @@ impl World {
     ///
     ///  This is useful if the [`IntoSystem`] implementor has already been turned into a
     /// [`System`](crate::system::System) trait object and put in a [`Box`].
-    pub fn register_boxed_system<I, O>(&mut self, system: BoxedSystem<I, O>) -> SystemId<I, O>
+    pub fn register_boxed_system<I, O>(&mut self, system: BoxedSystem<I, O>) -> SystemId
     where
         I: SystemInput + 'static,
         O: 'static,
     {
-        let entity = self.spawn(RegisteredSystem::new(system)).id();
-        SystemId::from_entity(entity)
+        let id = SystemId(self.systems.current);
+        self.systems
+            .systems
+            .insert(id, RegisteredSystem::new(system));
+        self.systems.current += 1;
+        id
     }
 
     /// Removes a registered system and returns the system, if it exists.
@@ -186,25 +123,24 @@ impl World {
     /// Systems are also not allowed to remove themselves, this returns an error too.
     pub fn unregister_system<I, O>(
         &mut self,
-        id: SystemId<I, O>,
-    ) -> Result<RemovedSystem<I, O>, RegisteredSystemError<I, O>>
+        id: SystemId,
+    ) -> Result<RemovedSystem<I, O>, RegisteredSystemError>
     where
         I: SystemInput + 'static,
         O: 'static,
     {
-        match self.get_entity_mut(id.entity) {
-            Ok(mut entity) => {
-                let registered_system = entity
-                    .take::<RegisteredSystem<I, O>>()
-                    .ok_or(RegisteredSystemError::SelfRemove(id))?;
-                entity.despawn();
-                Ok(RemovedSystem {
-                    initialized: registered_system.initialized,
-                    system: registered_system.system,
-                })
-            }
-            Err(_) => Err(RegisteredSystemError::SystemIdNotRegistered(id)),
-        }
+        let registered_system = self
+            .systems
+            .systems
+            .remove(id)
+            .ok_or(RegisteredSystemError::SystemIdNotRegistered(id))?;
+        Ok(RemovedSystem {
+            initialized: registered_system.initialized,
+            system: *registered_system
+                .system
+                .downcast::<Box<dyn System<In = I, Out = O>>>()
+                .unwrap(),
+        })
     }
 
     /// Run stored systems by their [`SystemId`].
@@ -292,11 +228,8 @@ impl World {
     ///   println!("{label} has score {}", world.run_system(scoring_system).expect("system succeeded"));
     /// }
     /// ```
-    pub fn run_system<O: 'static>(
-        &mut self,
-        id: SystemId<(), O>,
-    ) -> Result<O, RegisteredSystemError<(), O>> {
-        self.run_system_with(id, ())
+    pub fn run_system<O: 'static>(&mut self, id: SystemId) -> Result<O, RegisteredSystemError> {
+        self.run_system_with::<(), O>(id, ())
     }
 
     /// Run a stored chained system by its [`SystemId`], providing an input value.
@@ -325,53 +258,44 @@ impl World {
     /// See [`World::run_system`] for more examples.
     pub fn run_system_with<I, O>(
         &mut self,
-        id: SystemId<I, O>,
+        id: SystemId,
         input: I::Inner<'_>,
-    ) -> Result<O, RegisteredSystemError<I, O>>
+    ) -> Result<O, RegisteredSystemError>
     where
         I: SystemInput + 'static,
         O: 'static,
     {
-        // Lookup
-        let mut entity = self
-            .get_entity_mut(id.entity)
-            .map_err(|_| RegisteredSystemError::SystemIdNotRegistered(id))?;
+        match self.systems.systems.get_mut(id) {
+            Some(RegisteredSystem {
+                mut initialized,
+                mut system,
+            }) => {
+                let mut system = *system
+                    .downcast::<Box<dyn System<In = I, Out = O>>>()
+                    .unwrap();
 
-        // Take ownership of system trait object
-        let RegisteredSystem {
-            mut initialized,
-            mut system,
-        } = entity
-            .take::<RegisteredSystem<I, O>>()
-            .ok_or(RegisteredSystemError::Recursive(id))?;
+                // Run the system
+                if !initialized {
+                    system.initialize(self);
+                    initialized = true;
+                }
 
-        // Run the system
-        if !initialized {
-            system.initialize(self);
-            initialized = true;
+                let result = if system.validate_param(self) {
+                    // Wait to run the commands until the system is available again.
+                    // This is needed so the systems can recursively run themselves.
+                    let ret = system.run_without_applying_deferred(input, self);
+                    system.queue_deferred(self.into());
+                    Ok(ret)
+                } else {
+                    Err(RegisteredSystemError::InvalidParams(id))
+                };
+
+                // Run any commands enqueued by the system
+                self.flush();
+                result
+            }
+            None => Err(RegisteredSystemError::SystemIdNotRegistered(id)),
         }
-
-        let result = if system.validate_param(self) {
-            // Wait to run the commands until the system is available again.
-            // This is needed so the systems can recursively run themselves.
-            let ret = system.run_without_applying_deferred(input, self);
-            system.queue_deferred(self.into());
-            Ok(ret)
-        } else {
-            Err(RegisteredSystemError::InvalidParams(id))
-        };
-
-        // Return ownership of system trait object (if entity still exists)
-        if let Ok(mut entity) = self.get_entity_mut(id.entity) {
-            entity.insert::<RegisteredSystem<I, O>>(RegisteredSystem {
-                initialized,
-                system,
-            });
-        }
-
-        // Run any commands enqueued by the system
-        self.flush();
-        result
     }
 
     /// Registers a system or returns its cached [`SystemId`].
@@ -393,7 +317,7 @@ impl World {
     /// If you want to access values from the environment within a system, consider passing them in
     /// as inputs via [`World::run_system_cached_with`]. If that's not an option, consider
     /// [`World::register_system`] instead.
-    pub fn register_system_cached<I, O, M, S>(&mut self, system: S) -> SystemId<I, O>
+    pub fn register_system_cached<I, O, M, S>(&mut self, system: S) -> SystemId
     where
         I: SystemInput + 'static,
         O: 'static,
@@ -406,24 +330,12 @@ impl World {
             );
         }
 
-        if !self.contains_resource::<CachedSystemId<S>>() {
-            let id = self.register_system(system);
-            self.insert_resource(CachedSystemId::<S>::new(id));
-            return id;
-        }
+        let systems = &mut self.systems;
 
-        self.resource_scope(|world, mut id: Mut<CachedSystemId<S>>| {
-            if let Ok(mut entity) = world.get_entity_mut(id.entity) {
-                if !entity.contains::<RegisteredSystem<I, O>>() {
-                    entity.insert(RegisteredSystem::new(Box::new(IntoSystem::into_system(
-                        system,
-                    ))));
-                }
-            } else {
-                id.entity = world.register_system(system).entity();
-            }
-            SystemId::from_entity(id.entity)
-        })
+        *systems
+            .cached
+            .entry(TypeId::of::<S>())
+            .or_insert_with(|| self.register_system(system))
     }
 
     /// Removes a cached system and its [`CachedSystemId`] resource.
@@ -432,16 +344,19 @@ impl World {
     pub fn unregister_system_cached<I, O, M, S>(
         &mut self,
         _system: S,
-    ) -> Result<RemovedSystem<I, O>, RegisteredSystemError<I, O>>
+    ) -> Result<RemovedSystem<I, O>, RegisteredSystemError>
     where
         I: SystemInput + 'static,
         O: 'static,
         S: IntoSystem<I, O, M> + 'static,
     {
         let id = self
-            .remove_resource::<CachedSystemId<S>>()
+            .systems
+            .cached
+            .remove(&TypeId::of::<S>())
             .ok_or(RegisteredSystemError::SystemNotCached)?;
-        self.unregister_system(SystemId::<I, O>::from_entity(id.entity))
+
+        self.unregister_system(id)
     }
 
     /// Runs a cached system, registering it if necessary.
@@ -450,7 +365,7 @@ impl World {
     pub fn run_system_cached<O: 'static, M, S: IntoSystem<(), O, M> + 'static>(
         &mut self,
         system: S,
-    ) -> Result<O, RegisteredSystemError<(), O>> {
+    ) -> Result<O, RegisteredSystemError> {
         self.run_system_cached_with(system, ())
     }
 
@@ -461,25 +376,25 @@ impl World {
         &mut self,
         system: S,
         input: I::Inner<'_>,
-    ) -> Result<O, RegisteredSystemError<I, O>>
+    ) -> Result<O, RegisteredSystemError>
     where
         I: SystemInput + 'static,
         O: 'static,
         S: IntoSystem<I, O, M> + 'static,
     {
         let id = self.register_system_cached(system);
-        self.run_system_with(id, input)
+        self.run_system_with::<I, O>(id, input)
     }
 }
 
 /// An operation with stored systems failed.
 #[derive(Error)]
-pub enum RegisteredSystemError<I: SystemInput = (), O = ()> {
+pub enum RegisteredSystemError {
     /// A system was run by id, but no system with that id was found.
     ///
     /// Did you forget to register it?
     #[error("System {0:?} was not registered")]
-    SystemIdNotRegistered(SystemId<I, O>),
+    SystemIdNotRegistered(SystemId),
     /// A cached system was removed by value, but no system with its type was found.
     ///
     /// Did you forget to register it?
@@ -487,18 +402,18 @@ pub enum RegisteredSystemError<I: SystemInput = (), O = ()> {
     SystemNotCached,
     /// A system tried to run itself recursively.
     #[error("System {0:?} tried to run itself recursively")]
-    Recursive(SystemId<I, O>),
+    Recursive(SystemId),
     /// A system tried to remove itself.
     #[error("System {0:?} tried to remove itself")]
-    SelfRemove(SystemId<I, O>),
+    SelfRemove(SystemId),
     /// System could not be run due to parameters that failed validation.
     ///
     /// This can occur because the data required by the system was not present in the world.
     #[error("The data required by the system {0:?} was not found in the world and the system did not run due to failed parameter validation.")]
-    InvalidParams(SystemId<I, O>),
+    InvalidParams(SystemId),
 }
 
-impl<I: SystemInput, O> core::fmt::Debug for RegisteredSystemError<I, O> {
+impl core::fmt::Debug for RegisteredSystemError {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         match self {
             Self::SystemIdNotRegistered(arg0) => {
@@ -518,7 +433,11 @@ mod tests {
 
     use bevy_utils::default;
 
-    use crate::{prelude::*, system::SystemId};
+    use crate::{
+        prelude::*,
+        system::SystemId,
+        world::{MainWorld, Worlds},
+    };
 
     #[derive(Resource, Default, PartialEq, Debug)]
     struct Counter(u8);
@@ -537,21 +456,38 @@ mod tests {
             }
         }
 
-        let mut world = World::new();
-        world.init_resource::<ChangeDetector>();
-        world.init_resource::<Counter>();
-        assert_eq!(*world.resource::<Counter>(), Counter(0));
+        let mut worlds = Worlds::new();
+        worlds
+            .get_resource_world_mut()
+            .init_resource::<ChangeDetector>();
+        worlds.get_resource_world_mut().init_resource::<Counter>();
+        assert_eq!(
+            *worlds.get_resource_world_mut().resource::<Counter>(),
+            Counter(0)
+        );
         // Resources are changed when they are first added.
-        let id = world.register_system(count_up_iff_changed);
-        world.run_system(id).expect("system runs successfully");
-        assert_eq!(*world.resource::<Counter>(), Counter(1));
+        let id = worlds.register_system(count_up_iff_changed);
+        worlds.run_system(id).expect("system runs successfully");
+        assert_eq!(
+            *worlds.get_resource_world_mut().resource::<Counter>(),
+            Counter(1)
+        );
         // Nothing changed
-        world.run_system(id).expect("system runs successfully");
-        assert_eq!(*world.resource::<Counter>(), Counter(1));
+        worlds.run_system(id).expect("system runs successfully");
+        assert_eq!(
+            *worlds.get_resource_world_mut().resource::<Counter>(),
+            Counter(1)
+        );
         // Making a change
-        world.resource_mut::<ChangeDetector>().set_changed();
-        world.run_system(id).expect("system runs successfully");
-        assert_eq!(*world.resource::<Counter>(), Counter(2));
+        worlds
+            .get_resource_world_mut()
+            .resource_mut::<ChangeDetector>()
+            .set_changed();
+        worlds.run_system(id).expect("system runs successfully");
+        assert_eq!(
+            *worlds.get_resource_world_mut().resource::<Counter>(),
+            Counter(2)
+        );
     }
 
     #[test]
@@ -562,18 +498,33 @@ mod tests {
             last_counter.0 .0 = counter.0;
         }
 
-        let mut world = World::new();
-        world.insert_resource(Counter(1));
-        assert_eq!(*world.resource::<Counter>(), Counter(1));
-        let id = world.register_system(doubling);
-        world.run_system(id).expect("system runs successfully");
-        assert_eq!(*world.resource::<Counter>(), Counter(1));
-        world.run_system(id).expect("system runs successfully");
-        assert_eq!(*world.resource::<Counter>(), Counter(2));
-        world.run_system(id).expect("system runs successfully");
-        assert_eq!(*world.resource::<Counter>(), Counter(4));
-        world.run_system(id).expect("system runs successfully");
-        assert_eq!(*world.resource::<Counter>(), Counter(8));
+        let mut worlds = Worlds::new();
+        worlds.get_resource_world_mut().insert_resource(Counter(1));
+        assert_eq!(
+            *worlds.get_resource_world_mut().resource::<Counter>(),
+            Counter(1)
+        );
+        let id = worlds.register_system(doubling);
+        worlds.run_system(id).expect("system runs successfully");
+        assert_eq!(
+            *worlds.get_resource_world_mut().resource::<Counter>(),
+            Counter(1)
+        );
+        worlds.run_system(id).expect("system runs successfully");
+        assert_eq!(
+            *worlds.get_resource_world_mut().resource::<Counter>(),
+            Counter(2)
+        );
+        worlds.run_system(id).expect("system runs successfully");
+        assert_eq!(
+            *worlds.get_resource_world_mut().resource::<Counter>(),
+            Counter(4)
+        );
+        worlds.run_system(id).expect("system runs successfully");
+        assert_eq!(
+            *worlds.get_resource_world_mut().resource::<Counter>(),
+            Counter(8)
+        );
     }
 
     #[test]
@@ -585,33 +536,48 @@ mod tests {
             counter.0 += increment_by;
         }
 
-        let mut world = World::new();
+        let mut worlds = Worlds::new();
 
-        let id = world.register_system(increment_sys);
+        let id = worlds.register_system(increment_sys);
 
         // Insert the resource after registering the system.
-        world.insert_resource(Counter(1));
-        assert_eq!(*world.resource::<Counter>(), Counter(1));
+        worlds.get_resource_world_mut().insert_resource(Counter(1));
+        assert_eq!(
+            *worlds.get_resource_world_mut().resource::<Counter>(),
+            Counter(1)
+        );
 
-        world
+        worlds
             .run_system_with(id, NonCopy(1))
             .expect("system runs successfully");
-        assert_eq!(*world.resource::<Counter>(), Counter(2));
+        assert_eq!(
+            *worlds.get_resource_world_mut().resource::<Counter>(),
+            Counter(2)
+        );
 
-        world
+        worlds
             .run_system_with(id, NonCopy(1))
             .expect("system runs successfully");
-        assert_eq!(*world.resource::<Counter>(), Counter(3));
+        assert_eq!(
+            *worlds.get_resource_world_mut().resource::<Counter>(),
+            Counter(3)
+        );
 
-        world
+        worlds
             .run_system_with(id, NonCopy(20))
             .expect("system runs successfully");
-        assert_eq!(*world.resource::<Counter>(), Counter(23));
+        assert_eq!(
+            *worlds.get_resource_world_mut().resource::<Counter>(),
+            Counter(23)
+        );
 
-        world
+        worlds
             .run_system_with(id, NonCopy(1))
             .expect("system runs successfully");
-        assert_eq!(*world.resource::<Counter>(), Counter(24));
+        assert_eq!(
+            *worlds.get_resource_world_mut().resource::<Counter>(),
+            Counter(24)
+        );
     }
 
     #[test]
@@ -625,32 +591,41 @@ mod tests {
             NonCopy(counter.0)
         }
 
-        let mut world = World::new();
+        let mut worlds = Worlds::new();
 
-        let id = world.register_system(increment_sys);
+        let id = worlds.register_system(increment_sys);
 
         // Insert the resource after registering the system.
-        world.insert_resource(Counter(1));
-        assert_eq!(*world.resource::<Counter>(), Counter(1));
+        worlds.get_resource_world_mut().insert_resource(Counter(1));
+        assert_eq!(
+            *worlds.get_resource_world_mut().resource::<Counter>(),
+            Counter(1)
+        );
 
-        let output = world.run_system(id).expect("system runs successfully");
-        assert_eq!(*world.resource::<Counter>(), Counter(2));
+        let output = worlds.run_system(id).expect("system runs successfully");
+        assert_eq!(
+            *worlds.get_resource_world_mut().resource::<Counter>(),
+            Counter(2)
+        );
         assert_eq!(output, NonCopy(2));
 
-        let output = world.run_system(id).expect("system runs successfully");
-        assert_eq!(*world.resource::<Counter>(), Counter(3));
+        let output = worlds.run_system(id).expect("system runs successfully");
+        assert_eq!(
+            *worlds.get_resource_world_mut().resource::<Counter>(),
+            Counter(3)
+        );
         assert_eq!(output, NonCopy(3));
     }
 
     #[test]
     fn exclusive_system() {
-        let mut world = World::new();
-        let exclusive_system_id = world.register_system(|world: &mut World| {
+        let mut worlds = Worlds::new();
+        let exclusive_system_id = worlds.register_system(|world: &mut World<MainWorld>| {
             world.spawn_empty();
         });
-        let entity_count = world.entities.len();
-        let _ = world.run_system(exclusive_system_id);
-        assert_eq!(world.entities.len(), entity_count + 1);
+        let entity_count = worlds.get_main_world().entities().len();
+        let _ = worlds.run_system(exclusive_system_id);
+        assert_eq!(worlds.get_main_world().entities().len(), entity_count + 1);
     }
 
     #[test]
@@ -660,7 +635,7 @@ mod tests {
         #[derive(Component)]
         struct Callback(SystemId);
 
-        fn nested(query: Query<&Callback>, mut commands: Commands) {
+        fn nested(query: Query<&Callback>, mut commands: ComponentCommands) {
             for callback in query.iter() {
                 commands.run_system(callback.0);
             }
@@ -690,7 +665,7 @@ mod tests {
         #[derive(Component)]
         struct Callback(SystemId<In<u8>>, u8);
 
-        fn nested(query: Query<&Callback>, mut commands: Commands) {
+        fn nested(query: Query<&Callback>, mut commands: ComponentCommands) {
             for callback in query.iter() {
                 commands.run_system_with(callback.0, callback.1);
             }
@@ -879,7 +854,7 @@ mod tests {
             static SYSTEM_ID: Cell<Option<SystemId>> = default();
         }
 
-        fn system(mut commands: Commands) {
+        fn system(mut commands: ComponentCommands) {
             let count = INVOCATIONS_LEFT.get() - 1;
             INVOCATIONS_LEFT.set(count);
             if count > 0 {

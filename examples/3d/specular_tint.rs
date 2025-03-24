@@ -73,7 +73,7 @@ fn main() {
 
 /// Creates the scene.
 fn setup(
-    mut commands: Commands,
+    mut commands: ComponentCommands,
     asset_server: Res<AssetServer>,
     app_status: Res<AppStatus>,
     mut meshes: ResMut<Assets<Mesh>>,

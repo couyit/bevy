@@ -17,7 +17,7 @@ fn main() {
 }
 
 fn setup(
-    mut commands: Commands,
+    mut commands: ComponentCommands,
     mut ui_materials: ResMut<Assets<CustomUiMaterial>>,
     asset_server: Res<AssetServer>,
 ) {

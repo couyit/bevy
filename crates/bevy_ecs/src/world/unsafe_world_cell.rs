@@ -26,6 +26,8 @@ use thiserror::Error;
 #[derive(Copy, Clone)]
 pub struct UnsafeWorldsCell<'w> {
     ptr: *mut Worlds,
+    #[cfg(debug_assertions)]
+    allows_mutable_access: bool,
     _marker: PhantomData<(&'w Worlds, &'w UnsafeCell<Worlds>)>,
 }
 
@@ -38,20 +40,52 @@ impl<'w> From<&'w mut Worlds> for UnsafeWorldsCell<'w> {
     }
 }
 
+impl<'w> From<&'w Worlds> for UnsafeWorldsCell<'w> {
+    fn from(value: &'w Worlds) -> Self {
+        value.as_unsafe_cell_readonly()
+    }
+}
+
 impl<'w> UnsafeWorldsCell<'w> {
-    pub(crate) fn new_mutable<W: WorldLabel>(worlds: &'w mut Worlds) -> Self {
+    pub(crate) fn new_mutable(worlds: &'w mut Worlds) -> Self {
         Self {
             ptr: ptr::from_mut(worlds),
+            #[cfg(debug_assertions)]
+            allows_mutable_access: true,
+            _marker: PhantomData,
+        }
+    }
+
+    pub(crate) fn new_readonly(world: &'w Worlds) -> Self {
+        Self {
+            ptr: ptr::from_ref(world).cast_mut(),
+            #[cfg(debug_assertions)]
+            allows_mutable_access: false,
             _marker: PhantomData,
         }
     }
 
     pub unsafe fn get_mut(self) -> &'w mut Worlds {
+        self.assert_allows_mutable_access();
         unsafe { &mut *self.ptr }
     }
 
     pub unsafe fn get_unsafe_world_cell_mut<W: WorldLabel>(self) -> UnsafeWorldCell<'w> {
         unsafe { self.get_mut().get_world_mut::<W>().as_unsafe_world_cell() }
+    }
+
+    #[cfg_attr(debug_assertions, inline(never), track_caller)]
+    #[cfg_attr(not(debug_assertions), inline(always))]
+    pub(crate) fn assert_allows_mutable_access(self) {
+        // This annotation is needed because the
+        // allows_mutable_access field doesn't exist otherwise.
+        // Kinda weird, since debug_assert would never be called,
+        // but CI complained in https://github.com/bevyengine/bevy/pull/17393
+        #[cfg(debug_assertions)]
+        debug_assert!(
+            self.allows_mutable_access,
+            "mutating worlds data via `Worlds::as_unsafe_cell_readonly` is forbidden"
+        );
     }
 }
 

@@ -21,7 +21,7 @@ fn main() {
 struct MonitorRef(Entity);
 
 fn update(
-    mut commands: Commands,
+    mut commands: ComponentCommands,
     monitors_added: Query<(Entity, &Monitor), Added<Monitor>>,
     mut monitors_removed: RemovedComponents<Monitor>,
     monitor_refs: Query<(Entity, &MonitorRef)>,
@@ -92,7 +92,7 @@ fn update(
 }
 
 fn close_on_esc(
-    mut commands: Commands,
+    mut commands: ComponentCommands,
     focused_windows: Query<(Entity, &Window)>,
     input: Res<ButtonInput<KeyCode>>,
 ) {

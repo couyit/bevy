@@ -129,7 +129,7 @@ mod tests {
     use bevy_ecs::{
         component::Component,
         schedule::Schedule,
-        system::Commands,
+        system::ComponentCommands,
         world::{CommandQueue, World},
     };
 
@@ -180,7 +180,7 @@ mod tests {
         world.init_resource::<UiStack>();
 
         let mut queue = CommandQueue::default();
-        let mut commands = Commands::new(&mut queue, &world);
+        let mut commands = ComponentCommands::new(&mut queue, &world);
         commands.spawn(node_with_global_zindex("0", 2));
 
         commands
@@ -264,7 +264,7 @@ mod tests {
         world.init_resource::<UiStack>();
 
         let mut queue = CommandQueue::default();
-        let mut commands = Commands::new(&mut queue, &world);
+        let mut commands = ComponentCommands::new(&mut queue, &world);
         commands.spawn(node_with_global_and_local_zindex("0", -1, 1));
         commands.spawn(node_with_global_and_local_zindex("1", -1, 2));
         commands.spawn(node_with_global_and_local_zindex("2", 1, 3));

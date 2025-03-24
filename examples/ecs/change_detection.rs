@@ -25,7 +25,7 @@ struct MyComponent(f32);
 #[derive(Resource, PartialEq, Debug)]
 struct MyResource(f32);
 
-fn setup(mut commands: Commands) {
+fn setup(mut commands: ComponentCommands) {
     // Note the first change detection log correctly points to this line because the component is
     // added. Although commands are deferred, they are able to track the original calling location.
     commands.spawn(MyComponent(0.0));

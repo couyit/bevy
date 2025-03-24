@@ -4,7 +4,7 @@ use bevy_ecs::{
     component::Component,
     entity::Entity,
     event::EventReader,
-    system::{Commands, Query},
+    system::{ComponentCommands, Query},
 };
 #[cfg(feature = "bevy_reflect")]
 use bevy_reflect::prelude::*;
@@ -69,7 +69,7 @@ where
 /// Removes entities marked with [`StateScoped<S>`]
 /// when their state no longer matches the world state.
 pub fn clear_state_scoped_entities<S: States>(
-    mut commands: Commands,
+    mut commands: ComponentCommands,
     mut transitions: EventReader<StateTransitionEvent<S>>,
     query: Query<(Entity, &StateScoped<S>)>,
 ) {

@@ -59,7 +59,7 @@ pub fn main() {
 
 /// Initializes the scene.
 fn setup(
-    mut commands: Commands,
+    mut commands: ComponentCommands,
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<StandardMaterial>>,
     asset_server: Res<AssetServer>,
@@ -90,7 +90,7 @@ fn create_sphere_mesh(meshes: &mut Assets<Mesh>) -> Handle<Mesh> {
 
 /// Spawn a regular object with a clearcoat layer. This looks like car paint.
 fn spawn_car_paint_sphere(
-    commands: &mut Commands,
+    commands: &mut ComponentCommands,
     materials: &mut Assets<StandardMaterial>,
     asset_server: &AssetServer,
     sphere: &Handle<Mesh>,
@@ -117,7 +117,7 @@ fn spawn_car_paint_sphere(
 
 /// Spawn a semitransparent object with a clearcoat layer.
 fn spawn_coated_glass_bubble_sphere(
-    commands: &mut Commands,
+    commands: &mut ComponentCommands,
     materials: &mut Assets<StandardMaterial>,
     sphere: &Handle<Mesh>,
 ) {
@@ -143,7 +143,7 @@ fn spawn_coated_glass_bubble_sphere(
 ///
 /// This object is in glTF format, using the `KHR_materials_clearcoat`
 /// extension.
-fn spawn_golf_ball(commands: &mut Commands, asset_server: &AssetServer) {
+fn spawn_golf_ball(commands: &mut ComponentCommands, asset_server: &AssetServer) {
     commands.spawn((
         SceneRoot(
             asset_server.load(GltfAssetLabel::Scene(0).from_asset("models/GolfBall/GolfBall.glb")),
@@ -156,7 +156,7 @@ fn spawn_golf_ball(commands: &mut Commands, asset_server: &AssetServer) {
 /// Spawns an object with only a clearcoat normal map (a scratch pattern) and no
 /// main layer normal map.
 fn spawn_scratched_gold_ball(
-    commands: &mut Commands,
+    commands: &mut ComponentCommands,
     materials: &mut Assets<StandardMaterial>,
     asset_server: &AssetServer,
     sphere: &Handle<Mesh>,
@@ -182,12 +182,12 @@ fn spawn_scratched_gold_ball(
 }
 
 /// Spawns a light.
-fn spawn_light(commands: &mut Commands) {
+fn spawn_light(commands: &mut ComponentCommands) {
     commands.spawn(create_point_light());
 }
 
 /// Spawns a camera with associated skybox and environment map.
-fn spawn_camera(commands: &mut Commands, asset_server: &AssetServer) {
+fn spawn_camera(commands: &mut ComponentCommands, asset_server: &AssetServer) {
     commands
         .spawn((
             Camera3d::default(),
@@ -216,7 +216,7 @@ fn spawn_camera(commands: &mut Commands, asset_server: &AssetServer) {
 }
 
 /// Spawns the help text.
-fn spawn_text(commands: &mut Commands, light_mode: &LightMode) {
+fn spawn_text(commands: &mut ComponentCommands, light_mode: &LightMode) {
     commands.spawn((
         light_mode.create_help_text(),
         Node {
@@ -255,7 +255,7 @@ fn animate_spheres(mut spheres: Query<&mut Transform, With<ExampleSphere>>, time
 /// Handles the user pressing Space to change the type of light from point to
 /// directional and vice versa.
 fn handle_input(
-    mut commands: Commands,
+    mut commands: ComponentCommands,
     mut light_query: Query<Entity, Or<(With<PointLight>, With<DirectionalLight>)>>,
     keyboard: Res<ButtonInput<KeyCode>>,
     mut light_mode: ResMut<LightMode>,

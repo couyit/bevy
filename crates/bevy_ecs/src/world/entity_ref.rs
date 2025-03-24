@@ -5583,7 +5583,7 @@ mod tests {
         let mut world = World::new();
         let entity = world
             .spawn_empty()
-            .observe(|trigger: Trigger<TestEvent>, mut commands: Commands| {
+            .observe(|trigger: Trigger<TestEvent>, mut commands: ComponentCommands| {
                 commands.entity(trigger.target()).insert(TestComponent(0));
             })
             .id();
@@ -5603,7 +5603,7 @@ mod tests {
     fn location_on_despawned_entity_panics() {
         let mut world = World::new();
         world.add_observer(
-            |trigger: Trigger<OnAdd, TestComponent>, mut commands: Commands| {
+            |trigger: Trigger<OnAdd, TestComponent>, mut commands: ComponentCommands| {
                 commands.entity(trigger.target()).despawn();
             },
         );
@@ -5624,11 +5624,11 @@ mod tests {
     fn archetype_modifications_trigger_flush() {
         let mut world = World::new();
         world.insert_resource(TestFlush(0));
-        world.add_observer(|_: Trigger<OnAdd, TestComponent>, mut commands: Commands| {
+        world.add_observer(|_: Trigger<OnAdd, TestComponent>, mut commands: ComponentCommands| {
             commands.queue(count_flush);
         });
         world.add_observer(
-            |_: Trigger<OnRemove, TestComponent>, mut commands: Commands| {
+            |_: Trigger<OnRemove, TestComponent>, mut commands: ComponentCommands| {
                 commands.queue(count_flush);
             },
         );

@@ -133,7 +133,7 @@ fn setup(world: &mut World) {
 }
 
 fn trigger_hooks(
-    mut commands: Commands,
+    mut commands: ComponentCommands,
     keys: Res<ButtonInput<KeyCode>>,
     index: Res<MyComponentIndex>,
 ) {

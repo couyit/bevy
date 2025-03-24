@@ -44,7 +44,7 @@ fn main() {
 
 /// Set up a simple 3D scene
 fn setup(
-    mut commands: Commands,
+    mut commands: ComponentCommands,
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<StandardMaterial>>,
 ) {
@@ -79,7 +79,7 @@ fn setup(
     ));
 }
 
-fn instructions(mut commands: Commands) {
+fn instructions(mut commands: ComponentCommands) {
     commands.spawn((
         Name::new("Instructions"),
         Text::new(

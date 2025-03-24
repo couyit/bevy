@@ -735,13 +735,13 @@ impl ExecutorState {
 fn apply_deferred(
     unapplied_systems: &FixedBitSet,
     systems: &[SyncUnsafeCell<ScheduleSystem>],
-    world: &mut World,
+    worlds: &mut Worlds,
 ) -> Result<(), Box<dyn Any + Send>> {
     for system_index in unapplied_systems.ones() {
         // SAFETY: none of these systems are running, no other references exist
         let system = unsafe { &mut *systems[system_index].get() };
         let res = std::panic::catch_unwind(AssertUnwindSafe(|| {
-            system.apply_deferred(world);
+            system.apply_deferred(worlds);
         }));
         if let Err(payload) = res {
             #[cfg(feature = "std")]
@@ -812,7 +812,7 @@ mod tests {
     use crate::{
         prelude::Resource,
         schedule::{ExecutorKind, IntoScheduleConfigs, Schedule},
-        system::Commands,
+        system::ComponentCommands,
         world::World,
     };
 
@@ -828,7 +828,7 @@ mod tests {
             (
                 (|| {}).run_if(|| false),
                 // This system depends on a system that is always skipped.
-                |mut commands: Commands| {
+                |mut commands: ComponentCommands| {
                     commands.insert_resource(R);
                 },
             )
@@ -846,7 +846,7 @@ mod tests {
         let mut world = World::new();
         let mut schedule = Schedule::default();
         schedule.set_executor_kind(ExecutorKind::MultiThreaded);
-        schedule.add_systems(((|_: Commands| {}), |_: Commands| {}).chain());
+        schedule.add_systems(((|_: ComponentCommands| {}), |_: ComponentCommands| {}).chain());
         schedule.run(&mut world);
     }
 }

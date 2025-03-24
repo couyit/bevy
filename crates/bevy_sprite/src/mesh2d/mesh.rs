@@ -749,7 +749,7 @@ pub struct Mesh2dBindGroup {
 }
 
 pub fn prepare_mesh2d_bind_group(
-    mut commands: Commands,
+    mut commands: ComponentCommands,
     mesh2d_pipeline: Res<Mesh2dPipeline>,
     render_device: Res<RenderDevice>,
     mesh2d_uniforms: Res<BatchedInstanceBuffer<Mesh2dUniform>>,
@@ -771,7 +771,7 @@ pub struct Mesh2dViewBindGroup {
 }
 
 pub fn prepare_mesh2d_view_bind_groups(
-    mut commands: Commands,
+    mut commands: ComponentCommands,
     render_device: Res<RenderDevice>,
     mesh2d_pipeline: Res<Mesh2dPipeline>,
     view_uniforms: Res<ViewUniforms>,

@@ -999,20 +999,20 @@ mod tests {
         let mut world = World::new();
         world.init_resource::<Order>();
         world.add_observer(
-            |obs: Trigger<OnAdd, A>, mut res: ResMut<Order>, mut commands: Commands| {
+            |obs: Trigger<OnAdd, A>, mut res: ResMut<Order>, mut commands: ComponentCommands| {
                 res.observed("add_a");
                 commands.entity(obs.target()).insert(B);
             },
         );
         world.add_observer(
-            |obs: Trigger<OnRemove, A>, mut res: ResMut<Order>, mut commands: Commands| {
+            |obs: Trigger<OnRemove, A>, mut res: ResMut<Order>, mut commands: ComponentCommands| {
                 res.observed("remove_a");
                 commands.entity(obs.target()).remove::<B>();
             },
         );
 
         world.add_observer(
-            |obs: Trigger<OnAdd, B>, mut res: ResMut<Order>, mut commands: Commands| {
+            |obs: Trigger<OnAdd, B>, mut res: ResMut<Order>, mut commands: ComponentCommands| {
                 res.observed("add_b");
                 commands.entity(obs.target()).remove::<A>();
             },
@@ -1655,7 +1655,7 @@ mod tests {
         let mut world = World::new();
 
         // Observe the removal of A - this will run during despawn
-        world.add_observer(|_: Trigger<OnRemove, A>, mut cmd: Commands| {
+        world.add_observer(|_: Trigger<OnRemove, A>, mut cmd: ComponentCommands| {
             // Spawn a new entity - this reserves a new ID and requires a flush
             // afterward before Entities::free can be called.
             cmd.spawn_empty();
@@ -1681,7 +1681,7 @@ mod tests {
 
         let mut world = World::new();
         // This fails because `ResA` is not present in the world
-        world.add_observer(|_: Trigger<EventA>, _: Res<ResA>, mut commands: Commands| {
+        world.add_observer(|_: Trigger<EventA>, _: Res<ResA>, mut commands: ComponentCommands| {
             commands.insert_resource(ResB);
         });
         world.trigger(EventA);
@@ -1694,7 +1694,7 @@ mod tests {
 
         let mut world = World::new();
         world.add_observer(
-            |_: Trigger<EventA>, mut params: ParamSet<(Query<Entity>, Commands)>| {
+            |_: Trigger<EventA>, mut params: ParamSet<(Query<Entity>, ComponentCommands)>| {
                 params.p1().insert_resource(ResA);
             },
         );

@@ -158,7 +158,7 @@ impl Plugin for SpritePlugin {
 ///
 /// Used in system set [`VisibilitySystems::CalculateBounds`].
 pub fn calculate_bounds_2d(
-    mut commands: Commands,
+    mut commands: ComponentCommands,
     meshes: Res<Assets<Mesh>>,
     images: Res<Assets<Image>>,
     atlases: Res<Assets<TextureAtlasLayout>>,

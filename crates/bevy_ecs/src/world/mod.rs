@@ -18,6 +18,7 @@ use crate::{
     change_detection::TicksMut,
     component::ComponentTicks,
     storage::{ResourceData, Resources, SparseSets, Tables},
+    system::Systems,
 };
 pub use crate::{
     change_detection::{Mut, Ref, CHECK_TICK_THRESHOLD},
@@ -65,7 +66,7 @@ use crate::{
     removal_detection::RemovedComponentEvents,
     resource::Resource,
     schedule::{Schedule, ScheduleLabel, Schedules},
-    system::Commands,
+    system::ComponentCommands,
     world::{
         command_queue::RawCommandQueue,
         error::{
@@ -87,6 +88,7 @@ pub struct Worlds {
     id: WorldsId,
     pub(crate) indices: TypeIdMap<WorldId>,
     pub(crate) worlds: Vec<World<InvalidWorld>>,
+    pub(crate) systems: Systems,
 }
 
 impl Default for Worlds {
@@ -110,6 +112,10 @@ impl Worlds {
 
     pub fn as_unsafe_cell(&mut self) -> UnsafeWorldsCell<'_> {
         UnsafeWorldsCell::new_mutable(self)
+    }
+
+    pub fn as_unsafe_cell_readonly(&self) -> UnsafeWorldsCell<'_> {
+        UnsafeWorldsCell::new_readonly(self)
     }
 
     pub fn create_world<T: ComponentWorld>(&mut self) -> WorldId {
@@ -195,7 +201,7 @@ impl WorldLabel for ResourceWorld {}
 impl WorldLabel for InvalidWorld {}
 
 pub trait ManyWorldLabel {
-    type World<'w>;
+    type World<'w>: Copy + Clone;
 
     // fn get<'w>(worlds: UnsafeWorldsCell<'w>) -> Self::World<'w>;
     fn get_mut<'w>(worlds: UnsafeWorldsCell<'w>) -> Self::World<'w>;
@@ -364,7 +370,7 @@ impl<W: WorldLabel> World<W> {
 
     /// Retrieves this world's [`Components`] collection.
     #[inline]
-    pub fn components(&self) -> &Components {
+    pub fn components(&self) -> &Components<W> {
         &self.components
     }
 
@@ -944,7 +950,7 @@ impl<W: ComponentWorld> World<W> {
 
     /// Retrieves this world's [`Bundles`] collection.
     #[inline]
-    pub fn bundles(&self) -> &Bundles {
+    pub fn bundles(&self) -> &Bundles<W> {
         match self.storage {
             Storage::Components { ref bundles, .. } => bundles,
             Storage::Resources { .. } => panic!("Storage is not for Components"),
@@ -952,7 +958,7 @@ impl<W: ComponentWorld> World<W> {
     }
 
     #[inline]
-    pub fn bundles_mut(&mut self) -> &mut Bundles {
+    pub fn bundles_mut(&mut self) -> &mut Bundles<W> {
         match self.storage {
             Storage::Components {
                 ref mut bundles, ..
@@ -1007,9 +1013,11 @@ impl<W: ComponentWorld> World<W> {
     /// Creates a new [`Commands`] instance that writes to the world's command queue
     /// Use [`World::flush`] to apply all queued commands
     #[inline]
-    pub fn commands(&mut self) -> Commands<W> {
+    pub fn commands(&mut self) -> ComponentCommands<W> {
         // SAFETY: command_queue is stored on world and always valid while the world exists
-        unsafe { Commands::new_raw_from_entities(self.command_queue.clone(), self.entities()) }
+        unsafe {
+            ComponentCommands::new_raw_from_entities(self.command_queue.clone(), self.entities())
+        }
     }
 
     /// Returns [`EntityRef`]s that expose read-only operations for the given
@@ -1446,7 +1454,7 @@ impl<W: ComponentWorld> World<W> {
     /// # assert_eq!(world.get::<TargetedBy>(e1).unwrap().0, eid);
     /// # assert_eq!(world.get::<TargetedBy>(e2).unwrap().0, eid);
     /// ```
-    pub fn entities_and_commands(&mut self) -> (EntityFetcher, Commands<W>) {
+    pub fn entities_and_commands(&mut self) -> (EntityFetcher, ComponentCommands<W>) {
         let cell = self.as_unsafe_world_cell();
         // SAFETY: `&mut self` gives mutable access to the entire world, and prevents simultaneous access.
         let fetcher = unsafe { EntityFetcher::new(cell) };
@@ -1455,7 +1463,8 @@ impl<W: ComponentWorld> World<W> {
         // - Command queue access does not conflict with entity access.
         let raw_queue = unsafe { cell.get_raw_command_queue() };
         // SAFETY: `&mut self` ensures the commands does not outlive the world.
-        let commands = unsafe { Commands::new_raw_from_entities(raw_queue, cell.entities()) };
+        let commands =
+            unsafe { ComponentCommands::new_raw_from_entities(raw_queue, cell.entities()) };
 
         (fetcher, commands)
     }
@@ -4078,6 +4087,16 @@ pub trait FromWorld<W: WorldLabel> {
 impl<T: Default, W: WorldLabel> FromWorld<W> for T {
     /// Creates `Self` using [`default()`](`Default::default`).
     fn from_world(_world: &mut World<W>) -> Self {
+        T::default()
+    }
+}
+
+pub trait FromWorlds {
+    fn from_worlds(worlds: &mut Worlds) -> Self;
+}
+
+impl<T: Default> FromWorlds for T {
+    fn from_worlds(_worlds: &mut Worlds) -> Self {
         T::default()
     }
 }

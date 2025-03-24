@@ -188,7 +188,7 @@ impl AppSendEvent for Vec<WindowEvent> {
 
 /// The parameters of the [`create_windows`] system.
 pub type CreateWindowParams<'w, 's, F = ()> = (
-    Commands<'w, 's>,
+    ComponentCommands<'w, 's>,
     Query<
         'w,
         's,
@@ -208,4 +208,4 @@ pub type CreateWindowParams<'w, 's, F = ()> = (
 );
 
 /// The parameters of the [`create_monitors`] system.
-pub type CreateMonitorParams<'w, 's> = (Commands<'w, 's>, ResMut<'w, WinitMonitors>);
+pub type CreateMonitorParams<'w, 's> = (ComponentCommands<'w, 's>, ResMut<'w, WinitMonitors>);

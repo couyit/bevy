@@ -140,7 +140,7 @@ enum CurrentVolume {
 }
 
 fn update_volumes(
-    mut commands: Commands,
+    mut commands: ComponentCommands,
     query: Query<
         (Entity, &DesiredVolume, &Shape, &Transform),
         Or<(Changed<DesiredVolume>, Changed<Shape>, Changed<Transform>)>,
@@ -199,7 +199,7 @@ struct Intersects(bool);
 const OFFSET_X: f32 = 125.;
 const OFFSET_Y: f32 = 75.;
 
-fn setup(mut commands: Commands) {
+fn setup(mut commands: ComponentCommands) {
     commands.spawn(Camera2d);
 
     commands.spawn((

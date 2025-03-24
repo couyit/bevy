@@ -109,7 +109,7 @@ impl FromWorld for AutoExposureResources {
 }
 
 fn queue_view_auto_exposure_pipelines(
-    mut commands: Commands,
+    mut commands: ComponentCommands,
     pipeline_cache: Res<PipelineCache>,
     mut compute_pipelines: ResMut<SpecializedComputePipelines<AutoExposurePipeline>>,
     pipeline: Res<AutoExposurePipeline>,

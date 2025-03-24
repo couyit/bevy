@@ -45,7 +45,7 @@ impl<R: ExtractResource> Plugin for ExtractResourcePlugin<R> {
 
 /// This system extracts the resource of the corresponding [`Resource`] type
 pub fn extract_resource<R: ExtractResource>(
-    mut commands: Commands,
+    mut commands: ComponentCommands,
     main_resource: Extract<Option<Res<R::Source>>>,
     target_resource: Option<ResMut<R>>,
 ) {

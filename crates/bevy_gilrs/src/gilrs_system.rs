@@ -3,7 +3,7 @@ use crate::{
     Gilrs, GilrsGamepads,
 };
 use bevy_ecs::event::EventWriter;
-use bevy_ecs::prelude::Commands;
+use bevy_ecs::prelude::ComponentCommands;
 use bevy_ecs::system::ResMut;
 use bevy_input::gamepad::{
     GamepadConnection, GamepadConnectionEvent, RawGamepadAxisChangedEvent,
@@ -12,7 +12,7 @@ use bevy_input::gamepad::{
 use gilrs::{ev::filter::axis_dpad_to_button, EventType, Filter};
 
 pub fn gilrs_event_startup_system(
-    mut commands: Commands,
+    mut commands: ComponentCommands,
     mut gilrs: ResMut<Gilrs>,
     mut gamepads: ResMut<GilrsGamepads>,
     mut events: EventWriter<GamepadConnectionEvent>,
@@ -36,7 +36,7 @@ pub fn gilrs_event_startup_system(
 }
 
 pub fn gilrs_event_system(
-    mut commands: Commands,
+    mut commands: ComponentCommands,
     mut gilrs: ResMut<Gilrs>,
     mut gamepads: ResMut<GilrsGamepads>,
     mut events: EventWriter<RawGamepadEvent>,

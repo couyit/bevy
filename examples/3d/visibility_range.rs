@@ -95,7 +95,7 @@ fn main() {
 
 // Set up a simple 3D scene. Load the two meshes.
 fn setup(
-    mut commands: Commands,
+    mut commands: ComponentCommands,
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<StandardMaterial>>,
     asset_server: Res<AssetServer>,
@@ -173,7 +173,7 @@ fn setup(
 // determines which `Scene` they're under, and adds the `VisibilityRange`
 // component as appropriate.
 fn set_visibility_ranges(
-    mut commands: Commands,
+    mut commands: ComponentCommands,
     mut new_meshes: Query<Entity, Added<Mesh3d>>,
     children: Query<(Option<&ChildOf>, Option<&MainModel>)>,
 ) {
@@ -294,7 +294,7 @@ fn update_mode(
 
 // Toggles the prepass if the user requests.
 fn toggle_prepass(
-    mut commands: Commands,
+    mut commands: ComponentCommands,
     cameras: Query<Entity, With<Camera3d>>,
     keyboard_input: Res<ButtonInput<KeyCode>>,
     mut app_status: ResMut<AppStatus>,

@@ -38,7 +38,7 @@ struct ButtonValue(Val);
 #[derive(Event)]
 struct ButtonActivatedEvent(Entity);
 
-fn setup(mut commands: Commands, asset_server: Res<AssetServer>) {
+fn setup(mut commands: ComponentCommands, asset_server: Res<AssetServer>) {
     // ui camera
     commands.spawn(Camera2d);
 

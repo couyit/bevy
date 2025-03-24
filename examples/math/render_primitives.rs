@@ -292,7 +292,7 @@ const CIRCULAR_SEGMENT: CircularSegment = CircularSegment {
     },
 };
 
-fn setup_cameras(mut commands: Commands) {
+fn setup_cameras(mut commands: ComponentCommands) {
     let start_in_2d = true;
     let make_camera = |is_active| Camera {
         is_active,
@@ -312,7 +312,7 @@ fn setup_ambient_light(mut ambient_light: ResMut<AmbientLight>) {
     ambient_light.brightness = 50.0;
 }
 
-fn setup_lights(mut commands: Commands) {
+fn setup_lights(mut commands: ComponentCommands) {
     commands.spawn((
         PointLight {
             intensity: 5000.0,
@@ -363,7 +363,7 @@ fn switch_cameras(current: Res<State<CameraActive>>, mut next: ResMut<NextState<
     next.set(next_state);
 }
 
-fn setup_text(mut commands: Commands, cameras: Query<(Entity, &Camera)>) {
+fn setup_text(mut commands: ComponentCommands, cameras: Query<(Entity, &Camera)>) {
     let active_camera = cameras
         .iter()
         .find_map(|(entity, camera)| camera.is_active.then_some(entity))
@@ -489,7 +489,7 @@ pub struct MeshDim2;
 pub struct MeshDim3;
 
 fn spawn_primitive_2d(
-    mut commands: Commands,
+    mut commands: ComponentCommands,
     mut materials: ResMut<Assets<ColorMaterial>>,
     mut meshes: ResMut<Assets<Mesh>>,
 ) {
@@ -533,7 +533,7 @@ fn spawn_primitive_2d(
 }
 
 fn spawn_primitive_3d(
-    mut commands: Commands,
+    mut commands: ComponentCommands,
     mut materials: ResMut<Assets<StandardMaterial>>,
     mut meshes: ResMut<Assets<Mesh>>,
 ) {

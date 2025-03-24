@@ -42,7 +42,7 @@ fn main() -> ExitCode {
 }
 
 fn setup(
-    mut commands: Commands,
+    mut commands: ComponentCommands,
     asset_server: Res<AssetServer>,
     mut standard_materials: ResMut<Assets<StandardMaterial>>,
     mut debug_materials: ResMut<Assets<MeshletDebugMaterial>>,

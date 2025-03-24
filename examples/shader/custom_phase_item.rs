@@ -188,7 +188,7 @@ fn main() {
 }
 
 /// Spawns the objects in the scene.
-fn setup(mut commands: Commands) {
+fn setup(mut commands: ComponentCommands) {
     // Spawn a single entity that has custom rendering. It'll be extracted into
     // the render world via [`ExtractComponent`].
     commands.spawn((
@@ -213,7 +213,7 @@ fn setup(mut commands: Commands) {
 ///
 /// This must be done in a startup system because it needs the [`RenderDevice`]
 /// and [`RenderQueue`] to exist, and they don't until [`App::run`] is called.
-fn prepare_custom_phase_item_buffers(mut commands: Commands) {
+fn prepare_custom_phase_item_buffers(mut commands: ComponentCommands) {
     commands.init_resource::<CustomPhaseItemBuffers>();
 }
 

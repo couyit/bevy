@@ -2,7 +2,7 @@ use bevy_ecs::{
     event::EventWriter,
     prelude::Schedule,
     schedule::IntoScheduleConfigs,
-    system::{Commands, IntoSystem, ResMut},
+    system::{ComponentCommands, IntoSystem, ResMut},
 };
 
 use super::{states::States, take_next_state, transitions::*, NextState, State};
@@ -48,7 +48,7 @@ pub trait FreelyMutableState: States {
 
 fn apply_state_transition<S: FreelyMutableState>(
     event: EventWriter<StateTransitionEvent<S>>,
-    commands: Commands,
+    commands: ComponentCommands,
     current_state: Option<ResMut<State<S>>>,
     next_state: Option<ResMut<NextState<S>>>,
 ) {

@@ -29,7 +29,7 @@ enum AppState {
 #[derive(Resource, Default)]
 struct RpgSpriteFolder(Handle<LoadedFolder>);
 
-fn load_textures(mut commands: Commands, asset_server: Res<AssetServer>) {
+fn load_textures(mut commands: ComponentCommands, asset_server: Res<AssetServer>) {
     // Load multiple, individual sprites from a folder
     commands.insert_resource(RpgSpriteFolder(asset_server.load_folder("textures/rpg")));
 }
@@ -48,7 +48,7 @@ fn check_textures(
 }
 
 fn setup(
-    mut commands: Commands,
+    mut commands: ComponentCommands,
     rpg_sprite_handles: Res<RpgSpriteFolder>,
     asset_server: Res<AssetServer>,
     mut texture_atlases: ResMut<Assets<TextureAtlasLayout>>,
@@ -249,7 +249,7 @@ fn create_texture_atlas(
 
 /// Create and spawn a sprite from a texture atlas
 fn create_sprite_from_atlas(
-    commands: &mut Commands,
+    commands: &mut ComponentCommands,
     translation: (f32, f32, f32),
     atlas_texture: Handle<Image>,
     atlas_sources: TextureAtlasSources,
@@ -271,7 +271,7 @@ fn create_sprite_from_atlas(
 
 /// Create and spawn a label (text)
 fn create_label(
-    commands: &mut Commands,
+    commands: &mut ComponentCommands,
     translation: (f32, f32, f32),
     text: &str,
     text_style: TextFont,

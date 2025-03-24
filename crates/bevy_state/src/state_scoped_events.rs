@@ -5,7 +5,7 @@ use bevy_app::{App, SubApp};
 use bevy_ecs::{
     event::{Event, EventReader, Events},
     resource::Resource,
-    system::Commands,
+    system::ComponentCommands,
     world::World,
 };
 use bevy_platform_support::collections::HashMap;
@@ -50,7 +50,7 @@ impl<S: FreelyMutableState> Default for StateScopedEvents<S> {
 }
 
 fn cleanup_state_scoped_event<S: FreelyMutableState>(
-    mut c: Commands,
+    mut c: ComponentCommands,
     mut transitions: EventReader<StateTransitionEvent<S>>,
 ) {
     let Some(transition) = transitions.read().last() else {

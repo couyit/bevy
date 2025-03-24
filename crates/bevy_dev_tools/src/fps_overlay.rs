@@ -12,7 +12,7 @@ use bevy_ecs::{
     query::With,
     resource::Resource,
     schedule::{common_conditions::resource_changed, IntoScheduleConfigs},
-    system::{Commands, Query, Res},
+    system::{ComponentCommands, Query, Res},
 };
 use bevy_render::view::Visibility;
 use bevy_text::{Font, TextColor, TextFont, TextSpan};
@@ -92,7 +92,7 @@ impl Default for FpsOverlayConfig {
 #[derive(Component)]
 struct FpsText;
 
-fn setup(mut commands: Commands, overlay_config: Res<FpsOverlayConfig>) {
+fn setup(mut commands: ComponentCommands, overlay_config: Res<FpsOverlayConfig>) {
     commands
         .spawn((
             Node {

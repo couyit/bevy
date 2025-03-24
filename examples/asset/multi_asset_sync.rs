@@ -141,7 +141,7 @@ impl Drop for AssetBarrierGuard {
     }
 }
 
-fn setup_assets(mut commands: Commands, asset_server: Res<AssetServer>) {
+fn setup_assets(mut commands: ComponentCommands, asset_server: Res<AssetServer>) {
     let (barrier, guard) = AssetBarrier::new();
     commands.insert_resource(OneHundredThings(std::array::from_fn(|i| match i % 5 {
         0 => asset_server.load_acquire("models/GolfBall/GolfBall.glb", guard.clone()),
@@ -167,7 +167,7 @@ fn setup_assets(mut commands: Commands, asset_server: Res<AssetServer>) {
         .detach();
 }
 
-fn setup_ui(mut commands: Commands) {
+fn setup_ui(mut commands: ComponentCommands) {
     // Display the result of async loading.
 
     commands.spawn((
@@ -183,7 +183,7 @@ fn setup_ui(mut commands: Commands) {
 }
 
 fn setup_scene(
-    mut commands: Commands,
+    mut commands: ComponentCommands,
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<StandardMaterial>>,
 ) {
@@ -220,7 +220,7 @@ fn assets_loaded(barrier: Option<Res<AssetBarrier>>) -> bool {
 //
 // This function only runs if `assets_loaded` returns true.
 fn wait_on_load(
-    mut commands: Commands,
+    mut commands: ComponentCommands,
     foxes: Res<OneHundredThings>,
     gltfs: Res<Assets<Gltf>>,
     mut meshes: ResMut<Assets<Mesh>>,
@@ -265,7 +265,7 @@ fn get_async_loading_state(
 }
 
 // This showcases how to react to asynchronous world mutations synchronously.
-fn despawn_loading_state_entities(mut commands: Commands, loading: Query<Entity, With<Loading>>) {
+fn despawn_loading_state_entities(mut commands: ComponentCommands, loading: Query<Entity, With<Loading>>) {
     // Despawn entities in the loading phase.
     for entity in loading.iter() {
         commands.entity(entity).despawn();

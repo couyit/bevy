@@ -12,7 +12,10 @@ use crate::{
     query::Access,
     schedule::InternedSystemSet,
     system::{input::SystemInput, SystemIn},
-    world::{unsafe_world_cell::UnsafeWorldCell, DeferredWorld, World, Worlds},
+    world::{
+        unsafe_world_cell::{UnsafeWorldCell, UnsafeWorldsCell},
+        DeferredWorld, World, Worlds,
+    },
 };
 
 use alloc::{borrow::Cow, boxed::Box, vec::Vec};
@@ -72,8 +75,11 @@ pub trait System: Send + Sync + 'static {
     /// - The method [`System::update_archetype_component_access`] must be called at some
     ///   point before this one, with the same exact [`World`]. If [`System::update_archetype_component_access`]
     ///   panics (or otherwise does not return for any reason), this method must not be called.
-    unsafe fn run_unsafe(&mut self, input: SystemIn<'_, Self>, world: UnsafeWorldCell)
-        -> Self::Out;
+    unsafe fn run_unsafe(
+        &mut self,
+        input: SystemIn<'_, Self>,
+        worlds: UnsafeWorldsCell,
+    ) -> Self::Out;
 
     /// Runs the system with the given input in the world.
     ///
@@ -82,9 +88,9 @@ pub trait System: Send + Sync + 'static {
     /// Unlike [`System::run_unsafe`], this will apply deferred parameters *immediately*.
     ///
     /// [`run_readonly`]: ReadOnlySystem::run_readonly
-    fn run(&mut self, input: SystemIn<'_, Self>, world: &mut World) -> Self::Out {
-        let ret = self.run_without_applying_deferred(input, world);
-        self.apply_deferred(world);
+    fn run(&mut self, input: SystemIn<'_, Self>, worlds: &mut Worlds) -> Self::Out {
+        let ret = self.run_without_applying_deferred(input, worlds);
+        self.apply_deferred(worlds);
         ret
     }
 
@@ -94,9 +100,9 @@ pub trait System: Send + Sync + 'static {
     fn run_without_applying_deferred(
         &mut self,
         input: SystemIn<'_, Self>,
-        world: &mut World,
+        worlds: &mut Worlds,
     ) -> Self::Out {
-        let world_cell = world.as_unsafe_world_cell();
+        let world_cell = worlds.as_unsafe_cell();
         self.update_archetype_component_access(world_cell);
         // SAFETY:
         // - We have exclusive access to the entire world.
@@ -107,7 +113,7 @@ pub trait System: Send + Sync + 'static {
     /// Applies any [`Deferred`](crate::system::Deferred) system parameters (or other system buffers) of this system to the world.
     ///
     /// This is where [`Commands`](crate::system::Commands) get applied.
-    fn apply_deferred(&mut self, world: &mut World);
+    fn apply_deferred(&mut self, worlds: &mut Worlds);
 
     /// Enqueues any [`Deferred`](crate::system::Deferred) system parameters (or other system buffers)
     /// of this system into the world's command buffer.
@@ -136,8 +142,8 @@ pub trait System: Send + Sync + 'static {
 
     /// Safe version of [`System::validate_param_unsafe`].
     /// that runs on exclusive, single-threaded `world` pointer.
-    fn validate_param(&mut self, world: &World) -> bool {
-        let world_cell = world.as_unsafe_world_cell_readonly();
+    fn validate_param(&mut self, worlds: &Worlds) -> bool {
+        let world_cell = worlds.as_unsafe_cell();
         self.update_archetype_component_access(world_cell);
         // SAFETY:
         // - We have exclusive access to the entire world.
@@ -146,14 +152,14 @@ pub trait System: Send + Sync + 'static {
     }
 
     /// Initialize the system.
-    fn initialize(&mut self, _world: &mut World);
+    fn initialize(&mut self, _worlds: &mut Worlds);
 
     /// Update the system's archetype component [`Access`].
     ///
     /// ## Note for implementors
     /// `world` may only be used to access metadata. This can be done in safe code
     /// via functions such as [`UnsafeWorldCell::archetypes`].
-    fn update_archetype_component_access(&mut self, world: UnsafeWorldCell);
+    fn update_archetype_component_access(&mut self, worlds: UnsafeWorldsCell);
 
     /// Checks any [`Tick`]s stored on this system and wraps their value if they get too old.
     ///
@@ -400,7 +406,7 @@ mod tests {
 
         impl Resource for T {}
 
-        fn system(In(n): In<usize>, mut commands: Commands) -> usize {
+        fn system(In(n): In<usize>, mut commands: ComponentCommands) -> usize {
             commands.insert_resource(T(n));
             n + 1
         }
@@ -430,7 +436,7 @@ mod tests {
         assert_eq!(*world.resource::<Counter>(), Counter(2));
     }
 
-    fn spawn_entity(mut commands: Commands) {
+    fn spawn_entity(mut commands: ComponentCommands) {
         commands.spawn_empty();
     }
 

@@ -11,12 +11,15 @@ use crate::{
     query::{QueryData, QueryFilter},
     relationship::RelationshipHookMode,
     resource::Resource,
-    system::{Commands, Query},
+    system::{ComponentCommands, Query},
     traversal::Traversal,
     world::{error::EntityMutableFetchError, EntityFetcher, WorldEntityFetch},
 };
 
-use super::{unsafe_world_cell::UnsafeWorldCell, Mut, World, WorldLabel, ON_INSERT, ON_REPLACE};
+use super::{
+    unsafe_world_cell::UnsafeWorldCell, Mut, ResourceWorld, World, WorldLabel, ON_INSERT,
+    ON_REPLACE,
+};
 
 /// A [`World`] reference that disallows structural ECS changes.
 /// This includes initializing resources, registering components or spawning entities.
@@ -65,11 +68,11 @@ impl<'w, W: WorldLabel> DeferredWorld<'w, W> {
 
     /// Creates a [`Commands`] instance that pushes to the world's command queue
     #[inline]
-    pub fn commands(&mut self) -> Commands<W> {
+    pub fn commands(&mut self) -> ComponentCommands<W> {
         // SAFETY: &mut self ensure that there are no outstanding accesses to the queue
         let command_queue = unsafe { self.world.get_raw_command_queue() };
         // SAFETY: command_queue is stored on world and always valid while the world exists
-        unsafe { Commands::new_raw_from_entities(command_queue, self.world.entities()) }
+        unsafe { ComponentCommands::new_raw_from_entities(command_queue, self.world.entities()) }
     }
 
     /// Retrieves a mutable reference to the given `entity`'s [`Component`] of the given type.
@@ -377,7 +380,7 @@ impl<'w, W: WorldLabel> DeferredWorld<'w, W> {
     /// # assert_eq!(_world.get::<TargetedBy>(e1).unwrap().0, eid);
     /// # assert_eq!(_world.get::<TargetedBy>(e2).unwrap().0, eid);
     /// ```
-    pub fn entities_and_commands(&mut self) -> (EntityFetcher, Commands) {
+    pub fn entities_and_commands(&mut self) -> (EntityFetcher, ComponentCommands<W>) {
         let cell = self.as_unsafe_world_cell();
         // SAFETY: `&mut self` gives mutable access to the entire world, and prevents simultaneous access.
         let fetcher = unsafe { EntityFetcher::new(cell) };
@@ -386,7 +389,7 @@ impl<'w, W: WorldLabel> DeferredWorld<'w, W> {
         // - Command queue access does not conflict with entity access.
         let raw_queue = unsafe { cell.get_raw_command_queue() };
         // SAFETY: `&mut self` ensures the commands does not outlive the world.
-        let commands = unsafe { Commands::new_raw_from_entities(raw_queue, cell.entities()) };
+        let commands = unsafe { ComponentCommands::new_raw_from_entities(raw_queue, cell.entities()) };
 
         (fetcher, commands)
     }
@@ -403,128 +406,6 @@ impl<'w, W: WorldLabel> DeferredWorld<'w, W> {
     ) -> Query<'_, 's, D, F> {
         // SAFETY: We have mutable access to the entire world
         unsafe { state.query_unchecked(self.world) }
-    }
-
-    /// Gets a mutable reference to the resource of the given type
-    ///
-    /// # Panics
-    ///
-    /// Panics if the resource does not exist.
-    /// Use [`get_resource_mut`](DeferredWorld::get_resource_mut) instead if you want to handle this case.
-    #[inline]
-    #[track_caller]
-    pub fn resource_mut<R: Resource>(&mut self) -> Mut<'_, R> {
-        match self.get_resource_mut() {
-            Some(x) => x,
-            None => panic!(
-                "Requested resource {} does not exist in the `World`.
-                Did you forget to add it using `app.insert_resource` / `app.init_resource`?
-                Resources are also implicitly added via `app.add_event`,
-                and can be added by plugins.",
-                core::any::type_name::<R>()
-            ),
-        }
-    }
-
-    /// Gets a mutable reference to the resource of the given type if it exists
-    #[inline]
-    pub fn get_resource_mut<R: Resource>(&mut self) -> Option<Mut<'_, R>> {
-        // SAFETY: &mut self ensure that there are no outstanding accesses to the resource
-        unsafe { self.world.get_resource_mut() }
-    }
-
-    /// Gets a mutable reference to the non-send resource of the given type, if it exists.
-    ///
-    /// # Panics
-    ///
-    /// Panics if the resource does not exist.
-    /// Use [`get_non_send_resource_mut`](World::get_non_send_resource_mut) instead if you want to handle this case.
-    ///
-    /// This function will panic if it isn't called from the same thread that the resource was inserted from.
-    #[inline]
-    #[track_caller]
-    pub fn non_send_resource_mut<R: 'static>(&mut self) -> Mut<'_, R> {
-        match self.get_non_send_resource_mut() {
-            Some(x) => x,
-            None => panic!(
-                "Requested non-send resource {} does not exist in the `World`.
-                Did you forget to add it using `app.insert_non_send_resource` / `app.init_non_send_resource`?
-                Non-send resources can also be added by plugins.",
-                core::any::type_name::<R>()
-            ),
-        }
-    }
-
-    /// Gets a mutable reference to the non-send resource of the given type, if it exists.
-    /// Otherwise returns `None`.
-    ///
-    /// # Panics
-    /// This function will panic if it isn't called from the same thread that the resource was inserted from.
-    #[inline]
-    pub fn get_non_send_resource_mut<R: 'static>(&mut self) -> Option<Mut<'_, R>> {
-        // SAFETY: &mut self ensure that there are no outstanding accesses to the resource
-        unsafe { self.world.get_non_send_resource_mut() }
-    }
-
-    /// Sends an [`Event`].
-    /// This method returns the [ID](`EventId`) of the sent `event`,
-    /// or [`None`] if the `event` could not be sent.
-    #[inline]
-    pub fn send_event<E: Event>(&mut self, event: E) -> Option<EventId<E>> {
-        self.send_event_batch(core::iter::once(event))?.next()
-    }
-
-    /// Sends the default value of the [`Event`] of type `E`.
-    /// This method returns the [ID](`EventId`) of the sent `event`,
-    /// or [`None`] if the `event` could not be sent.
-    #[inline]
-    pub fn send_event_default<E: Event + Default>(&mut self) -> Option<EventId<E>> {
-        self.send_event(E::default())
-    }
-
-    /// Sends a batch of [`Event`]s from an iterator.
-    /// This method returns the [IDs](`EventId`) of the sent `events`,
-    /// or [`None`] if the `event` could not be sent.
-    #[inline]
-    pub fn send_event_batch<E: Event>(
-        &mut self,
-        events: impl IntoIterator<Item = E>,
-    ) -> Option<SendBatchIds<E>> {
-        let Some(mut events_resource) = self.get_resource_mut::<Events<E>>() else {
-            log::error!(
-                "Unable to send event `{}`\n\tEvent must be added to the app with `add_event()`\n\thttps://docs.rs/bevy/*/bevy/app/struct.App.html#method.add_event ",
-                core::any::type_name::<E>()
-            );
-            return None;
-        };
-        Some(events_resource.send_batch(events))
-    }
-
-    /// Gets a pointer to the resource with the id [`ComponentId`] if it exists.
-    /// The returned pointer may be used to modify the resource, as long as the mutable borrow
-    /// of the [`World`] is still valid.
-    ///
-    /// **You should prefer to use the typed API [`World::get_resource_mut`] where possible and only
-    /// use this in cases where the actual types are not known at compile time.**
-    #[inline]
-    pub fn get_resource_mut_by_id(&mut self, component_id: ComponentId) -> Option<MutUntyped<'_>> {
-        // SAFETY: &mut self ensure that there are no outstanding accesses to the resource
-        unsafe { self.world.get_resource_mut_by_id(component_id) }
-    }
-
-    /// Gets a `!Send` resource to the resource with the id [`ComponentId`] if it exists.
-    /// The returned pointer may be used to modify the resource, as long as the mutable borrow
-    /// of the [`World`] is still valid.
-    ///
-    /// **You should prefer to use the typed API [`World::get_resource_mut`] where possible and only
-    /// use this in cases where the actual types are not known at compile time.**
-    ///
-    /// # Panics
-    /// This function will panic if it isn't called from the same thread that the resource was inserted from.
-    #[inline]
-    pub fn get_non_send_mut_by_id(&mut self, component_id: ComponentId) -> Option<MutUntyped<'_>> {
-        // SAFETY: &mut self ensure that there are no outstanding accesses to the resource
-        unsafe { self.world.get_non_send_resource_mut_by_id(component_id) }
     }
 
     /// Retrieves a mutable untyped reference to the given `entity`'s [`Component`] of the given [`ComponentId`].
@@ -787,5 +668,129 @@ impl<'w, W: WorldLabel> DeferredWorld<'w, W> {
     #[inline]
     pub(crate) fn as_unsafe_world_cell(&mut self) -> UnsafeWorldCell {
         self.world
+    }
+}
+
+impl<'w> DeferredWorld<'w, ResourceWorld> {
+    /// Gets a mutable reference to the resource of the given type
+    ///
+    /// # Panics
+    ///
+    /// Panics if the resource does not exist.
+    /// Use [`get_resource_mut`](DeferredWorld::get_resource_mut) instead if you want to handle this case.
+    #[inline]
+    #[track_caller]
+    pub fn resource_mut<R: Resource>(&mut self) -> Mut<'_, R> {
+        match self.get_resource_mut() {
+            Some(x) => x,
+            None => panic!(
+                "Requested resource {} does not exist in the `World`.
+                Did you forget to add it using `app.insert_resource` / `app.init_resource`?
+                Resources are also implicitly added via `app.add_event`,
+                and can be added by plugins.",
+                core::any::type_name::<R>()
+            ),
+        }
+    }
+
+    /// Gets a mutable reference to the resource of the given type if it exists
+    #[inline]
+    pub fn get_resource_mut<R: Resource>(&mut self) -> Option<Mut<'_, R>> {
+        // SAFETY: &mut self ensure that there are no outstanding accesses to the resource
+        unsafe { self.world.get_resource_mut() }
+    }
+
+    /// Gets a mutable reference to the non-send resource of the given type, if it exists.
+    ///
+    /// # Panics
+    ///
+    /// Panics if the resource does not exist.
+    /// Use [`get_non_send_resource_mut`](World::get_non_send_resource_mut) instead if you want to handle this case.
+    ///
+    /// This function will panic if it isn't called from the same thread that the resource was inserted from.
+    #[inline]
+    #[track_caller]
+    pub fn non_send_resource_mut<R: 'static>(&mut self) -> Mut<'_, R> {
+        match self.get_non_send_resource_mut() {
+            Some(x) => x,
+            None => panic!(
+                "Requested non-send resource {} does not exist in the `World`.
+                Did you forget to add it using `app.insert_non_send_resource` / `app.init_non_send_resource`?
+                Non-send resources can also be added by plugins.",
+                core::any::type_name::<R>()
+            ),
+        }
+    }
+
+    /// Gets a mutable reference to the non-send resource of the given type, if it exists.
+    /// Otherwise returns `None`.
+    ///
+    /// # Panics
+    /// This function will panic if it isn't called from the same thread that the resource was inserted from.
+    #[inline]
+    pub fn get_non_send_resource_mut<R: 'static>(&mut self) -> Option<Mut<'_, R>> {
+        // SAFETY: &mut self ensure that there are no outstanding accesses to the resource
+        unsafe { self.world.get_non_send_resource_mut() }
+    }
+
+    /// Sends an [`Event`].
+    /// This method returns the [ID](`EventId`) of the sent `event`,
+    /// or [`None`] if the `event` could not be sent.
+    #[inline]
+    pub fn send_event<E: Event>(&mut self, event: E) -> Option<EventId<E>> {
+        self.send_event_batch(core::iter::once(event))?.next()
+    }
+
+    /// Sends the default value of the [`Event`] of type `E`.
+    /// This method returns the [ID](`EventId`) of the sent `event`,
+    /// or [`None`] if the `event` could not be sent.
+    #[inline]
+    pub fn send_event_default<E: Event + Default>(&mut self) -> Option<EventId<E>> {
+        self.send_event(E::default())
+    }
+
+    /// Sends a batch of [`Event`]s from an iterator.
+    /// This method returns the [IDs](`EventId`) of the sent `events`,
+    /// or [`None`] if the `event` could not be sent.
+    #[inline]
+    pub fn send_event_batch<E: Event>(
+        &mut self,
+        events: impl IntoIterator<Item = E>,
+    ) -> Option<SendBatchIds<E>> {
+        let Some(mut events_resource) = self.get_resource_mut::<Events<E>>() else {
+            log::error!(
+                "Unable to send event `{}`\n\tEvent must be added to the app with `add_event()`\n\thttps://docs.rs/bevy/*/bevy/app/struct.App.html#method.add_event ",
+                core::any::type_name::<E>()
+            );
+            return None;
+        };
+        Some(events_resource.send_batch(events))
+    }
+
+    /// Gets a pointer to the resource with the id [`ComponentId`] if it exists.
+    /// The returned pointer may be used to modify the resource, as long as the mutable borrow
+    /// of the [`World`] is still valid.
+    ///
+    /// **You should prefer to use the typed API [`World::get_resource_mut`] where possible and only
+    /// use this in cases where the actual types are not known at compile time.**
+    #[inline]
+    pub fn get_resource_mut_by_id(&mut self, component_id: ComponentId) -> Option<MutUntyped<'_>> {
+        // SAFETY: &mut self ensure that there are no outstanding accesses to the resource
+        unsafe { self.world.get_resource_mut_by_id(component_id) }
+    }
+
+    /// Gets a `!Send` resource to the resource with the id [`ComponentId`] if it exists.
+    /// The returned pointer may be used to modify the resource, as long as the mutable borrow
+    /// of the [`World`] is still valid.
+    ///
+    /// **You should prefer to use the typed API [`World::get_resource_mut`] where possible and only
+    /// use this in cases where the actual types are not known at compile time.**
+    ///
+    /// # Panics
+    /// This function will panic if it isn't called from the same thread that the resource was inserted from.
+    #[inline]
+    pub fn get_non_send_mut_by_id(&mut self, component_id: ComponentId) -> Option<MutUntyped<'_>> {
+        // SAFETY: &mut self ensure that there are no outstanding accesses to the resource
+        unsafe { self.world.get_non_send_resource_mut_by_id(component_id) }
     }
 }

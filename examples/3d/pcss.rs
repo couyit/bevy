@@ -141,7 +141,7 @@ fn main() {
 }
 
 /// Creates all the objects in the scene.
-fn setup(mut commands: Commands, asset_server: Res<AssetServer>, app_status: Res<AppStatus>) {
+fn setup(mut commands: ComponentCommands, asset_server: Res<AssetServer>, app_status: Res<AppStatus>) {
     spawn_camera(&mut commands, &asset_server);
     spawn_light(&mut commands, &app_status);
     spawn_gltf_scene(&mut commands, &asset_server);
@@ -149,7 +149,7 @@ fn setup(mut commands: Commands, asset_server: Res<AssetServer>, app_status: Res
 }
 
 /// Spawns the camera, with the initial shadow filtering method.
-fn spawn_camera(commands: &mut Commands, asset_server: &AssetServer) {
+fn spawn_camera(commands: &mut ComponentCommands, asset_server: &AssetServer) {
     commands
         .spawn((
             Camera3d::default(),
@@ -176,7 +176,7 @@ fn spawn_camera(commands: &mut Commands, asset_server: &AssetServer) {
 }
 
 /// Spawns the initial light.
-fn spawn_light(commands: &mut Commands, app_status: &AppStatus) {
+fn spawn_light(commands: &mut ComponentCommands, app_status: &AppStatus) {
     // Because this light can become a directional light, point light, or spot
     // light depending on the settings, we add the union of the components
     // necessary for this light to behave as all three of those.
@@ -200,14 +200,14 @@ fn spawn_light(commands: &mut Commands, app_status: &AppStatus) {
 }
 
 /// Loads and spawns the glTF palm tree scene.
-fn spawn_gltf_scene(commands: &mut Commands, asset_server: &AssetServer) {
+fn spawn_gltf_scene(commands: &mut ComponentCommands, asset_server: &AssetServer) {
     commands.spawn(SceneRoot(
         asset_server.load("models/PalmTree/PalmTree.gltf#Scene0"),
     ));
 }
 
 /// Spawns all the buttons at the bottom of the screen.
-fn spawn_buttons(commands: &mut Commands) {
+fn spawn_buttons(commands: &mut ComponentCommands) {
     commands
         .spawn(widgets::main_ui_node())
         .with_children(|parent| {
@@ -275,7 +275,7 @@ fn update_radio_buttons(
 
 /// Handles requests from the user to change the type of light.
 fn handle_light_type_change(
-    mut commands: Commands,
+    mut commands: ComponentCommands,
     mut lights: Query<Entity, Or<(With<DirectionalLight>, With<PointLight>, With<SpotLight>)>>,
     mut events: EventReader<WidgetClickEvent<AppSetting>>,
     mut app_status: ResMut<AppStatus>,
@@ -312,7 +312,7 @@ fn handle_light_type_change(
 /// This system is also responsible for enabling and disabling TAA as
 /// appropriate.
 fn handle_shadow_filter_change(
-    mut commands: Commands,
+    mut commands: ComponentCommands,
     mut cameras: Query<(Entity, &mut ShadowFilteringMethod)>,
     mut events: EventReader<WidgetClickEvent<AppSetting>>,
     mut app_status: ResMut<AppStatus>,

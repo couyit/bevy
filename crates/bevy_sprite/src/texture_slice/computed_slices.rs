@@ -27,7 +27,7 @@ impl ComputedTextureSlices {
     #[must_use]
     pub(crate) fn extract_sprites<'a, 'w, 's>(
         &'a self,
-        commands: &'a mut Commands<'w, 's>,
+        commands: &'a mut ComponentCommands<'w, 's>,
         transform: &'a GlobalTransform,
         original_entity: Entity,
         sprite: &'a Sprite,
@@ -137,7 +137,7 @@ fn compute_sprite_slices(
 /// System reacting to added or modified [`Image`] handles, and recompute sprite slices
 /// on sprite entities with a matching  [`SpriteImageMode`]
 pub(crate) fn compute_slices_on_asset_event(
-    mut commands: Commands,
+    mut commands: ComponentCommands,
     mut events: EventReader<AssetEvent<Image>>,
     images: Res<Assets<Image>>,
     atlas_layouts: Res<Assets<TextureAtlasLayout>>,
@@ -170,7 +170,7 @@ pub(crate) fn compute_slices_on_asset_event(
 
 /// System reacting to changes on the [`Sprite`] component to compute the sprite slices
 pub(crate) fn compute_slices_on_sprite_change(
-    mut commands: Commands,
+    mut commands: ComponentCommands,
     images: Res<Assets<Image>>,
     atlas_layouts: Res<Assets<TextureAtlasLayout>>,
     changed_sprites: Query<(Entity, &Sprite), Changed<Sprite>>,

@@ -33,7 +33,7 @@ fn window_title_system(mut windows: Query<&mut Window>) {
     }
 }
 
-fn spawn_player(mut commands: Commands) {
+fn spawn_player(mut commands: ComponentCommands) {
     commands.spawn(Player::default());
 }
 

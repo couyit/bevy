@@ -6,7 +6,7 @@ use crate::{
     system::{Deferred, SystemBuffer, SystemMeta, SystemParam},
 };
 
-use super::{CommandQueue, Commands};
+use super::{CommandQueue, ComponentCommands};
 
 #[derive(Default)]
 struct ParallelCommandQueue {
@@ -65,9 +65,9 @@ impl<'w, 's> ParallelCommands<'w, 's> {
     /// Temporarily provides access to the [`Commands`] for the current thread.
     ///
     /// For an example, see the type-level documentation for [`ParallelCommands`].
-    pub fn command_scope<R>(&self, f: impl FnOnce(Commands) -> R) -> R {
+    pub fn command_scope<R>(&self, f: impl FnOnce(ComponentCommands) -> R) -> R {
         self.state.thread_queues.scope(|queue| {
-            let commands = Commands::new_from_entities(queue, self.entities);
+            let commands = ComponentCommands::new_from_entities(queue, self.entities);
             f(commands)
         })
     }

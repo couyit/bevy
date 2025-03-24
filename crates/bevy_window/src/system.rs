@@ -40,7 +40,7 @@ pub fn exit_on_primary_closed(
 ///
 /// [`WindowPlugin`]: crate::WindowPlugin
 pub fn close_when_requested(
-    mut commands: Commands,
+    mut commands: ComponentCommands,
     mut closed: EventReader<WindowCloseRequested>,
     closing: Query<Entity, With<ClosingWindow>>,
 ) {

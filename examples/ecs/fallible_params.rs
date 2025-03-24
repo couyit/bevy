@@ -54,7 +54,7 @@ struct Player {
     min_follow_radius: f32,
 }
 
-fn setup(mut commands: Commands, asset_server: Res<AssetServer>) {
+fn setup(mut commands: ComponentCommands, asset_server: Res<AssetServer>) {
     // Spawn 2D camera.
     commands.spawn(Camera2d);
 
@@ -79,7 +79,7 @@ fn setup(mut commands: Commands, asset_server: Res<AssetServer>) {
 /// If user presses 'A' we spawn a new random enemy.
 /// If user presses 'R' we remove a random enemy (if any exist).
 fn user_input(
-    mut commands: Commands,
+    mut commands: ComponentCommands,
     enemies: Query<Entity, With<Enemy>>,
     keyboard_input: Res<ButtonInput<KeyCode>>,
     asset_server: Res<AssetServer>,

@@ -98,7 +98,7 @@ impl Plugin for PointerInputPlugin {
 }
 
 /// Spawns the default mouse pointer.
-pub fn spawn_mouse_pointer(mut commands: Commands) {
+pub fn spawn_mouse_pointer(mut commands: ComponentCommands) {
     commands.spawn(PointerId::Mouse);
 }
 
@@ -187,7 +187,7 @@ pub fn touch_pick_events(
     // Locals
     mut touch_cache: Local<HashMap<u64, TouchInput>>,
     // Output
-    mut commands: Commands,
+    mut commands: ComponentCommands,
     mut pointer_events: EventWriter<PointerInput>,
 ) {
     for window_event in window_events.read() {
@@ -257,7 +257,7 @@ pub fn touch_pick_events(
 /// Because each new touch gets assigned a new ID, we need to remove the pointers associated with
 /// touches that are no longer active.
 pub fn deactivate_touch_pointers(
-    mut commands: Commands,
+    mut commands: ComponentCommands,
     mut despawn_list: Local<HashSet<(Entity, PointerId)>>,
     pointers: Query<(Entity, &PointerId)>,
     mut touches: EventReader<TouchInput>,

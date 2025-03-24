@@ -25,7 +25,7 @@ use bevy_ecs::{
     observer::Trigger,
     query::With,
     reflect::ReflectComponent,
-    system::{Commands, Local, Query},
+    system::{ComponentCommands, Local, Query},
     world::{OnRemove, Ref},
 };
 #[cfg(feature = "custom_cursor")]
@@ -77,7 +77,7 @@ impl From<SystemCursorIcon> for CursorIcon {
 }
 
 fn update_cursors(
-    mut commands: Commands,
+    mut commands: ComponentCommands,
     windows: Query<(Entity, Ref<CursorIcon>), With<Window>>,
     #[cfg(feature = "custom_cursor")] cursor_cache: Res<CustomCursorCache>,
     #[cfg(feature = "custom_cursor")] images: Res<Assets<Image>>,
@@ -184,7 +184,7 @@ fn update_cursors(
 }
 
 /// Resets the cursor to the default icon when `CursorIcon` is removed.
-fn on_remove_cursor_icon(trigger: Trigger<OnRemove, CursorIcon>, mut commands: Commands) {
+fn on_remove_cursor_icon(trigger: Trigger<OnRemove, CursorIcon>, mut commands: ComponentCommands) {
     // Use `try_insert` to avoid panic if the window is being destroyed.
     commands
         .entity(trigger.target())

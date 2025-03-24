@@ -154,7 +154,7 @@ fn toggle_theme(mut window: Single<&mut Window>, input: Res<ButtonInput<KeyCode>
 struct CursorIcons(Vec<CursorIcon>);
 
 fn init_cursor_icons(
-    mut commands: Commands,
+    mut commands: ComponentCommands,
     #[cfg(feature = "custom_cursor")] asset_server: Res<AssetServer>,
 ) {
     commands.insert_resource(CursorIcons(vec![
@@ -174,7 +174,7 @@ fn init_cursor_icons(
 
 /// This system cycles the cursor's icon through a small set of icons when clicking
 fn cycle_cursor_icon(
-    mut commands: Commands,
+    mut commands: ComponentCommands,
     window: Single<Entity, With<Window>>,
     input: Res<ButtonInput<MouseButton>>,
     mut index: Local<usize>,

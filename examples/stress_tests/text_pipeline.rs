@@ -35,7 +35,7 @@ fn main() {
         .run();
 }
 
-fn spawn(mut commands: Commands, asset_server: Res<AssetServer>) {
+fn spawn(mut commands: ComponentCommands, asset_server: Res<AssetServer>) {
     warn!(include_str!("warning_string.txt"));
 
     commands.spawn(Camera2d);

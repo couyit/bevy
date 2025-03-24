@@ -6,7 +6,7 @@ use bevy_ecs::{
     entity::Entity,
     query::With,
     resource::Resource,
-    system::{Commands, Query, Res, ResMut},
+    system::{ComponentCommands, Query, Res, ResMut},
     world::{FromWorld, World},
 };
 use bevy_math::{Mat4, Vec3};
@@ -388,7 +388,7 @@ pub(super) fn queue_render_sky_pipelines(
     pipeline_cache: Res<PipelineCache>,
     layouts: Res<RenderSkyBindGroupLayouts>,
     mut specializer: ResMut<SpecializedRenderPipelines<RenderSkyBindGroupLayouts>>,
-    mut commands: Commands,
+    mut commands: ComponentCommands,
 ) {
     for (entity, camera, msaa) in &views {
         let id = specializer.specialize(
@@ -415,7 +415,7 @@ pub(super) fn prepare_atmosphere_textures(
     views: Query<(Entity, &AtmosphereSettings), With<Atmosphere>>,
     render_device: Res<RenderDevice>,
     mut texture_cache: ResMut<TextureCache>,
-    mut commands: Commands,
+    mut commands: ComponentCommands,
 ) {
     for (entity, lut_settings) in &views {
         let transmittance_lut = texture_cache.get(
@@ -536,7 +536,7 @@ pub(super) fn prepare_atmosphere_transforms(
     render_device: Res<RenderDevice>,
     render_queue: Res<RenderQueue>,
     mut atmo_uniforms: ResMut<AtmosphereTransforms>,
-    mut commands: Commands,
+    mut commands: ComponentCommands,
 ) {
     let atmo_count = views.iter().len();
     let Some(mut writer) =
@@ -599,7 +599,7 @@ pub(super) fn prepare_atmosphere_bind_groups(
     atmosphere_uniforms: Res<ComponentUniforms<Atmosphere>>,
     settings_uniforms: Res<ComponentUniforms<AtmosphereSettings>>,
 
-    mut commands: Commands,
+    mut commands: ComponentCommands,
 ) {
     if views.iter().len() == 0 {
         return;

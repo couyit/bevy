@@ -49,7 +49,7 @@ struct SamplePoint;
 struct MousePressed(bool);
 
 fn setup(
-    mut commands: Commands,
+    mut commands: ComponentCommands,
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<StandardMaterial>>,
 ) {
@@ -135,7 +135,7 @@ fn setup(
 
 // Handle user inputs from the keyboard:
 fn handle_keypress(
-    mut commands: Commands,
+    mut commands: ComponentCommands,
     keyboard: Res<ButtonInput<KeyCode>>,
     mut mode: ResMut<Mode>,
     shape: Res<SampledShape>,

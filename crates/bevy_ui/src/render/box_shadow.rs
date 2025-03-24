@@ -234,7 +234,7 @@ pub struct ExtractedBoxShadows {
 }
 
 pub fn extract_shadows(
-    mut commands: Commands,
+    mut commands: ComponentCommands,
     mut extracted_box_shadows: ResMut<ExtractedBoxShadows>,
     box_shadow_query: Extract<
         Query<(
@@ -376,7 +376,7 @@ pub fn queue_shadows(
 }
 
 pub fn prepare_shadows(
-    mut commands: Commands,
+    mut commands: ComponentCommands,
     render_device: Res<RenderDevice>,
     render_queue: Res<RenderQueue>,
     mut ui_meta: ResMut<BoxShadowMeta>,

@@ -73,7 +73,7 @@ use crate::{
         Identifier,
     },
     storage::{SparseSetIndex, TableId, TableRow},
-    world::{ComponentWorld, WorldLabel},
+    world::ComponentWorld,
 };
 use alloc::vec::Vec;
 use bevy_platform_support::sync::atomic::Ordering;
@@ -575,7 +575,7 @@ pub struct Entities<W: ComponentWorld> {
     marker: PhantomData<W>,
 }
 
-impl<W: WorldLabel> Entities<W> {
+impl<W: ComponentWorld> Entities<W> {
     pub(crate) const fn new() -> Self {
         Entities {
             meta: Vec::new(),
@@ -1051,7 +1051,7 @@ pub struct EntityDoesNotExistError {
 }
 
 impl EntityDoesNotExistError {
-    pub(crate) fn new<W: WorldLabel>(entity: Entity, entities: &Entities<W>) -> Self {
+    pub(crate) fn new<W: ComponentWorld>(entity: Entity, entities: &Entities<W>) -> Self {
         Self {
             entity,
             details: entities.entity_does_not_exist_error_details(entity),
@@ -1137,6 +1137,8 @@ impl EntityLocation {
 
 #[cfg(test)]
 mod tests {
+    use crate::world::InvalidComponentWorld;
+
     use super::*;
     use alloc::format;
 
@@ -1155,7 +1157,7 @@ mod tests {
 
     #[test]
     fn reserve_entity_len() {
-        let mut e = Entities::new();
+        let mut e = Entities::<InvalidComponentWorld>::new();
         e.reserve_entity();
         // SAFETY: entity_location is left invalid
         unsafe { e.flush(|_, _| {}) };
@@ -1164,7 +1166,7 @@ mod tests {
 
     #[test]
     fn get_reserved_and_invalid() {
-        let mut entities = Entities::new();
+        let mut entities = Entities::<InvalidComponentWorld>::new();
         let e = entities.reserve_entity();
         assert!(entities.contains(e));
         assert!(entities.get(e).is_none());
@@ -1199,7 +1201,7 @@ mod tests {
 
     #[test]
     fn reserve_generations() {
-        let mut entities = Entities::new();
+        let mut entities = Entities::<InvalidComponentWorld>::new();
         let entity = entities.alloc();
         entities.free(entity);
 
@@ -1210,7 +1212,7 @@ mod tests {
     fn reserve_generations_and_alloc() {
         const GENERATIONS: u32 = 10;
 
-        let mut entities = Entities::new();
+        let mut entities = Entities::<InvalidComponentWorld>::new();
         let entity = entities.alloc();
         entities.free(entity);
 

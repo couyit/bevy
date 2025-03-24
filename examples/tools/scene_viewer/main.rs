@@ -110,7 +110,7 @@ fn parse_scene(scene_path: String) -> (String, usize) {
     (scene_path, 0)
 }
 
-fn setup(mut commands: Commands, asset_server: Res<AssetServer>, args: Res<Args>) {
+fn setup(mut commands: ComponentCommands, asset_server: Res<AssetServer>, args: Res<Args>) {
     let scene_path = &args.scene_path;
     info!("Loading {}", scene_path);
     let (file_path, scene_index) = parse_scene((*scene_path).clone());
@@ -119,7 +119,7 @@ fn setup(mut commands: Commands, asset_server: Res<AssetServer>, args: Res<Args>
 }
 
 fn setup_scene_after_load(
-    mut commands: Commands,
+    mut commands: ComponentCommands,
     mut setup: Local<bool>,
     mut scene_handle: ResMut<SceneHandle>,
     asset_server: Res<AssetServer>,

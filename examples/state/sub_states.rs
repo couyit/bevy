@@ -83,7 +83,7 @@ fn menu(
     }
 }
 
-fn cleanup_menu(mut commands: Commands, menu_data: Res<MenuData>) {
+fn cleanup_menu(mut commands: ComponentCommands, menu_data: Res<MenuData>) {
     commands.entity(menu_data.button_entity).despawn();
 }
 
@@ -150,11 +150,11 @@ mod ui {
     pub const HOVERED_BUTTON: Color = Color::srgb(0.25, 0.25, 0.25);
     pub const PRESSED_BUTTON: Color = Color::srgb(0.35, 0.75, 0.35);
 
-    pub fn setup(mut commands: Commands) {
+    pub fn setup(mut commands: ComponentCommands) {
         commands.spawn(Camera2d);
     }
 
-    pub fn setup_menu(mut commands: Commands) {
+    pub fn setup_menu(mut commands: ComponentCommands) {
         let button_entity = commands
             .spawn((
                 Node {
@@ -191,11 +191,11 @@ mod ui {
         commands.insert_resource(MenuData { button_entity });
     }
 
-    pub fn setup_game(mut commands: Commands, asset_server: Res<AssetServer>) {
+    pub fn setup_game(mut commands: ComponentCommands, asset_server: Res<AssetServer>) {
         commands.spawn(Sprite::from_image(asset_server.load("branding/icon.png")));
     }
 
-    pub fn setup_paused_screen(mut commands: Commands) {
+    pub fn setup_paused_screen(mut commands: ComponentCommands) {
         commands.spawn((
             StateScoped(IsPaused::Paused),
             Node {

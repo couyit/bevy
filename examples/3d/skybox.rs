@@ -57,7 +57,7 @@ struct Cubemap {
     image_handle: Handle<Image>,
 }
 
-fn setup(mut commands: Commands, asset_server: Res<AssetServer>) {
+fn setup(mut commands: ComponentCommands, asset_server: Res<AssetServer>) {
     // directional 'sun' light
     commands.spawn((
         DirectionalLight {

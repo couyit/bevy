@@ -4,7 +4,7 @@ use crate::{
     },
     entity::{ComponentCloneCtx, Entity, EntityClonerBuilder, SourceComponent},
     observer::ObserverState,
-    system::Commands,
+    system::ComponentCommands,
     world::World,
 };
 use alloc::vec::Vec;
@@ -65,7 +65,7 @@ impl EntityClonerBuilder<'_> {
 }
 
 fn component_clone_observed_by(
-    commands: &mut Commands,
+    commands: &mut ComponentCommands,
     _source: &SourceComponent,
     ctx: &mut ComponentCloneCtx,
 ) {

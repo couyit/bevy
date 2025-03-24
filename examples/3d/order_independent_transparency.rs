@@ -20,7 +20,7 @@ fn main() {
 
 /// set up a simple 3D scene
 fn setup(
-    mut commands: Commands,
+    mut commands: ComponentCommands,
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<StandardMaterial>>,
 ) {
@@ -68,7 +68,7 @@ fn setup(
 }
 
 fn toggle_oit(
-    mut commands: Commands,
+    mut commands: ComponentCommands,
     text: Single<Entity, With<Text>>,
     keyboard_input: Res<ButtonInput<KeyCode>>,
     q: Single<(Entity, Has<OrderIndependentTransparencySettings>), With<Camera3d>>,
@@ -94,7 +94,7 @@ fn toggle_oit(
 }
 
 fn cycle_scenes(
-    mut commands: Commands,
+    mut commands: ComponentCommands,
     keyboard_input: Res<ButtonInput<KeyCode>>,
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<StandardMaterial>>,
@@ -121,7 +121,7 @@ fn cycle_scenes(
 /// Technically, when using `alpha_to_coverage` with MSAA this particular example wouldn't break,
 /// but it breaks when disabling MSAA and is enough to show the difference between OIT enabled vs disabled.
 fn spawn_spheres(
-    commands: &mut Commands,
+    commands: &mut ComponentCommands,
     meshes: &mut Assets<Mesh>,
     materials: &mut Assets<StandardMaterial>,
 ) {
@@ -173,7 +173,7 @@ fn spawn_spheres(
 /// This is useful to make sure transparent meshes drawn with OIT
 /// are properly occluded by opaque meshes.
 fn spawn_occlusion_test(
-    commands: &mut Commands,
+    commands: &mut ComponentCommands,
     meshes: &mut Assets<Mesh>,
     materials: &mut Assets<StandardMaterial>,
 ) {

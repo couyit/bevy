@@ -202,7 +202,7 @@ impl SpecializedRenderPipeline for FxaaPipeline {
 }
 
 pub fn prepare_fxaa_pipelines(
-    mut commands: Commands,
+    mut commands: ComponentCommands,
     pipeline_cache: Res<PipelineCache>,
     mut pipelines: ResMut<SpecializedRenderPipelines<FxaaPipeline>>,
     fxaa_pipeline: Res<FxaaPipeline>,
