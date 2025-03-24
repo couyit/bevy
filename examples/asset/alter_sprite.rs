@@ -45,7 +45,7 @@ impl Bird {
 #[derive(Component, Debug)]
 struct Left;
 
-fn setup(mut commands: ComponentCommands, asset_server: Res<AssetServer>) {
+fn setup(mut commands: EntityCommands, asset_server: Res<AssetServer>) {
     let bird_left = Bird::Normal;
     let bird_right = Bird::Normal;
     commands.spawn(Camera2d);
@@ -88,7 +88,7 @@ fn setup(mut commands: ComponentCommands, asset_server: Res<AssetServer>) {
     ));
 }
 
-fn spawn_text(mut commands: ComponentCommands) {
+fn spawn_text(mut commands: EntityCommands) {
     commands.spawn((
         Name::new("Instructions"),
         Text::new(

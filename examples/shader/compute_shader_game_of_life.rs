@@ -50,7 +50,7 @@ fn main() {
         .run();
 }
 
-fn setup(mut commands: ComponentCommands, mut images: ResMut<Assets<Image>>) {
+fn setup(mut commands: EntityCommands, mut images: ResMut<Assets<Image>>) {
     let mut image = Image::new_fill(
         Extent3d {
             width: SIZE.0,
@@ -129,7 +129,7 @@ struct GameOfLifeImages {
 struct GameOfLifeImageBindGroups([BindGroup; 2]);
 
 fn prepare_bind_group(
-    mut commands: ComponentCommands,
+    mut commands: EntityCommands,
     pipeline: Res<GameOfLifePipeline>,
     gpu_images: Res<RenderAssets<GpuImage>>,
     game_of_life_images: Res<GameOfLifeImages>,

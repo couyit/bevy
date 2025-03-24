@@ -367,7 +367,7 @@ impl Plugin for VisibilityPlugin {
 ///
 /// This system is used in system set [`VisibilitySystems::CalculateBounds`].
 pub fn calculate_bounds(
-    mut commands: ComponentCommands,
+    mut commands: EntityCommands,
     meshes: Res<Assets<Mesh>>,
     without_aabb: Query<(Entity, &Mesh3d), (Without<Aabb>, Without<NoFrustumCulling>)>,
 ) {

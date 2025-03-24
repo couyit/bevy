@@ -115,7 +115,7 @@ fn main() {
 
 // Set up the scene.
 fn setup(
-    mut commands: ComponentCommands,
+    mut commands: EntityCommands,
     mut meshes: ResMut<Assets<Mesh>>,
     mut standard_materials: ResMut<Assets<StandardMaterial>>,
     mut water_materials: ResMut<Assets<ExtendedMaterial<StandardMaterial, Water>>>,
@@ -141,7 +141,7 @@ fn setup(
 
 // Spawns the rotating cube.
 fn spawn_cube(
-    commands: &mut ComponentCommands,
+    commands: &mut EntityCommands,
     asset_server: &AssetServer,
     meshes: &mut Assets<Mesh>,
     standard_materials: &mut Assets<StandardMaterial>,
@@ -160,7 +160,7 @@ fn spawn_cube(
 }
 
 // Spawns the flight helmet.
-fn spawn_flight_helmet(commands: &mut ComponentCommands, asset_server: &AssetServer) {
+fn spawn_flight_helmet(commands: &mut EntityCommands, asset_server: &AssetServer) {
     commands.spawn((
         SceneRoot(
             asset_server
@@ -174,7 +174,7 @@ fn spawn_flight_helmet(commands: &mut ComponentCommands, asset_server: &AssetSer
 
 // Spawns the water plane.
 fn spawn_water(
-    commands: &mut ComponentCommands,
+    commands: &mut EntityCommands,
     asset_server: &AssetServer,
     meshes: &mut Assets<Mesh>,
     water_materials: &mut Assets<ExtendedMaterial<StandardMaterial, Water>>,
@@ -218,7 +218,7 @@ fn spawn_water(
 }
 
 // Spawns the camera.
-fn spawn_camera(commands: &mut ComponentCommands, asset_server: &AssetServer) {
+fn spawn_camera(commands: &mut EntityCommands, asset_server: &AssetServer) {
     // Create the camera. Add an environment map and skybox so the water has
     // something interesting to reflect, other than the cube. Enable deferred
     // rendering by adding depth and deferred prepasses. Turn on FXAA to make
@@ -249,7 +249,7 @@ fn spawn_camera(commands: &mut ComponentCommands, asset_server: &AssetServer) {
 }
 
 // Spawns the help text.
-fn spawn_text(commands: &mut ComponentCommands, app_settings: &AppSettings) {
+fn spawn_text(commands: &mut EntityCommands, app_settings: &AppSettings) {
     commands.spawn((
         create_text(app_settings),
         Node {
@@ -340,7 +340,7 @@ fn move_camera(
 
 // Adjusts app settings per user input.
 fn adjust_app_settings(
-    mut commands: ComponentCommands,
+    mut commands: EntityCommands,
     keyboard_input: Res<ButtonInput<KeyCode>>,
     mut app_settings: ResMut<AppSettings>,
     mut cameras: Query<Entity, With<Camera>>,

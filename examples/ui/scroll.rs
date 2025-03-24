@@ -22,7 +22,7 @@ fn main() {
 const FONT_SIZE: f32 = 20.;
 const LINE_HEIGHT: f32 = 21.;
 
-fn setup(mut commands: ComponentCommands, asset_server: Res<AssetServer>) {
+fn setup(mut commands: EntityCommands, asset_server: Res<AssetServer>) {
     // Camera
     commands.spawn((Camera2d, IsDefaultUiCamera));
 
@@ -90,7 +90,7 @@ fn setup(mut commands: ComponentCommands, asset_server: Res<AssetServer>) {
                                 })
                                 .observe(|
                                     trigger: Trigger<Pointer<Pressed>>,
-                                    mut commands: ComponentCommands
+                                    mut commands: EntityCommands
                                 | {
                                     if trigger.event().button == PointerButton::Primary {
                                         commands.entity(trigger.target()).despawn();

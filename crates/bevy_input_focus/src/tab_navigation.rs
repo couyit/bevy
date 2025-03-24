@@ -32,7 +32,7 @@ use bevy_ecs::{
     hierarchy::{ChildOf, Children},
     observer::Trigger,
     query::{With, Without},
-    system::{ComponentCommands, Query, Res, ResMut, SystemParam},
+    system::{EntityCommands, Query, Res, ResMut, SystemParam},
 };
 use bevy_input::{
     keyboard::{KeyCode, KeyboardInput},
@@ -310,7 +310,7 @@ impl Plugin for TabNavigationPlugin {
     }
 }
 
-fn setup_tab_navigation(mut commands: ComponentCommands, window: Query<Entity, With<PrimaryWindow>>) {
+fn setup_tab_navigation(mut commands: EntityCommands, window: Query<Entity, With<PrimaryWindow>>) {
     for window in window.iter() {
         commands.entity(window).observe(handle_tab_navigation);
     }

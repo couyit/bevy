@@ -178,7 +178,7 @@ struct BirdScheduled {
 }
 
 fn scheduled_spawner(
-    mut commands: ComponentCommands,
+    mut commands: EntityCommands,
     args: Res<Args>,
     window: Single<&Window>,
     mut scheduled: ResMut<BirdScheduled>,
@@ -217,7 +217,7 @@ struct BirdResources {
 struct StatsText;
 
 fn setup(
-    mut commands: ComponentCommands,
+    mut commands: EntityCommands,
     args: Res<Args>,
     asset_server: Res<AssetServer>,
     mut meshes: ResMut<Assets<Mesh>>,
@@ -323,7 +323,7 @@ fn setup(
 }
 
 fn mouse_handler(
-    mut commands: ComponentCommands,
+    mut commands: EntityCommands,
     args: Res<Args>,
     time: Res<Time>,
     mouse_button_input: Res<ButtonInput<MouseButton>>,
@@ -390,7 +390,7 @@ fn bird_velocity_transform(
 const FIXED_DELTA_TIME: f32 = 1.0 / 60.0;
 
 fn spawn_birds(
-    commands: &mut ComponentCommands,
+    commands: &mut EntityCommands,
     args: &Args,
     primary_window_resolution: &WindowResolution,
     counter: &mut BevyCounter,

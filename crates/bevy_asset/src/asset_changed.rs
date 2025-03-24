@@ -295,7 +295,7 @@ mod tests {
         component::Component,
         event::EventWriter,
         resource::Resource,
-        system::{ComponentCommands, IntoSystem, Local, Query, Res, ResMut},
+        system::{EntityCommands, IntoSystem, Local, Query, Res, ResMut},
     };
     use bevy_reflect::TypePath;
 
@@ -374,7 +374,7 @@ mod tests {
 
     fn add_some(
         mut assets: ResMut<Assets<MyAsset>>,
-        mut cmds: ComponentCommands,
+        mut cmds: EntityCommands,
         mut run_count: Local<u32>,
     ) {
         match *run_count {
@@ -430,7 +430,7 @@ mod tests {
             .insert_resource(Counter(vec![0, 0]))
             .add_systems(
                 Startup,
-                |mut cmds: ComponentCommands, mut assets: ResMut<Assets<MyAsset>>| {
+                |mut cmds: EntityCommands, mut assets: ResMut<Assets<MyAsset>>| {
                     let asset0 = assets.add(MyAsset(0, "init"));
                     let asset1 = assets.add(MyAsset(1, "init"));
                     cmds.spawn(MyComponent(asset0.clone()));

@@ -12,7 +12,7 @@ use bevy_ecs::{
     query::{QueryItem, With},
     resource::Resource,
     schedule::IntoScheduleConfigs,
-    system::{ComponentCommands, Query, Res, ResMut},
+    system::{EntityCommands, Query, Res, ResMut},
     world::{FromWorld, Worlds},
 };
 use bevy_image::BevyDefault as _;
@@ -344,7 +344,7 @@ impl SpecializedRenderPipeline for TaaPipeline {
     }
 }
 
-fn extract_taa_settings(mut commands: ComponentCommands, mut main_world: ResMut<MainWorld>) {
+fn extract_taa_settings(mut commands: EntityCommands, mut main_world: ResMut<MainWorld>) {
     let mut cameras_3d = main_world.query_filtered::<(
         RenderEntity,
         &Camera,
@@ -382,7 +382,7 @@ fn extract_taa_settings(mut commands: ComponentCommands, mut main_world: ResMut<
 fn prepare_taa_jitter_and_mip_bias(
     frame_count: Res<FrameCount>,
     mut query: Query<(Entity, &mut TemporalJitter, Option<&MipBias>), With<TemporalAntiAliasing>>,
-    mut commands: ComponentCommands,
+    mut commands: EntityCommands,
 ) {
     // Halton sequence (2, 3) - 0.5, skipping i = 0
     let halton_sequence = [
@@ -414,7 +414,7 @@ pub struct TemporalAntiAliasHistoryTextures {
 }
 
 fn prepare_taa_history_textures(
-    mut commands: ComponentCommands,
+    mut commands: EntityCommands,
     mut texture_cache: ResMut<TextureCache>,
     render_device: Res<RenderDevice>,
     frame_count: Res<FrameCount>,
@@ -468,7 +468,7 @@ fn prepare_taa_history_textures(
 pub struct TemporalAntiAliasPipelineId(CachedRenderPipelineId);
 
 fn prepare_taa_pipelines(
-    mut commands: ComponentCommands,
+    mut commands: EntityCommands,
     pipeline_cache: Res<PipelineCache>,
     mut pipelines: ResMut<SpecializedRenderPipelines<TaaPipeline>>,
     pipeline: Res<TaaPipeline>,

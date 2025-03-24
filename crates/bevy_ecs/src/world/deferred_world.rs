@@ -11,7 +11,7 @@ use crate::{
     query::{QueryData, QueryFilter},
     relationship::RelationshipHookMode,
     resource::Resource,
-    system::{ComponentCommands, Query},
+    system::{EntityCommands, Query},
     traversal::Traversal,
     world::{error::EntityMutableFetchError, EntityFetcher, WorldEntityFetch},
 };
@@ -68,11 +68,11 @@ impl<'w, W: WorldLabel> DeferredWorld<'w, W> {
 
     /// Creates a [`Commands`] instance that pushes to the world's command queue
     #[inline]
-    pub fn commands(&mut self) -> ComponentCommands<W> {
+    pub fn commands(&mut self) -> EntityCommands<W> {
         // SAFETY: &mut self ensure that there are no outstanding accesses to the queue
         let command_queue = unsafe { self.world.get_raw_command_queue() };
         // SAFETY: command_queue is stored on world and always valid while the world exists
-        unsafe { ComponentCommands::new_raw_from_entities(command_queue, self.world.entities()) }
+        unsafe { EntityCommands::new_raw_from_entities(command_queue, self.world.entities()) }
     }
 
     /// Retrieves a mutable reference to the given `entity`'s [`Component`] of the given type.
@@ -380,7 +380,7 @@ impl<'w, W: WorldLabel> DeferredWorld<'w, W> {
     /// # assert_eq!(_world.get::<TargetedBy>(e1).unwrap().0, eid);
     /// # assert_eq!(_world.get::<TargetedBy>(e2).unwrap().0, eid);
     /// ```
-    pub fn entities_and_commands(&mut self) -> (EntityFetcher, ComponentCommands<W>) {
+    pub fn entities_and_commands(&mut self) -> (EntityFetcher, EntityCommands<W>) {
         let cell = self.as_unsafe_world_cell();
         // SAFETY: `&mut self` gives mutable access to the entire world, and prevents simultaneous access.
         let fetcher = unsafe { EntityFetcher::new(cell) };
@@ -389,7 +389,7 @@ impl<'w, W: WorldLabel> DeferredWorld<'w, W> {
         // - Command queue access does not conflict with entity access.
         let raw_queue = unsafe { cell.get_raw_command_queue() };
         // SAFETY: `&mut self` ensures the commands does not outlive the world.
-        let commands = unsafe { ComponentCommands::new_raw_from_entities(raw_queue, cell.entities()) };
+        let commands = unsafe { EntityCommands::new_raw_from_entities(raw_queue, cell.entities()) };
 
         (fetcher, commands)
     }

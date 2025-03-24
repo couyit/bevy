@@ -145,7 +145,7 @@ fn main() {
 }
 
 /// Creates the scene.
-fn setup(mut commands: ComponentCommands, asset_server: Res<AssetServer>, app_status: Res<AppStatus>) {
+fn setup(mut commands: EntityCommands, asset_server: Res<AssetServer>, app_status: Res<AppStatus>) {
     spawn_camera(&mut commands);
     spawn_scene(&mut commands, &asset_server);
     spawn_buttons(&mut commands);
@@ -153,7 +153,7 @@ fn setup(mut commands: ComponentCommands, asset_server: Res<AssetServer>, app_st
 }
 
 /// Spawns the 3D camera.
-fn spawn_camera(commands: &mut ComponentCommands) {
+fn spawn_camera(commands: &mut EntityCommands) {
     commands
         .spawn(Camera3d::default())
         .insert(Transform::from_xyz(-0.7, 0.7, 1.0).looking_at(vec3(0.0, 0.3, 0.0), Vec3::Y));
@@ -162,7 +162,7 @@ fn spawn_camera(commands: &mut ComponentCommands) {
 /// Spawns the scene.
 ///
 /// The scene is loaded from a glTF file.
-fn spawn_scene(commands: &mut ComponentCommands, asset_server: &AssetServer) {
+fn spawn_scene(commands: &mut EntityCommands, asset_server: &AssetServer) {
     commands
         .spawn(SceneRoot(
             asset_server.load(
@@ -181,7 +181,7 @@ fn spawn_scene(commands: &mut ComponentCommands, asset_server: &AssetServer) {
 }
 
 /// Spawns the buttons that allow the user to change the lighting mode.
-fn spawn_buttons(commands: &mut ComponentCommands) {
+fn spawn_buttons(commands: &mut EntityCommands) {
     commands
         .spawn(widgets::main_ui_node())
         .with_children(|parent| {
@@ -199,7 +199,7 @@ fn spawn_buttons(commands: &mut ComponentCommands) {
 }
 
 /// Spawns the help text at the top of the window.
-fn spawn_help_text(commands: &mut ComponentCommands, app_status: &AppStatus) {
+fn spawn_help_text(commands: &mut EntityCommands, app_status: &AppStatus) {
     commands.spawn((
         create_help_text(app_status),
         Node {
@@ -218,7 +218,7 @@ fn spawn_help_text(commands: &mut ComponentCommands, app_status: &AppStatus) {
 /// This is also called right after the scene loads in order to set up the
 /// lightmaps.
 fn update_lightmaps(
-    mut commands: ComponentCommands,
+    mut commands: EntityCommands,
     asset_server: Res<AssetServer>,
     mut materials: ResMut<Assets<StandardMaterial>>,
     meshes: Query<(Entity, &Name, &MeshMaterial3d<StandardMaterial>), With<Mesh3d>>,
@@ -320,7 +320,7 @@ const fn uv_rect_opengl(gl_min: Vec2, size: Vec2) -> Rect {
 /// Ensures that clicking on the scene to move the sphere doesn't result in a
 /// hit on the sphere itself.
 fn make_sphere_nonpickable(
-    mut commands: ComponentCommands,
+    mut commands: EntityCommands,
     mut query: Query<(Entity, &Name), (With<Mesh3d>, Without<Pickable>)>,
 ) {
     for (sphere, name) in &mut query {
@@ -483,7 +483,7 @@ fn move_sphere(
 /// Changes the help text at the top of the screen when the lighting mode
 /// changes.
 fn adjust_help_text(
-    mut commands: ComponentCommands,
+    mut commands: EntityCommands,
     help_texts: Query<Entity, With<HelpText>>,
     app_status: Res<AppStatus>,
     mut lighting_mode_change_event_reader: EventReader<LightingModeChanged>,

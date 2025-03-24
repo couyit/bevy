@@ -162,7 +162,7 @@ fn menu(
     }
 }
 
-fn cleanup_menu(mut commands: ComponentCommands, menu_data: Res<MenuData>) {
+fn cleanup_menu(mut commands: EntityCommands, menu_data: Res<MenuData>) {
     commands.entity(menu_data.button_entity).despawn();
 }
 
@@ -218,16 +218,16 @@ fn trigger_game_restart(
     }
 }
 
-fn setup(mut commands: ComponentCommands) {
+fn setup(mut commands: EntityCommands) {
     commands.spawn(Camera2d);
 }
 
-fn setup_game(mut commands: ComponentCommands, asset_server: Res<AssetServer>) {
+fn setup_game(mut commands: EntityCommands, asset_server: Res<AssetServer>) {
     commands.spawn(Sprite::from_image(asset_server.load("branding/icon.png")));
     info!("Setup game");
 }
 
-fn teardown_game(mut commands: ComponentCommands, player: Single<Entity, With<Sprite>>) {
+fn teardown_game(mut commands: EntityCommands, player: Single<Entity, With<Sprite>>) {
     commands.entity(*player).despawn();
     info!("Teardown game");
 }
@@ -241,7 +241,7 @@ const NORMAL_BUTTON: Color = Color::srgb(0.15, 0.15, 0.15);
 const HOVERED_BUTTON: Color = Color::srgb(0.25, 0.25, 0.25);
 const PRESSED_BUTTON: Color = Color::srgb(0.35, 0.75, 0.35);
 
-fn setup_menu(mut commands: ComponentCommands) {
+fn setup_menu(mut commands: EntityCommands) {
     let button_entity = commands
         .spawn((
             Node {

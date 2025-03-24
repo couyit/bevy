@@ -36,7 +36,7 @@ impl Default for State {
 struct SeededRng(ChaCha8Rng);
 
 fn atlas_render_system(
-    mut commands: ComponentCommands,
+    mut commands: EntityCommands,
     mut state: ResMut<State>,
     font_atlas_sets: Res<FontAtlasSets>,
     images: Res<Assets<Image>>,
@@ -82,7 +82,7 @@ fn text_update_system(
     }
 }
 
-fn setup(mut commands: ComponentCommands, asset_server: Res<AssetServer>, mut state: ResMut<State>) {
+fn setup(mut commands: EntityCommands, asset_server: Res<AssetServer>, mut state: ResMut<State>) {
     let font_handle = asset_server.load("fonts/FiraSans-Bold.ttf");
     state.handle = font_handle.clone();
     commands.spawn(Camera2d);

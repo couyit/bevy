@@ -29,7 +29,7 @@ fn main() {
 }
 
 fn setup_cursor_icon(
-    mut commands: ComponentCommands,
+    mut commands: EntityCommands,
     asset_server: Res<AssetServer>,
     mut texture_atlas_layouts: ResMut<Assets<TextureAtlasLayout>>,
     window: Single<Entity, With<Window>>,
@@ -63,11 +63,11 @@ fn setup_cursor_icon(
     ));
 }
 
-fn setup_camera(mut commands: ComponentCommands) {
+fn setup_camera(mut commands: EntityCommands) {
     commands.spawn(Camera3d::default());
 }
 
-fn setup_instructions(mut commands: ComponentCommands) {
+fn setup_instructions(mut commands: EntityCommands) {
     commands.spawn((
         Text::new(
             "Press T to toggle the cursor's `texture_atlas`.\n

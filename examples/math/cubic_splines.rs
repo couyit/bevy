@@ -3,7 +3,7 @@
 use bevy::{
     app::{App, Startup, Update},
     color::*,
-    ecs::system::ComponentCommands,
+    ecs::system::EntityCommands,
     gizmos::gizmos::Gizmos,
     input::{mouse::MouseButtonInput, ButtonState},
     math::{cubic_splines::*, vec2},
@@ -32,7 +32,7 @@ fn main() {
         .run();
 }
 
-fn setup(mut commands: ComponentCommands) {
+fn setup(mut commands: EntityCommands) {
     // Initialize the modes with their defaults:
     let spline_mode = SplineMode::default();
     commands.insert_resource(spline_mode);

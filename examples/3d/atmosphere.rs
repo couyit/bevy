@@ -17,7 +17,7 @@ fn main() {
         .run();
 }
 
-fn setup_camera_fog(mut commands: ComponentCommands) {
+fn setup_camera_fog(mut commands: EntityCommands) {
     commands.spawn((
         Camera3d::default(),
         // HDR is required for atmospheric scattering to be properly applied to the scene
@@ -53,7 +53,7 @@ fn setup_camera_fog(mut commands: ComponentCommands) {
 struct Terrain;
 
 fn setup_terrain_scene(
-    mut commands: ComponentCommands,
+    mut commands: EntityCommands,
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<StandardMaterial>>,
     asset_server: Res<AssetServer>,

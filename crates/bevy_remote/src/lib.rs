@@ -371,7 +371,7 @@ use bevy_ecs::{
     entity::Entity,
     resource::Resource,
     schedule::{IntoScheduleConfigs, ScheduleLabel, SystemSet},
-    system::{ComponentCommands, In, IntoSystem, ResMut, System, SystemId},
+    system::{EntityCommands, In, IntoSystem, ResMut, System, SystemId},
     world::World,
 };
 use bevy_platform_support::collections::HashMap;
@@ -919,7 +919,7 @@ pub struct BrpSender(Sender<BrpMessage>);
 #[derive(Debug, Resource, Deref, DerefMut)]
 pub struct BrpReceiver(Receiver<BrpMessage>);
 
-fn setup_mailbox_channel(mut commands: ComponentCommands) {
+fn setup_mailbox_channel(mut commands: EntityCommands) {
     // Create the channel and the mailbox.
     let (request_sender, request_receiver) = async_channel::bounded(CHANNEL_SIZE);
     commands.insert_resource(BrpSender(request_sender));

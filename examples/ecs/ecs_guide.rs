@@ -180,7 +180,7 @@ fn game_over_system(
 // "startup" system from a "normal" system is how it is registered:
 //      Startup: app.add_systems(Startup, startup_system)
 //      Normal:  app.add_systems(Update, normal_system)
-fn startup_system(mut commands: ComponentCommands, mut game_state: ResMut<GameState>) {
+fn startup_system(mut commands: EntityCommands, mut game_state: ResMut<GameState>) {
     // Create our game rules resource
     commands.insert_resource(GameRules {
         max_rounds: 10,
@@ -217,7 +217,7 @@ fn startup_system(mut commands: ComponentCommands, mut game_state: ResMut<GameSt
 // is not thread safe. Command buffers give us the ability to queue up changes to our World without
 // directly accessing it
 fn new_player_system(
-    mut commands: ComponentCommands,
+    mut commands: EntityCommands,
     game_rules: Res<GameRules>,
     mut game_state: ResMut<GameState>,
 ) {

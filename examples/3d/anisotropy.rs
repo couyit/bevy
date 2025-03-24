@@ -97,7 +97,7 @@ fn main() {
 }
 
 /// Creates the initial scene.
-fn setup(mut commands: ComponentCommands, asset_server: Res<AssetServer>, app_status: Res<AppStatus>) {
+fn setup(mut commands: EntityCommands, asset_server: Res<AssetServer>, app_status: Res<AppStatus>) {
     commands.spawn((
         Camera3d::default(),
         Transform::from_translation(CAMERA_INITIAL_POSITION).looking_at(Vec3::ZERO, Vec3::Y),
@@ -133,7 +133,7 @@ fn setup(mut commands: ComponentCommands, asset_server: Res<AssetServer>, app_st
 }
 
 /// Spawns the help text.
-fn spawn_text(commands: &mut ComponentCommands, app_status: &AppStatus) {
+fn spawn_text(commands: &mut EntityCommands, app_status: &AppStatus) {
     commands.spawn((
         app_status.create_help_text(),
         Node {
@@ -149,7 +149,7 @@ fn spawn_text(commands: &mut ComponentCommands, app_status: &AppStatus) {
 ///
 /// This allows the user to press Enter to toggle anisotropy on and off.
 fn create_material_variants(
-    mut commands: ComponentCommands,
+    mut commands: EntityCommands,
     mut materials: ResMut<Assets<StandardMaterial>>,
     new_meshes: Query<
         (Entity, &MeshMaterial3d<StandardMaterial>),
@@ -210,7 +210,7 @@ fn rotate_camera(
 
 /// Handles requests from the user to change the lighting or toggle anisotropy.
 fn handle_input(
-    mut commands: ComponentCommands,
+    mut commands: EntityCommands,
     asset_server: Res<AssetServer>,
     cameras: Query<Entity, With<Camera>>,
     lights: Query<Entity, Or<(With<DirectionalLight>, With<PointLight>)>>,
@@ -295,7 +295,7 @@ fn update_help_text(mut text_query: Query<&mut Text>, app_status: Res<AppStatus>
 
 /// Adds the skybox and environment map to the scene.
 fn add_skybox_and_environment_map(
-    commands: &mut ComponentCommands,
+    commands: &mut EntityCommands,
     asset_server: &AssetServer,
     entity: Entity,
 ) {
@@ -315,7 +315,7 @@ fn add_skybox_and_environment_map(
 }
 
 /// Spawns a rotating directional light.
-fn spawn_directional_light(commands: &mut ComponentCommands) {
+fn spawn_directional_light(commands: &mut EntityCommands) {
     commands.spawn(DirectionalLight {
         color: WHITE.into(),
         illuminance: 3000.0,
@@ -324,7 +324,7 @@ fn spawn_directional_light(commands: &mut ComponentCommands) {
 }
 
 /// Spawns a rotating point light.
-fn spawn_point_light(commands: &mut ComponentCommands) {
+fn spawn_point_light(commands: &mut EntityCommands) {
     commands.spawn(PointLight {
         color: WHITE.into(),
         intensity: 200000.0,

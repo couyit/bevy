@@ -41,7 +41,7 @@ const EXTRUSION_X_EXTENT: f32 = 16.0;
 const Z_EXTENT: f32 = 5.0;
 
 fn setup_scene(
-    mut commands: ComponentCommands,
+    mut commands: EntityCommands,
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<StandardMaterial>>,
 ) {

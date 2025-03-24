@@ -48,7 +48,7 @@ impl Shape {
 struct Left;
 
 fn setup(
-    mut commands: ComponentCommands,
+    mut commands: EntityCommands,
     asset_server: Res<AssetServer>,
     mut materials: ResMut<Assets<StandardMaterial>>,
 ) {
@@ -131,7 +131,7 @@ fn setup(
     ));
 }
 
-fn spawn_text(mut commands: ComponentCommands) {
+fn spawn_text(mut commands: EntityCommands) {
     commands.spawn((
         Name::new("Instructions"),
         Text::new(

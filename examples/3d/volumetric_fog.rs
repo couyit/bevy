@@ -55,7 +55,7 @@ fn main() {
 }
 
 /// Initializes the scene.
-fn setup(mut commands: ComponentCommands, asset_server: Res<AssetServer>, app_settings: Res<AppSettings>) {
+fn setup(mut commands: EntityCommands, asset_server: Res<AssetServer>, app_settings: Res<AppSettings>) {
     // Spawn the glTF scene.
     commands.spawn(SceneRoot(asset_server.load(
         GltfAssetLabel::Scene(0).from_asset("models/VolumetricFogExample/VolumetricFogExample.glb"),
@@ -155,7 +155,7 @@ fn create_text(app_settings: &AppSettings) -> Text {
 /// A system that makes directional lights in the glTF scene into volumetric
 /// lights with shadows.
 fn tweak_scene(
-    mut commands: ComponentCommands,
+    mut commands: EntityCommands,
     mut lights: Query<(Entity, &mut DirectionalLight), Changed<DirectionalLight>>,
 ) {
     for (light, mut directional_light) in lights.iter_mut() {
@@ -219,7 +219,7 @@ fn move_point_light(
 
 // Adjusts app settings per user input.
 fn adjust_app_settings(
-    mut commands: ComponentCommands,
+    mut commands: EntityCommands,
     keyboard_input: Res<ButtonInput<KeyCode>>,
     mut app_settings: ResMut<AppSettings>,
     mut point_lights: Query<Entity, With<PointLight>>,

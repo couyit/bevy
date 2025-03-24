@@ -11,7 +11,7 @@ fn main() {
 
 /// Set up a simple 3D scene
 fn setup(
-    mut commands: ComponentCommands,
+    mut commands: EntityCommands,
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<StandardMaterial>>,
 ) {

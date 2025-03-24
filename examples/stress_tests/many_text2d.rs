@@ -101,7 +101,7 @@ impl Default for PrintingTimer {
     }
 }
 
-fn setup(mut commands: ComponentCommands, font: Res<FontHandle>, args: Res<Args>) {
+fn setup(mut commands: EntityCommands, font: Res<FontHandle>, args: Res<Args>) {
     warn!(include_str!("warning_string.txt"));
 
     let mut rng = ChaCha8Rng::seed_from_u64(42);

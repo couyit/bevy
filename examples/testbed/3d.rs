@@ -70,7 +70,7 @@ mod light {
     const CURRENT_SCENE: super::Scene = super::Scene::Light;
 
     pub fn setup(
-        mut commands: ComponentCommands,
+        mut commands: EntityCommands,
         mut meshes: ResMut<Assets<Mesh>>,
         mut materials: ResMut<Assets<StandardMaterial>>,
     ) {
@@ -149,7 +149,7 @@ mod bloom {
     const CURRENT_SCENE: super::Scene = super::Scene::Bloom;
 
     pub fn setup(
-        mut commands: ComponentCommands,
+        mut commands: EntityCommands,
         mut meshes: ResMut<Assets<Mesh>>,
         mut materials: ResMut<Assets<StandardMaterial>>,
     ) {
@@ -198,7 +198,7 @@ mod gltf {
 
     const CURRENT_SCENE: super::Scene = super::Scene::Gltf;
 
-    pub fn setup(mut commands: ComponentCommands, asset_server: Res<AssetServer>) {
+    pub fn setup(mut commands: EntityCommands, asset_server: Res<AssetServer>) {
         commands.spawn((
             Camera3d::default(),
             Transform::from_xyz(0.7, 0.7, 1.0).looking_at(Vec3::new(0.0, 0.3, 0.0), Vec3::Y),
@@ -242,7 +242,7 @@ mod animation {
     }
 
     pub fn setup(
-        mut commands: ComponentCommands,
+        mut commands: EntityCommands,
         asset_server: Res<AssetServer>,
         mut graphs: ResMut<Assets<AnimationGraph>>,
     ) {
@@ -282,7 +282,7 @@ mod animation {
     fn pause_animation_frame(
         trigger: Trigger<SceneInstanceReady>,
         children: Query<&Children>,
-        mut commands: ComponentCommands,
+        mut commands: EntityCommands,
         animation: Res<Animation>,
         mut players: Query<(Entity, &mut AnimationPlayer)>,
     ) {
@@ -306,7 +306,7 @@ mod animation {
 mod gizmos {
     use bevy::{color::palettes::css::*, prelude::*};
 
-    pub fn setup(mut commands: ComponentCommands) {
+    pub fn setup(mut commands: EntityCommands) {
         commands.spawn((
             Camera3d::default(),
             Transform::from_xyz(-2.0, 2.5, 5.0).looking_at(Vec3::ZERO, Vec3::Y),

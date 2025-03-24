@@ -122,7 +122,7 @@ fn log_system() {
 #[derive(Component)]
 struct LogViewerRoot;
 
-fn setup(mut commands: ComponentCommands) {
+fn setup(mut commands: EntityCommands) {
     commands.spawn(Camera2d);
 
     commands.spawn((
@@ -141,7 +141,7 @@ fn setup(mut commands: ComponentCommands) {
 // In this example we are reading the LogEvents and inserting them as text into our log viewer.
 fn print_logs(
     mut events: EventReader<LogEvent>,
-    mut commands: ComponentCommands,
+    mut commands: EntityCommands,
     log_viewer_root: Single<Entity, With<LogViewerRoot>>,
 ) {
     let root_entity = *log_viewer_root;

@@ -216,7 +216,7 @@ fn main() {
 }
 
 // Spawns all the scene objects.
-fn setup(mut commands: ComponentCommands, assets: Res<ExampleAssets>, app_status: Res<AppStatus>) {
+fn setup(mut commands: EntityCommands, assets: Res<ExampleAssets>, app_status: Res<AppStatus>) {
     spawn_main_scene(&mut commands, &assets);
     spawn_camera(&mut commands, &assets);
     spawn_irradiance_volume(&mut commands, &assets);
@@ -227,11 +227,11 @@ fn setup(mut commands: ComponentCommands, assets: Res<ExampleAssets>, app_status
     spawn_text(&mut commands, &app_status);
 }
 
-fn spawn_main_scene(commands: &mut ComponentCommands, assets: &ExampleAssets) {
+fn spawn_main_scene(commands: &mut EntityCommands, assets: &ExampleAssets) {
     commands.spawn(SceneRoot(assets.main_scene.clone()));
 }
 
-fn spawn_camera(commands: &mut ComponentCommands, assets: &ExampleAssets) {
+fn spawn_camera(commands: &mut EntityCommands, assets: &ExampleAssets) {
     commands.spawn((
         Camera3d::default(),
         Transform::from_xyz(-10.012, 4.8605, 13.281).looking_at(Vec3::ZERO, Vec3::Y),
@@ -243,7 +243,7 @@ fn spawn_camera(commands: &mut ComponentCommands, assets: &ExampleAssets) {
     ));
 }
 
-fn spawn_irradiance_volume(commands: &mut ComponentCommands, assets: &ExampleAssets) {
+fn spawn_irradiance_volume(commands: &mut EntityCommands, assets: &ExampleAssets) {
     commands.spawn((
         Transform::from_matrix(VOXEL_FROM_WORLD),
         IrradianceVolume {
@@ -255,7 +255,7 @@ fn spawn_irradiance_volume(commands: &mut ComponentCommands, assets: &ExampleAss
     ));
 }
 
-fn spawn_light(commands: &mut ComponentCommands) {
+fn spawn_light(commands: &mut EntityCommands) {
     commands.spawn((
         PointLight {
             intensity: 250000.0,
@@ -266,7 +266,7 @@ fn spawn_light(commands: &mut ComponentCommands) {
     ));
 }
 
-fn spawn_sphere(commands: &mut ComponentCommands, assets: &ExampleAssets) {
+fn spawn_sphere(commands: &mut EntityCommands, assets: &ExampleAssets) {
     commands
         .spawn((
             Mesh3d(assets.main_sphere.clone()),
@@ -276,11 +276,11 @@ fn spawn_sphere(commands: &mut ComponentCommands, assets: &ExampleAssets) {
         .insert(MainObject);
 }
 
-fn spawn_voxel_cube_parent(commands: &mut ComponentCommands) {
+fn spawn_voxel_cube_parent(commands: &mut EntityCommands) {
     commands.spawn((Visibility::Hidden, Transform::default(), VoxelCubeParent));
 }
 
-fn spawn_fox(commands: &mut ComponentCommands, assets: &ExampleAssets) {
+fn spawn_fox(commands: &mut EntityCommands, assets: &ExampleAssets) {
     commands.spawn((
         SceneRoot(assets.fox.clone()),
         Visibility::Hidden,
@@ -289,7 +289,7 @@ fn spawn_fox(commands: &mut ComponentCommands, assets: &ExampleAssets) {
     ));
 }
 
-fn spawn_text(commands: &mut ComponentCommands, app_status: &AppStatus) {
+fn spawn_text(commands: &mut EntityCommands, app_status: &AppStatus) {
     commands.spawn((
         app_status.create_text(),
         Node {
@@ -410,7 +410,7 @@ impl Default for AppStatus {
 
 // Turns on and off the irradiance volume as requested by the user.
 fn toggle_irradiance_volumes(
-    mut commands: ComponentCommands,
+    mut commands: EntityCommands,
     keyboard: Res<ButtonInput<KeyCode>>,
     light_probe_query: Query<Entity, With<LightProbe>>,
     mut app_status: ResMut<AppStatus>,
@@ -511,7 +511,7 @@ impl FromWorld for ExampleAssets {
 
 // Plays the animation on the fox.
 fn play_animations(
-    mut commands: ComponentCommands,
+    mut commands: EntityCommands,
     assets: Res<ExampleAssets>,
     mut players: Query<(Entity, &mut AnimationPlayer), Without<AnimationGraphHandle>>,
 ) {
@@ -525,7 +525,7 @@ fn play_animations(
 
 fn create_cubes(
     image_assets: Res<Assets<Image>>,
-    mut commands: ComponentCommands,
+    mut commands: EntityCommands,
     irradiance_volumes: Query<(&IrradianceVolume, &GlobalTransform)>,
     voxel_cube_parents: Query<Entity, With<VoxelCubeParent>>,
     voxel_cubes: Query<Entity, With<VoxelCube>>,

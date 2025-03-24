@@ -322,7 +322,7 @@ impl BloomTexture {
 }
 
 fn prepare_bloom_textures(
-    mut commands: ComponentCommands,
+    mut commands: EntityCommands,
     mut texture_cache: ResMut<TextureCache>,
     render_device: Res<RenderDevice>,
     views: Query<(Entity, &ExtractedCamera, &Bloom)>,
@@ -395,7 +395,7 @@ struct BloomBindGroups {
 }
 
 fn prepare_bloom_bind_groups(
-    mut commands: ComponentCommands,
+    mut commands: EntityCommands,
     render_device: Res<RenderDevice>,
     downsampling_pipeline: Res<BloomDownsamplingPipeline>,
     upsampling_pipeline: Res<BloomUpsamplingPipeline>,

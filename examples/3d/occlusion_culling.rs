@@ -268,7 +268,7 @@ impl Plugin for ReadbackIndirectParametersPlugin {
 
 /// Spawns all the objects in the scene.
 fn setup(
-    mut commands: ComponentCommands,
+    mut commands: EntityCommands,
     asset_server: Res<AssetServer>,
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<StandardMaterial>>,
@@ -282,7 +282,7 @@ fn setup(
 
 /// Spawns the rotating sphere of small cubes.
 fn spawn_small_cubes(
-    commands: &mut ComponentCommands,
+    commands: &mut EntityCommands,
     meshes: &mut Assets<Mesh>,
     materials: &mut Assets<StandardMaterial>,
 ) {
@@ -336,7 +336,7 @@ fn spawn_small_cubes(
 ///
 /// This cube rotates chaotically and occludes small cubes behind it.
 fn spawn_large_cube(
-    commands: &mut ComponentCommands,
+    commands: &mut EntityCommands,
     asset_server: &AssetServer,
     meshes: &mut Assets<Mesh>,
     materials: &mut Assets<StandardMaterial>,
@@ -382,7 +382,7 @@ fn spin_large_cube(mut large_cubes: Query<&mut Transform, With<LargeCube>>) {
 }
 
 /// Spawns a directional light to illuminate the scene.
-fn spawn_light(commands: &mut ComponentCommands) {
+fn spawn_light(commands: &mut EntityCommands) {
     commands
         .spawn(DirectionalLight::default())
         .insert(Transform::from_rotation(Quat::from_euler(
@@ -394,7 +394,7 @@ fn spawn_light(commands: &mut ComponentCommands) {
 }
 
 /// Spawns a camera that includes the depth prepass and occlusion culling.
-fn spawn_camera(commands: &mut ComponentCommands) {
+fn spawn_camera(commands: &mut EntityCommands) {
     commands
         .spawn(Camera3d::default())
         .insert(Transform::from_xyz(0.0, 0.0, 9.0).looking_at(Vec3::ZERO, Vec3::Y))
@@ -403,7 +403,7 @@ fn spawn_camera(commands: &mut ComponentCommands) {
 }
 
 /// Spawns the help text at the upper left of the screen.
-fn spawn_help_text(commands: &mut ComponentCommands) {
+fn spawn_help_text(commands: &mut EntityCommands) {
     commands.spawn((
         Text::new(""),
         Node {
@@ -667,7 +667,7 @@ where
 /// Adds or removes the [`OcclusionCulling`] and [`DepthPrepass`] components
 /// when the user presses the spacebar.
 fn toggle_occlusion_culling_on_request(
-    mut commands: ComponentCommands,
+    mut commands: EntityCommands,
     input: Res<ButtonInput<KeyCode>>,
     mut app_status: ResMut<AppStatus>,
     cameras: Query<Entity, With<Camera3d>>,

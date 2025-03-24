@@ -417,7 +417,7 @@ impl FromWorld for DeferredLightingLayout {
 }
 
 pub fn insert_deferred_lighting_pass_id_component(
-    mut commands: ComponentCommands,
+    mut commands: EntityCommands,
     views: Query<Entity, (With<DeferredPrepass>, Without<PbrDeferredLightingDepthId>)>,
 ) {
     for entity in views.iter() {
@@ -428,7 +428,7 @@ pub fn insert_deferred_lighting_pass_id_component(
 }
 
 pub fn prepare_deferred_lighting_pipelines(
-    mut commands: ComponentCommands,
+    mut commands: EntityCommands,
     pipeline_cache: Res<PipelineCache>,
     mut pipelines: ResMut<SpecializedRenderPipelines<DeferredLightingLayout>>,
     deferred_lighting_layout: Res<DeferredLightingLayout>,

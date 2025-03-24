@@ -16,7 +16,7 @@ use crate::{
     error::{ignore, CommandWithEntity, HandleError},
     system::{
         entity_command::{self},
-        ComponentCommands,
+        EntityCommands,
     },
     world::{DeferredWorld, EntityWorldMut},
 };
@@ -304,7 +304,7 @@ pub trait RelationshipTarget: Component<Mutability = Mutable> + Sized {
 /// This will also queue up clones of the relationship sources if the [`EntityCloner`](crate::entity::EntityCloner) is configured
 /// to spawn recursively.
 pub fn clone_relationship_target<T: RelationshipTarget>(
-    _commands: &mut ComponentCommands,
+    _commands: &mut EntityCommands,
     source: &SourceComponent,
     context: &mut ComponentCloneCtx,
 ) {

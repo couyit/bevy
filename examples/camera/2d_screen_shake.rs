@@ -30,7 +30,7 @@ fn main() {
 }
 
 fn setup_scene(
-    mut commands: ComponentCommands,
+    mut commands: EntityCommands,
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<ColorMaterial>>,
 ) {
@@ -62,7 +62,7 @@ fn setup_scene(
     commands.init_resource::<ScreenShake>();
 }
 
-fn setup_instructions(mut commands: ComponentCommands) {
+fn setup_instructions(mut commands: EntityCommands) {
     commands.spawn((
         Text::new("Hold space to trigger a screen shake"),
         Node {
@@ -74,7 +74,7 @@ fn setup_instructions(mut commands: ComponentCommands) {
     ));
 }
 
-fn setup_camera(mut commands: ComponentCommands) {
+fn setup_camera(mut commands: EntityCommands) {
     commands.spawn((
         Camera2d,
         Camera {

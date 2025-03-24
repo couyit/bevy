@@ -28,7 +28,7 @@ struct FirstPassCube;
 struct MainPassCube;
 
 fn setup(
-    mut commands: ComponentCommands,
+    mut commands: EntityCommands,
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<StandardMaterial>>,
     mut images: ResMut<Assets<Image>>,

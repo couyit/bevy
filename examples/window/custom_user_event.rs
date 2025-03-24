@@ -46,7 +46,7 @@ fn main() {
         .run();
 }
 
-fn setup(mut commands: ComponentCommands) {
+fn setup(mut commands: EntityCommands) {
     commands.spawn(Camera2d);
 }
 

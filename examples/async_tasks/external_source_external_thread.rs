@@ -23,7 +23,7 @@ struct StreamReceiver(Receiver<u32>);
 #[derive(Event)]
 struct StreamEvent(u32);
 
-fn setup(mut commands: ComponentCommands) {
+fn setup(mut commands: EntityCommands) {
     commands.spawn(Camera2d);
 
     let (tx, rx) = bounded::<u32>(1);
@@ -50,7 +50,7 @@ fn read_stream(receiver: Res<StreamReceiver>, mut events: EventWriter<StreamEven
     }
 }
 
-fn spawn_text(mut commands: ComponentCommands, mut reader: EventReader<StreamEvent>) {
+fn spawn_text(mut commands: EntityCommands, mut reader: EventReader<StreamEvent>) {
     for (per_frame, event) in reader.read().enumerate() {
         commands.spawn((
             Text2d::new(event.0.to_string()),
@@ -61,7 +61,7 @@ fn spawn_text(mut commands: ComponentCommands, mut reader: EventReader<StreamEve
 }
 
 fn move_text(
-    mut commands: ComponentCommands,
+    mut commands: EntityCommands,
     mut texts: Query<(Entity, &mut Transform), With<Text2d>>,
     time: Res<Time>,
 ) {

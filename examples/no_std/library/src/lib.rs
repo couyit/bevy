@@ -110,7 +110,7 @@ struct DelayedComponent<B: Bundle>(B);
 struct Unwrap;
 
 fn tick_timers(
-    mut commands: ComponentCommands,
+    mut commands: EntityCommands,
     mut query: Query<(Entity, &mut DelayedComponentTimer)>,
     time: Res<Time>,
 ) {

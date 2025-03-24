@@ -22,7 +22,7 @@ fn main() {
 }
 
 fn setup(
-    mut commands: ComponentCommands,
+    mut commands: EntityCommands,
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<StandardMaterial>>,
 ) {
@@ -100,7 +100,7 @@ fn update(
     >,
     mut text: Single<&mut Text>,
     mut sphere: Single<&mut Transform, With<SphereMarker>>,
-    mut commands: ComponentCommands,
+    mut commands: EntityCommands,
     keycode: Res<ButtonInput<KeyCode>>,
     time: Res<Time>,
 ) {

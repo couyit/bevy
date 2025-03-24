@@ -40,7 +40,7 @@ struct RealTime;
 struct VirtualTime;
 
 /// Setup the example
-fn setup(mut commands: ComponentCommands, asset_server: Res<AssetServer>, mut time: ResMut<Time<Virtual>>) {
+fn setup(mut commands: EntityCommands, asset_server: Res<AssetServer>, mut time: ResMut<Time<Virtual>>) {
     // start with double `Virtual` time resulting in one of the sprites moving at twice the speed
     // of the other sprite which moves based on `Real` (unscaled) time
     time.set_relative_speed(2.);

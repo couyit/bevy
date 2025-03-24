@@ -101,7 +101,7 @@ fn reset_button_after_interaction(
 // We're spawning a simple grid of buttons and some instructions
 // The buttons are just colored rectangles with text displaying the button's name
 fn setup_ui(
-    mut commands: ComponentCommands,
+    mut commands: EntityCommands,
     mut directional_nav_map: ResMut<DirectionalNavigationMap>,
     mut input_focus: ResMut<InputFocus>,
 ) {
@@ -373,7 +373,7 @@ fn highlight_focused_element(
 fn interact_with_focused_button(
     action_state: Res<ActionState>,
     input_focus: Res<InputFocus>,
-    mut commands: ComponentCommands,
+    mut commands: EntityCommands,
 ) {
     if action_state
         .pressed_actions

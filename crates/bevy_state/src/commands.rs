@@ -1,4 +1,4 @@
-use bevy_ecs::{system::ComponentCommands, world::World};
+use bevy_ecs::{system::EntityCommands, world::World};
 use log::debug;
 
 use crate::state::{FreelyMutableState, NextState};
@@ -15,7 +15,7 @@ pub trait CommandsStatesExt {
     fn set_state<S: FreelyMutableState>(&mut self, state: S);
 }
 
-impl CommandsStatesExt for ComponentCommands<'_, '_> {
+impl CommandsStatesExt for EntityCommands<'_, '_> {
     fn set_state<S: FreelyMutableState>(&mut self, state: S) {
         self.queue(move |w: &mut World| {
             let mut next = w.resource_mut::<NextState<S>>();

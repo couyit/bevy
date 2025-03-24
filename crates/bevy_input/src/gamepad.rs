@@ -12,7 +12,7 @@ use bevy_ecs::{
     entity::Entity,
     event::{Event, EventReader, EventWriter},
     name::Name,
-    system::{ComponentCommands, Query},
+    system::{EntityCommands, Query},
 };
 use bevy_math::ops;
 use bevy_math::Vec2;
@@ -1504,7 +1504,7 @@ impl ButtonAxisSettings {
 ///
 /// Whenever a [`Gamepad`] connects or disconnects, an information gets printed to the console using the [`info!`] macro.
 pub fn gamepad_connection_system(
-    mut commands: ComponentCommands,
+    mut commands: EntityCommands,
     mut connection_events: EventReader<GamepadConnectionEvent>,
 ) {
     for connection_event in connection_events.read() {

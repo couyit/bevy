@@ -653,7 +653,7 @@ pub fn extract_core_3d_camera_phases(
 // Extract the render phases for the prepass
 
 pub fn extract_camera_prepass_phase(
-    mut commands: ComponentCommands,
+    mut commands: EntityCommands,
     mut opaque_3d_prepass_phases: ResMut<ViewBinnedRenderPhases<Opaque3dPrepass>>,
     mut alpha_mask_3d_prepass_phases: ResMut<ViewBinnedRenderPhases<AlphaMask3dPrepass>>,
     mut opaque_3d_deferred_phases: ResMut<ViewBinnedRenderPhases<Opaque3dDeferred>>,
@@ -763,7 +763,7 @@ pub fn extract_camera_prepass_phase(
 }
 
 pub fn prepare_core_3d_depth_textures(
-    mut commands: ComponentCommands,
+    mut commands: EntityCommands,
     mut texture_cache: ResMut<TextureCache>,
     render_device: Res<RenderDevice>,
     opaque_3d_phases: Res<ViewBinnedRenderPhases<Opaque3d>>,
@@ -854,7 +854,7 @@ pub struct ViewTransmissionTexture {
 }
 
 pub fn prepare_core_3d_transmission_textures(
-    mut commands: ComponentCommands,
+    mut commands: EntityCommands,
     mut texture_cache: ResMut<TextureCache>,
     render_device: Res<RenderDevice>,
     opaque_3d_phases: Res<ViewBinnedRenderPhases<Opaque3d>>,
@@ -975,7 +975,7 @@ pub fn check_msaa(mut deferred_views: Query<&mut Msaa, (With<Camera>, With<Defer
 
 // Prepares the textures used by the prepass
 pub fn prepare_prepass_textures(
-    mut commands: ComponentCommands,
+    mut commands: EntityCommands,
     mut texture_cache: ResMut<TextureCache>,
     render_device: Res<RenderDevice>,
     opaque_3d_prepass_phases: Res<ViewBinnedRenderPhases<Opaque3dPrepass>>,

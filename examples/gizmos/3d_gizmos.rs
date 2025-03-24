@@ -21,7 +21,7 @@ fn main() {
 struct MyRoundGizmos;
 
 fn setup(
-    mut commands: ComponentCommands,
+    mut commands: EntityCommands,
     mut gizmo_assets: ResMut<Assets<GizmoAsset>>,
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<StandardMaterial>>,

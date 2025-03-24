@@ -661,7 +661,7 @@ fn shrink_entities(visible_entities: &mut Vec<Entity>) {
 }
 
 pub fn check_dir_light_mesh_visibility(
-    mut commands: ComponentCommands,
+    mut commands: EntityCommands,
     mut directional_lights: Query<
         (
             &DirectionalLight,

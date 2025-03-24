@@ -346,7 +346,7 @@ mod tests {
             Schedule,
         },
         system::{
-            ComponentCommands, In, IntoSystem, Local, NonSend, NonSendMut, ParamSet, Query, Res, ResMut,
+            EntityCommands, In, IntoSystem, Local, NonSend, NonSendMut, ParamSet, Query, Res, ResMut,
             Single, StaticSystemParam, System, SystemState,
         },
         world::{DeferredWorld, EntityMut, FromWorld, World},
@@ -1551,7 +1551,7 @@ mod tests {
 
         run_system(
             &mut world,
-            move |mut commands_set: ParamSet<(ComponentCommands, ComponentCommands)>| {
+            move |mut commands_set: ParamSet<(EntityCommands, EntityCommands)>| {
                 commands_set.p0().entity(entity).insert(A);
                 commands_set.p1().entity(entity).insert(B);
             },

@@ -16,7 +16,7 @@ fn main() {
 }
 
 fn screenshot_on_spacebar(
-    mut commands: ComponentCommands,
+    mut commands: EntityCommands,
     input: Res<ButtonInput<KeyCode>>,
     mut counter: Local<u32>,
 ) {
@@ -30,7 +30,7 @@ fn screenshot_on_spacebar(
 }
 
 fn screenshot_saving(
-    mut commands: ComponentCommands,
+    mut commands: EntityCommands,
     screenshot_saving: Query<Entity, With<Capturing>>,
     window: Single<Entity, With<Window>>,
 ) {
@@ -49,7 +49,7 @@ fn screenshot_saving(
 
 /// set up a simple 3D scene
 fn setup(
-    mut commands: ComponentCommands,
+    mut commands: EntityCommands,
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<StandardMaterial>>,
 ) {

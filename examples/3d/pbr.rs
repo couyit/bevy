@@ -13,7 +13,7 @@ fn main() {
 
 /// set up a simple 3D scene
 fn setup(
-    mut commands: ComponentCommands,
+    mut commands: EntityCommands,
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<StandardMaterial>>,
     asset_server: Res<AssetServer>,
@@ -125,7 +125,7 @@ fn setup(
 }
 
 fn environment_map_load_finish(
-    mut commands: ComponentCommands,
+    mut commands: EntityCommands,
     asset_server: Res<AssetServer>,
     environment_map: Single<&EnvironmentMapLight>,
     label_entity: Option<Single<Entity, With<EnvironmentMapLabel>>>,

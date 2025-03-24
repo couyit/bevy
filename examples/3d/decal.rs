@@ -20,7 +20,7 @@ fn main() {
 }
 
 fn setup(
-    mut commands: ComponentCommands,
+    mut commands: EntityCommands,
     mut meshes: ResMut<Assets<Mesh>>,
     mut standard_materials: ResMut<Assets<StandardMaterial>>,
     mut decal_standard_materials: ResMut<Assets<ForwardDecalMaterial<StandardMaterial>>>,

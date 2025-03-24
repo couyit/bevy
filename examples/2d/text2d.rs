@@ -33,7 +33,7 @@ struct AnimateRotation;
 #[derive(Component)]
 struct AnimateScale;
 
-fn setup(mut commands: ComponentCommands, asset_server: Res<AssetServer>) {
+fn setup(mut commands: EntityCommands, asset_server: Res<AssetServer>) {
     let font = asset_server.load("fonts/FiraSans-Bold.ttf");
     let text_font = TextFont {
         font: font.clone(),

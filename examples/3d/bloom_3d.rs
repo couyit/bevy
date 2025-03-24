@@ -22,7 +22,7 @@ fn main() {
 }
 
 fn setup_scene(
-    mut commands: ComponentCommands,
+    mut commands: EntityCommands,
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<StandardMaterial>>,
 ) {
@@ -100,7 +100,7 @@ fn setup_scene(
 fn update_bloom_settings(
     camera: Single<(Entity, Option<&mut Bloom>), With<Camera>>,
     mut text: Single<&mut Text>,
-    mut commands: ComponentCommands,
+    mut commands: EntityCommands,
     keycode: Res<ButtonInput<KeyCode>>,
     time: Res<Time>,
 ) {

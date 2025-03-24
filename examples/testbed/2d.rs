@@ -65,7 +65,7 @@ mod shapes {
     const X_EXTENT: f32 = 900.;
 
     pub fn setup(
-        mut commands: ComponentCommands,
+        mut commands: EntityCommands,
         mut meshes: ResMut<Assets<Mesh>>,
         mut materials: ResMut<Assets<ColorMaterial>>,
     ) {
@@ -115,7 +115,7 @@ mod bloom {
     };
 
     pub fn setup(
-        mut commands: ComponentCommands,
+        mut commands: EntityCommands,
         mut meshes: ResMut<Assets<Mesh>>,
         mut materials: ResMut<Assets<ColorMaterial>>,
     ) {
@@ -152,7 +152,7 @@ mod text {
     use bevy::sprite::Anchor;
     use bevy::text::TextBounds;
 
-    pub fn setup(mut commands: ComponentCommands, asset_server: Res<AssetServer>) {
+    pub fn setup(mut commands: EntityCommands, asset_server: Res<AssetServer>) {
         commands.spawn((Camera2d, StateScoped(super::Scene::Text)));
 
         for (i, justify) in [
@@ -199,7 +199,7 @@ mod text {
     }
 
     fn spawn_anchored_text(
-        commands: &mut ComponentCommands,
+        commands: &mut EntityCommands,
         dest: Vec3,
         justify: JustifyText,
         bounds: Option<TextBounds>,
@@ -261,7 +261,7 @@ mod text {
 mod sprite {
     use bevy::prelude::*;
 
-    pub fn setup(mut commands: ComponentCommands, asset_server: Res<AssetServer>) {
+    pub fn setup(mut commands: EntityCommands, asset_server: Res<AssetServer>) {
         commands.spawn((Camera2d, StateScoped(super::Scene::Sprite)));
         commands.spawn((
             Sprite::from_image(asset_server.load("branding/bevy_bird_dark.png")),
@@ -273,7 +273,7 @@ mod sprite {
 mod gizmos {
     use bevy::{color::palettes::css::*, prelude::*};
 
-    pub fn setup(mut commands: ComponentCommands) {
+    pub fn setup(mut commands: EntityCommands) {
         commands.spawn((Camera2d, StateScoped(super::Scene::Gizmos)));
     }
 

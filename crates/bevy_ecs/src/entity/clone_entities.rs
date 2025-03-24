@@ -13,7 +13,7 @@ use crate::component::{ComponentCloneBehavior, ComponentCloneFn};
 use crate::entity::hash_map::EntityHashMap;
 use crate::entity::{Entities, EntityMapper};
 use crate::relationship::RelationshipHookMode;
-use crate::system::ComponentCommands;
+use crate::system::EntityCommands;
 use crate::world::{ComponentWorld, InvalidComponentWorld, WorldLabel};
 use crate::{
     bundle::Bundle,
@@ -483,7 +483,7 @@ impl<W: ComponentWorld> EntityCloner<W> {
             bundle_scratch = BundleScratch::with_capacity(archetype.component_count());
             // SAFETY: no other references to command queue exist
             let mut commands = unsafe {
-                ComponentCommands::new_raw_from_entities(world.get_raw_command_queue(), world.entities())
+                EntityCommands::new_raw_from_entities(world.get_raw_command_queue(), world.entities())
             };
 
             for component in archetype.components() {

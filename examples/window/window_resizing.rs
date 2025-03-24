@@ -27,12 +27,12 @@ struct ResolutionSettings {
 }
 
 // Spawns the camera that draws UI
-fn setup_camera(mut commands: ComponentCommands) {
+fn setup_camera(mut commands: EntityCommands) {
     commands.spawn(Camera2d);
 }
 
 // Spawns the UI
-fn setup_ui(mut commands: ComponentCommands) {
+fn setup_ui(mut commands: EntityCommands) {
     // Node that fills entire background
     commands
         .spawn(Node {

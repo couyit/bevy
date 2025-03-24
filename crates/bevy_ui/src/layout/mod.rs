@@ -9,7 +9,7 @@ use bevy_ecs::{
     hierarchy::{ChildOf, Children},
     query::With,
     removal_detection::RemovedComponents,
-    system::{ComponentCommands, Query, ResMut},
+    system::{EntityCommands, Query, ResMut},
     world::Ref,
 };
 use bevy_math::Vec2;
@@ -70,7 +70,7 @@ pub enum LayoutError {
 
 /// Updates the UI's layout tree, computes the new layout geometry and then updates the sizes and transforms of all the UI nodes.
 pub fn ui_layout_system(
-    mut commands: ComponentCommands,
+    mut commands: EntityCommands,
     mut ui_surface: ResMut<UiSurface>,
     ui_root_node_query: UiRootNodes,
     mut node_query: Query<(
@@ -185,7 +185,7 @@ with UI components as a child of an entity without UI components, your UI layout
 
     // Returns the combined bounding box of the node and any of its overflowing children.
     fn update_uinode_geometry_recursive(
-        commands: &mut ComponentCommands,
+        commands: &mut EntityCommands,
         entity: Entity,
         ui_surface: &mut UiSurface,
         inherited_use_rounding: bool,
@@ -745,7 +745,7 @@ mod tests {
 
         fn move_ui_node(
             In(pos): In<Vec2>,
-            mut commands: ComponentCommands,
+            mut commands: EntityCommands,
             cameras: Query<(Entity, &Camera)>,
             moving_ui_query: Query<Entity, With<MovingUiNode>>,
         ) {

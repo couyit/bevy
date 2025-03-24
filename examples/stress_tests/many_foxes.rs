@@ -106,7 +106,7 @@ struct Ring {
 }
 
 fn setup(
-    mut commands: ComponentCommands,
+    mut commands: EntityCommands,
     asset_server: Res<AssetServer>,
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<StandardMaterial>>,
@@ -232,7 +232,7 @@ fn setup(
 fn setup_scene_once_loaded(
     animations: Res<Animations>,
     foxes: Res<Foxes>,
-    mut commands: ComponentCommands,
+    mut commands: EntityCommands,
     mut player: Query<(Entity, &mut AnimationPlayer)>,
     mut done: Local<bool>,
 ) {

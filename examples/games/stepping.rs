@@ -97,7 +97,7 @@ struct SteppingUi;
 /// data may not be available on the first run of the system.  This happens if
 /// one of the stepping schedules has not yet been run.
 fn build_ui(
-    mut commands: ComponentCommands,
+    mut commands: EntityCommands,
     asset_server: Res<AssetServer>,
     schedules: Res<Schedules>,
     mut stepping: ResMut<Stepping>,
@@ -177,7 +177,7 @@ fn build_ui(
     ));
 }
 
-fn build_stepping_hint(mut commands: ComponentCommands) {
+fn build_stepping_hint(mut commands: EntityCommands) {
     let hint_text = if cfg!(feature = "bevy_debug_stepping") {
         "Press ` to toggle stepping mode (S: step system, Space: step frame)"
     } else {
@@ -231,7 +231,7 @@ fn handle_input(keyboard_input: Res<ButtonInput<KeyCode>>, mut stepping: ResMut<
 }
 
 fn update_ui(
-    mut commands: ComponentCommands,
+    mut commands: EntityCommands,
     state: Res<State>,
     stepping: Res<Stepping>,
     ui: Single<(Entity, &Visibility), With<SteppingUi>>,

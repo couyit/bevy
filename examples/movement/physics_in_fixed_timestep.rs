@@ -129,7 +129,7 @@ struct PhysicalTranslation(Vec3);
 struct PreviousPhysicalTranslation(Vec3);
 
 /// Spawn the player sprite and a 2D camera.
-fn spawn_player(mut commands: ComponentCommands, asset_server: Res<AssetServer>) {
+fn spawn_player(mut commands: EntityCommands, asset_server: Res<AssetServer>) {
     commands.spawn(Camera2d);
     commands.spawn((
         Name::new("Player"),
@@ -143,7 +143,7 @@ fn spawn_player(mut commands: ComponentCommands, asset_server: Res<AssetServer>)
 }
 
 /// Spawn a bit of UI text to explain how to move the player.
-fn spawn_text(mut commands: ComponentCommands) {
+fn spawn_text(mut commands: EntityCommands) {
     commands
         .spawn(Node {
             position_type: PositionType::Absolute,

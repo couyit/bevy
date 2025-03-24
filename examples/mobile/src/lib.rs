@@ -92,7 +92,7 @@ fn touch_camera(
 
 /// set up a simple 3D scene
 fn setup_scene(
-    mut commands: ComponentCommands,
+    mut commands: EntityCommands,
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<StandardMaterial>>,
 ) {
@@ -181,7 +181,7 @@ fn button_handler(
     }
 }
 
-fn setup_music(asset_server: Res<AssetServer>, mut commands: ComponentCommands) {
+fn setup_music(asset_server: Res<AssetServer>, mut commands: EntityCommands) {
     commands.spawn((
         AudioPlayer::new(asset_server.load("sounds/Windless Slopes.ogg")),
         PlaybackSettings::LOOP,

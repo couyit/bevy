@@ -65,7 +65,7 @@ fn main() {
 ///
 /// See: <https://doc.rust-lang.org/reference/expressions/operator-expr.html#the-question-mark-operator>
 fn setup(
-    mut commands: ComponentCommands,
+    mut commands: EntityCommands,
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<StandardMaterial>>,
 ) -> Result {
@@ -166,7 +166,7 @@ fn failing_system(world: &mut World) -> Result {
     Ok(())
 }
 
-fn failing_commands(mut commands: ComponentCommands) {
+fn failing_commands(mut commands: EntityCommands) {
     commands
         // This entity doesn't exist!
         .entity(Entity::from_raw(12345678))

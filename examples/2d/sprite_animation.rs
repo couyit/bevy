@@ -83,7 +83,7 @@ struct LeftSprite;
 struct RightSprite;
 
 fn setup(
-    mut commands: ComponentCommands,
+    mut commands: EntityCommands,
     asset_server: Res<AssetServer>,
     mut texture_atlas_layouts: ResMut<Assets<TextureAtlasLayout>>,
 ) {

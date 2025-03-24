@@ -3,7 +3,7 @@ use core::{marker::PhantomData, mem};
 use bevy_ecs::{
     event::{Event, EventReader, EventWriter},
     schedule::{IntoScheduleConfigs, Schedule, ScheduleLabel, Schedules, SystemSet},
-    system::{ComponentCommands, In, ResMut},
+    system::{EntityCommands, In, ResMut},
     world::World,
 };
 
@@ -127,7 +127,7 @@ impl<S: States> Default for ApplyStateTransition<S> {
 /// removal of the `State<S>` resource from the [`World`].
 pub(crate) fn internal_apply_state_transition<S: States>(
     mut event: EventWriter<StateTransitionEvent<S>>,
-    mut commands: ComponentCommands,
+    mut commands: EntityCommands,
     current_state: Option<ResMut<State<S>>>,
     new_state: Option<S>,
 ) {

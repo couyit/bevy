@@ -15,7 +15,7 @@ fn main() {
         .run();
 }
 
-fn spawn_layout(mut commands: ComponentCommands, asset_server: Res<AssetServer>) {
+fn spawn_layout(mut commands: EntityCommands, asset_server: Res<AssetServer>) {
     let font = asset_server.load("fonts/FiraSans-Bold.ttf");
     commands.spawn(Camera2d);
 

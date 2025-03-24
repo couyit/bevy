@@ -32,7 +32,7 @@ fn main() {
 struct DrawBounds<Shape: Bounded2d + Send + Sync + 'static>(Shape);
 
 fn setup(
-    mut commands: ComponentCommands,
+    mut commands: EntityCommands,
     asset_server: Res<AssetServer>,
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<ColorMaterial>>,

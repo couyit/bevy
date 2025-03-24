@@ -135,7 +135,7 @@ const WIDTH: usize = 200;
 const HEIGHT: usize = 200;
 
 fn setup(
-    mut commands: ComponentCommands,
+    mut commands: EntityCommands,
     args: Res<Args>,
     mesh_assets: ResMut<Assets<Mesh>>,
     material_assets: ResMut<Assets<StandardMaterial>>,

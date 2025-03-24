@@ -28,7 +28,7 @@ fn minimize_automatically(mut window: Single<&mut Window>, frames: Res<FrameCoun
 
 /// A simple 3d scene, taken from the `3d_scene` example
 fn setup_3d(
-    mut commands: ComponentCommands,
+    mut commands: EntityCommands,
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<StandardMaterial>>,
 ) {
@@ -59,7 +59,7 @@ fn setup_3d(
 }
 
 /// A simple 2d scene, taken from the `rect` example
-fn setup_2d(mut commands: ComponentCommands) {
+fn setup_2d(mut commands: EntityCommands) {
     commands.spawn((
         Camera2d,
         Camera {

@@ -15,7 +15,7 @@ fn main() {
         .run();
 }
 
-fn setup(mut commands: ComponentCommands, asset_server: Res<AssetServer>) {
+fn setup(mut commands: EntityCommands, asset_server: Res<AssetServer>) {
     commands.spawn((
         Camera3d::default(),
         Transform::from_xyz(0.7, 0.7, 1.0).looking_at(Vec3::new(0.0, 0.3, 0.0), Vec3::Y),

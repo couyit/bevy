@@ -3,7 +3,7 @@ use bevy_ecs::{
     entity::Entity,
     query::With,
     resource::Resource,
-    system::{ComponentCommands, Query, Res, ResMut},
+    system::{EntityCommands, Query, Res, ResMut},
     world::FromWorld,
 };
 use bevy_image::BevyDefault as _;
@@ -151,7 +151,7 @@ impl SpecializedRenderPipeline for MotionBlurPipeline {
 pub struct MotionBlurPipelineId(pub CachedRenderPipelineId);
 
 pub(crate) fn prepare_motion_blur_pipelines(
-    mut commands: ComponentCommands,
+    mut commands: EntityCommands,
     pipeline_cache: Res<PipelineCache>,
     mut pipelines: ResMut<SpecializedRenderPipelines<MotionBlurPipeline>>,
     pipeline: Res<MotionBlurPipeline>,

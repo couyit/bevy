@@ -45,7 +45,7 @@ fn main() {
 }
 
 /// Creates the example scene and spawns the UI.
-fn setup(mut commands: ComponentCommands, asset_server: Res<AssetServer>, app_settings: Res<AppSettings>) {
+fn setup(mut commands: EntityCommands, asset_server: Res<AssetServer>, app_settings: Res<AppSettings>) {
     // Spawn the camera.
     spawn_camera(&mut commands, &asset_server);
 
@@ -57,7 +57,7 @@ fn setup(mut commands: ComponentCommands, asset_server: Res<AssetServer>, app_se
 }
 
 /// Spawns the camera, including the [`ChromaticAberration`] component.
-fn spawn_camera(commands: &mut ComponentCommands, asset_server: &AssetServer) {
+fn spawn_camera(commands: &mut EntityCommands, asset_server: &AssetServer) {
     commands.spawn((
         Camera3d::default(),
         Camera {
@@ -88,7 +88,7 @@ fn spawn_camera(commands: &mut ComponentCommands, asset_server: &AssetServer) {
 ///
 /// This is just the tonemapping test scene, chosen for the fact that it uses a
 /// variety of colors.
-fn spawn_scene(commands: &mut ComponentCommands, asset_server: &AssetServer) {
+fn spawn_scene(commands: &mut EntityCommands, asset_server: &AssetServer) {
     // Spawn the main scene.
     commands.spawn(SceneRoot(asset_server.load(
         GltfAssetLabel::Scene(0).from_asset("models/TonemappingTest/TonemappingTest.gltf"),
@@ -121,7 +121,7 @@ fn spawn_scene(commands: &mut ComponentCommands, asset_server: &AssetServer) {
 }
 
 /// Spawns the help text at the bottom of the screen.
-fn spawn_text(commands: &mut ComponentCommands, app_settings: &AppSettings) {
+fn spawn_text(commands: &mut EntityCommands, app_settings: &AppSettings) {
     commands.spawn((
         create_help_text(app_settings),
         Node {

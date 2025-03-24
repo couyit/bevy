@@ -236,7 +236,7 @@ impl SpecializedRenderPipeline for CasPipeline {
 }
 
 fn prepare_cas_pipelines(
-    mut commands: ComponentCommands,
+    mut commands: EntityCommands,
     pipeline_cache: Res<PipelineCache>,
     mut pipelines: ResMut<SpecializedRenderPipelines<CasPipeline>>,
     sharpening_pipeline: Res<CasPipeline>,

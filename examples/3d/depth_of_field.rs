@@ -67,7 +67,7 @@ fn main() {
         .run();
 }
 
-fn setup(mut commands: ComponentCommands, asset_server: Res<AssetServer>, app_settings: Res<AppSettings>) {
+fn setup(mut commands: EntityCommands, asset_server: Res<AssetServer>, app_settings: Res<AppSettings>) {
     // Spawn the camera. Enable HDR and bloom, as that highlights the depth of
     // field effect.
     let mut camera = commands.spawn((
@@ -162,7 +162,7 @@ impl Default for AppSettings {
 
 /// Writes the depth of field settings into the camera.
 fn update_dof_settings(
-    mut commands: ComponentCommands,
+    mut commands: EntityCommands,
     view_targets: Query<Entity, With<Camera>>,
     app_settings: Res<AppSettings>,
 ) {
@@ -181,7 +181,7 @@ fn update_dof_settings(
 
 /// Makes one-time adjustments to the scene that can't be encoded in glTF.
 fn tweak_scene(
-    mut commands: ComponentCommands,
+    mut commands: EntityCommands,
     asset_server: Res<AssetServer>,
     mut materials: ResMut<Assets<StandardMaterial>>,
     mut lights: Query<&mut DirectionalLight, Changed<DirectionalLight>>,

@@ -39,7 +39,7 @@ struct A;
 #[derive(Component)]
 struct B;
 
-fn setup_with_commands(mut commands: ComponentCommands) {
+fn setup_with_commands(mut commands: EntityCommands) {
     let system_id = commands.register_system(system_a);
     commands.spawn((Callback(system_id), A));
 }
@@ -54,7 +54,7 @@ fn setup_with_world(world: &mut World) {
 
 /// Tag entities that have callbacks we want to run with the `Triggered` component.
 fn trigger_system(
-    mut commands: ComponentCommands,
+    mut commands: EntityCommands,
     query_a: Single<Entity, With<A>>,
     query_b: Single<Entity, With<B>>,
     input: Res<ButtonInput<KeyCode>>,
@@ -72,7 +72,7 @@ fn trigger_system(
 /// Runs the systems associated with each `Callback` component if the entity also has a `Triggered` component.
 ///
 /// This could be done in an exclusive system rather than using `Commands` if preferred.
-fn evaluate_callbacks(query: Query<(Entity, &Callback), With<Triggered>>, mut commands: ComponentCommands) {
+fn evaluate_callbacks(query: Query<(Entity, &Callback), With<Triggered>>, mut commands: EntityCommands) {
     for (entity, callback) in query.iter() {
         commands.run_system(callback.0);
         commands.entity(entity).remove::<Triggered>();
@@ -89,7 +89,7 @@ fn system_b(entity_b: Single<Entity, With<Text>>, mut writer: TextUiWriter) {
     info!("B: One shot system registered with World was triggered");
 }
 
-fn setup_ui(mut commands: ComponentCommands) {
+fn setup_ui(mut commands: EntityCommands) {
     commands.spawn(Camera2d);
     commands
         .spawn((

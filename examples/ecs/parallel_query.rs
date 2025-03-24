@@ -7,7 +7,7 @@ use rand_chacha::ChaCha8Rng;
 #[derive(Component, Deref)]
 struct Velocity(Vec2);
 
-fn spawn_system(mut commands: ComponentCommands, asset_server: Res<AssetServer>) {
+fn spawn_system(mut commands: EntityCommands, asset_server: Res<AssetServer>) {
     commands.spawn(Camera2d);
     let texture = asset_server.load("branding/icon.png");
 

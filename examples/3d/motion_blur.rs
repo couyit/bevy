@@ -17,7 +17,7 @@ fn main() {
         .run();
 }
 
-fn setup_camera(mut commands: ComponentCommands) {
+fn setup_camera(mut commands: EntityCommands) {
     commands.spawn((
         Camera3d::default(),
         // Add the `MotionBlur` component to a camera to enable motion blur.
@@ -55,7 +55,7 @@ struct Rotates;
 fn setup_scene(
     asset_server: Res<AssetServer>,
     mut images: ResMut<Assets<Image>>,
-    mut commands: ComponentCommands,
+    mut commands: EntityCommands,
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<StandardMaterial>>,
 ) {
@@ -108,7 +108,7 @@ fn spawn_cars(
     asset_server: &AssetServer,
     meshes: &mut Assets<Mesh>,
     materials: &mut Assets<StandardMaterial>,
-    commands: &mut ComponentCommands,
+    commands: &mut EntityCommands,
 ) {
     const N_CARS: usize = 20;
     let box_mesh = meshes.add(Cuboid::new(0.3, 0.15, 0.55));
@@ -175,7 +175,7 @@ fn spawn_cars(
 fn spawn_barriers(
     meshes: &mut Assets<Mesh>,
     materials: &mut Assets<StandardMaterial>,
-    commands: &mut ComponentCommands,
+    commands: &mut EntityCommands,
 ) {
     const N_CONES: usize = 100;
     let capsule = meshes.add(Capsule3d::default());
@@ -204,7 +204,7 @@ fn spawn_barriers(
 fn spawn_trees(
     meshes: &mut Assets<Mesh>,
     materials: &mut Assets<StandardMaterial>,
-    commands: &mut ComponentCommands,
+    commands: &mut EntityCommands,
 ) {
     const N_TREES: usize = 30;
     let capsule = meshes.add(Capsule3d::default());
@@ -235,7 +235,7 @@ fn spawn_trees(
     spawn_with_offset(-0.07);
 }
 
-fn setup_ui(mut commands: ComponentCommands) {
+fn setup_ui(mut commands: EntityCommands) {
     commands
         .spawn((
             Text::default(),

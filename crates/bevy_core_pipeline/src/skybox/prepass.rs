@@ -6,7 +6,7 @@ use bevy_ecs::{
     entity::Entity,
     query::{Has, With},
     resource::Resource,
-    system::{ComponentCommands, Query, Res, ResMut},
+    system::{EntityCommands, Query, Res, ResMut},
     world::{FromWorld, World},
 };
 use bevy_render::{
@@ -114,7 +114,7 @@ impl SpecializedRenderPipeline for SkyboxPrepassPipeline {
 
 /// Specialize and cache the [`SkyboxPrepassPipeline`] for each camera with a [`Skybox`].
 pub fn prepare_skybox_prepass_pipelines(
-    mut commands: ComponentCommands,
+    mut commands: EntityCommands,
     pipeline_cache: Res<PipelineCache>,
     mut pipelines: ResMut<SpecializedRenderPipelines<SkyboxPrepassPipeline>>,
     pipeline: Res<SkyboxPrepassPipeline>,
@@ -138,7 +138,7 @@ pub fn prepare_skybox_prepass_pipelines(
 /// from the CPU for access in the prepass shader on the GPU, allowing us to compute camera motion
 /// between frames. This is then stored in the [`SkyboxPrepassBindGroup`] component on the camera.
 pub fn prepare_skybox_prepass_bind_groups(
-    mut commands: ComponentCommands,
+    mut commands: EntityCommands,
     pipeline: Res<SkyboxPrepassPipeline>,
     view_uniforms: Res<ViewUniforms>,
     prev_view_uniforms: Res<PreviousViewUniforms>,

@@ -37,7 +37,7 @@ struct AnimatedJoint(isize);
 ///   and mark the second joint to be animated.
 /// It is similar to the scene defined in `models/SimpleSkin/SimpleSkin.gltf`
 fn setup(
-    mut commands: ComponentCommands,
+    mut commands: EntityCommands,
     asset_server: Res<AssetServer>,
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<StandardMaterial>>,

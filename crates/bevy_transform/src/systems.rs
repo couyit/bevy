@@ -587,7 +587,7 @@ mod test {
         );
 
         let mut command_queue = CommandQueue::default();
-        let mut commands = ComponentCommands::new(&mut command_queue, &world);
+        let mut commands = EntityCommands::new(&mut command_queue, &world);
         let root = commands.spawn(offset_transform(3.3)).id();
         let parent = commands.spawn(offset_transform(4.4)).id();
         let child = commands.spawn(offset_transform(5.5)).id();
@@ -604,7 +604,7 @@ mod test {
 
         // Remove parent of `parent`
         let mut command_queue = CommandQueue::default();
-        let mut commands = ComponentCommands::new(&mut command_queue, &world);
+        let mut commands = EntityCommands::new(&mut command_queue, &world);
         commands.entity(parent).remove::<ChildOf>();
         command_queue.apply(&mut world);
         schedule.run(&mut world);
@@ -617,7 +617,7 @@ mod test {
 
         // Remove parent of `child`
         let mut command_queue = CommandQueue::default();
-        let mut commands = ComponentCommands::new(&mut command_queue, &world);
+        let mut commands = EntityCommands::new(&mut command_queue, &world);
         commands.entity(child).remove::<ChildOf>();
         command_queue.apply(&mut world);
         schedule.run(&mut world);
@@ -683,7 +683,7 @@ mod test {
 
         // Root entity
         let mut queue = CommandQueue::default();
-        let mut commands = ComponentCommands::new(&mut queue, &world);
+        let mut commands = EntityCommands::new(&mut queue, &world);
         let mut children = Vec::new();
         commands
             .spawn(Transform::from_xyz(1.0, 0.0, 0.0))
@@ -724,7 +724,7 @@ mod test {
         let mut children = Vec::new();
         let parent = {
             let mut command_queue = CommandQueue::default();
-            let mut commands = ComponentCommands::new(&mut command_queue, &world);
+            let mut commands = EntityCommands::new(&mut command_queue, &world);
             let parent = commands.spawn(Transform::from_xyz(1.0, 0.0, 0.0)).id();
             commands.entity(parent).with_children(|parent| {
                 children.push(parent.spawn(Transform::from_xyz(0.0, 2.0, 0.0)).id());
@@ -747,7 +747,7 @@ mod test {
         // Parent `e1` to `e2`.
         {
             let mut command_queue = CommandQueue::default();
-            let mut commands = ComponentCommands::new(&mut command_queue, &world);
+            let mut commands = EntityCommands::new(&mut command_queue, &world);
             commands.entity(children[1]).add_child(children[0]);
             command_queue.apply(&mut world);
             schedule.run(&mut world);

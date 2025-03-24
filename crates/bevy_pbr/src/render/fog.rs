@@ -47,7 +47,7 @@ pub struct FogMeta {
 
 /// Prepares fog metadata and writes the fog-related uniform buffers to the GPU
 pub fn prepare_fog(
-    mut commands: ComponentCommands,
+    mut commands: EntityCommands,
     render_device: Res<RenderDevice>,
     render_queue: Res<RenderQueue>,
     mut fog_meta: ResMut<FogMeta>,
