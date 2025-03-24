@@ -4,7 +4,7 @@ pub mod entity_command;
 #[cfg(feature = "std")]
 mod parallel_scope;
 
-pub use command::Command;
+pub use command::ComponentCommand;
 pub use entity_command::EntityCommand;
 
 #[cfg(feature = "std")]
@@ -27,9 +27,8 @@ use crate::{
     schedule::ScheduleLabel,
     system::{Deferred, IntoObserverSystem, IntoSystem, RegisteredSystem, SystemId, SystemInput},
     world::{
-        command_queue::RawCommandQueue, unsafe_world_cell::UnsafeWorldCell, CommandQueue,
-        ComponentWorld, EntityWorldMut, FromWorld, InvalidComponentWorld, InvalidWorld, World,
-        WorldLabel,
+        command_queue::RawCommandQueue, CommandQueue, ComponentWorld, EntityWorldMut, FromWorld,
+        ManyWorldLabel, World,
     },
 };
 
@@ -122,16 +121,17 @@ const _: () = {
     unsafe impl<W: ComponentWorld> bevy_ecs::system::SystemParam for ComponentCommands<'_, '_, W> {
         type State = FetchState<W>;
         type Item<'w, 's> = ComponentCommands<'w, 's, W>;
-        type World = W;
+        type World =
+            <__StructFieldsAlias<'static, 'static, W> as bevy_ecs::system::SystemParam>::World;
 
-        fn init_state(
-            world: UnsafeWorldCell,
+        fn init_state<'w>(
+            world: <Self::World as ManyWorldLabel>::World<'w>,
             system_meta: &mut bevy_ecs::system::SystemMeta,
         ) -> Self::State {
             FetchState {
                 state:
                     <__StructFieldsAlias<'_, '_, W> as bevy_ecs::system::SystemParam>::init_state(
-                        (world, world),
+                        world,
                         system_meta,
                     ),
             }
@@ -152,10 +152,10 @@ const _: () = {
             };
         }
 
-        fn apply(
+        fn apply<'w>(
             state: &mut Self::State,
             system_meta: &bevy_ecs::system::SystemMeta,
-            world: UnsafeWorldCell,
+            world: <Self::World as ManyWorldLabel>::World<'w>,
         ) {
             <__StructFieldsAlias<'_, '_, W> as bevy_ecs::system::SystemParam>::apply(
                 &mut state.state,
@@ -164,10 +164,10 @@ const _: () = {
             );
         }
 
-        fn queue(
+        fn queue<'w>(
             state: &mut Self::State,
             system_meta: &bevy_ecs::system::SystemMeta,
-            world: UnsafeWorldCell,
+            world: <Self::World as ManyWorldLabel>::World<'w>,
         ) {
             <__StructFieldsAlias<'_, '_, W> as bevy_ecs::system::SystemParam>::queue(
                 &mut state.state,
@@ -177,10 +177,10 @@ const _: () = {
         }
 
         #[inline]
-        unsafe fn validate_param(
+        unsafe fn validate_param<'w>(
             state: &Self::State,
             system_meta: &bevy_ecs::system::SystemMeta,
-            world: UnsafeWorldCell,
+            world: <Self::World as ManyWorldLabel>::World<'w>,
         ) -> bool {
             <(Deferred<CommandQueue>, &Entities<W>) as bevy_ecs::system::SystemParam>::validate_param(
                 &state.state,
@@ -193,23 +193,22 @@ const _: () = {
         unsafe fn get_param<'w, 's>(
             state: &'s mut Self::State,
             system_meta: &bevy_ecs::system::SystemMeta,
-            world: UnsafeWorldCell<'w>,
+            world: <Self::World as ManyWorldLabel>::World<'w>,
             change_tick: bevy_ecs::component::Tick,
         ) -> Self::Item<'w, 's> {
-            let(f0, f1) =  <(Deferred<'s, CommandQueue>, &'w Entities) as bevy_ecs::system::SystemParam>::get_param(&mut state.state, system_meta, world, change_tick);
+            let(f0, f1) =  <(Deferred<'s, CommandQueue>, &'w Entities<W>) as bevy_ecs::system::SystemParam>::get_param(&mut state.state, system_meta, world, change_tick);
             ComponentCommands {
                 queue: InternalQueue::CommandQueue(f0),
                 entities: f1,
-                marker: PhantomData,
             }
         }
     }
     // SAFETY: Only reads Entities
-    unsafe impl<'w, 's, W: WorldLabel> bevy_ecs::system::ReadOnlySystemParam
+    unsafe impl<'w, 's, W: ComponentWorld> bevy_ecs::system::ReadOnlySystemParam
         for ComponentCommands<'w, 's, W>
     where
         Deferred<'s, CommandQueue>: bevy_ecs::system::ReadOnlySystemParam,
-        &'w Entities: bevy_ecs::system::ReadOnlySystemParam,
+        &'w Entities<W>: bevy_ecs::system::ReadOnlySystemParam,
     {
     }
 };
@@ -226,7 +225,7 @@ impl<'w, 's, W: ComponentWorld> ComponentCommands<'w, 's, W> {
     ///
     /// [system parameter]: crate::system::SystemParam
     pub fn new(queue: &'s mut CommandQueue, world: &'w World<W>) -> Self {
-        Self::new_from_entities(queue, &world.entities)
+        Self::new_from_entities(queue, world.entities())
     }
 
     /// Returns a new `Commands` instance from a [`CommandQueue`] and an [`Entities`] reference.
@@ -238,7 +237,6 @@ impl<'w, 's, W: ComponentWorld> ComponentCommands<'w, 's, W> {
         Self {
             queue: InternalQueue::CommandQueue(Deferred(queue)),
             entities,
-            marker: PhantomData,
         }
     }
 
@@ -256,7 +254,6 @@ impl<'w, 's, W: ComponentWorld> ComponentCommands<'w, 's, W> {
         Self {
             queue: InternalQueue::RawCommandQueue(queue),
             entities,
-            marker: PhantomData,
         }
     }
 
@@ -287,7 +284,6 @@ impl<'w, 's, W: ComponentWorld> ComponentCommands<'w, 's, W> {
                 }
             },
             entities: self.entities,
-            marker: PhantomData,
         }
     }
 
@@ -589,7 +585,7 @@ impl<'w, 's, W: ComponentWorld> ComponentCommands<'w, 's, W> {
     /// # bevy_ecs::system::assert_is_system(add_three_to_counter_system);
     /// # bevy_ecs::system::assert_is_system(add_twenty_five_to_counter_system);
     /// ```
-    pub fn queue<C: Command<W, T> + HandleError<W, T>, T>(&mut self, command: C) {
+    pub fn queue<C: ComponentCommand<W, T> + HandleError<W, T>, T>(&mut self, command: C) {
         self.queue_internal(command.handle_error());
     }
 
@@ -639,7 +635,7 @@ impl<'w, 's, W: ComponentWorld> ComponentCommands<'w, 's, W> {
     /// # bevy_ecs::system::assert_is_system(add_three_to_counter_system);
     /// # bevy_ecs::system::assert_is_system(add_twenty_five_to_counter_system);
     /// ```
-    pub fn queue_handled<C: Command<W, T> + HandleError<W, T>, T>(
+    pub fn queue_handled<C: ComponentCommand<W, T> + HandleError<W, T>, T>(
         &mut self,
         command: C,
         error_handler: fn(BevyError, ErrorContext),
@@ -647,7 +643,7 @@ impl<'w, 's, W: ComponentWorld> ComponentCommands<'w, 's, W> {
         self.queue_internal(command.handle_error_with(error_handler));
     }
 
-    fn queue_internal(&mut self, command: impl Command) {
+    fn queue_internal(&mut self, command: impl ComponentCommand) {
         match &mut self.queue {
             InternalQueue::CommandQueue(queue) => {
                 queue.push(command);

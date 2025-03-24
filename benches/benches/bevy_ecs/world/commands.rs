@@ -2,7 +2,7 @@ use core::hint::black_box;
 
 use bevy_ecs::{
     component::Component,
-    system::{Command, ComponentCommands},
+    system::{ComponentCommand, ComponentCommands},
     world::{CommandQueue, World},
 };
 use criterion::Criterion;
@@ -139,14 +139,14 @@ pub fn insert_commands(criterion: &mut Criterion) {
 struct FakeCommandA;
 struct FakeCommandB(u64);
 
-impl Command for FakeCommandA {
+impl ComponentCommand for FakeCommandA {
     fn apply(self, world: &mut World) {
         black_box(self);
         black_box(world);
     }
 }
 
-impl Command for FakeCommandB {
+impl ComponentCommand for FakeCommandB {
     fn apply(self, world: &mut World) {
         black_box(self);
         black_box(world);
@@ -183,7 +183,7 @@ pub fn fake_commands(criterion: &mut Criterion) {
 #[derive(Default)]
 struct SizedCommand<T: Default + Send + Sync + 'static>(T);
 
-impl<T: Default + Send + Sync + 'static> Command for SizedCommand<T> {
+impl<T: Default + Send + Sync + 'static> ComponentCommand for SizedCommand<T> {
     fn apply(self, world: &mut World) {
         black_box(self);
         black_box(world);
@@ -198,7 +198,7 @@ impl Default for LargeStruct {
     }
 }
 
-pub fn sized_commands_impl<T: Default + Command>(criterion: &mut Criterion) {
+pub fn sized_commands_impl<T: Default + ComponentCommand>(criterion: &mut Criterion) {
     let mut group = criterion.benchmark_group(format!("sized_commands_{}_bytes", size_of::<T>()));
     group.warm_up_time(core::time::Duration::from_millis(500));
     group.measurement_time(core::time::Duration::from_secs(4));

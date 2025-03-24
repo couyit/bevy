@@ -45,7 +45,7 @@ use crate::{
 ///     commands.queue(AddToCounter(42));
 /// }
 /// ```
-pub trait Command<W: ComponentWorld, Out = ()>: Send + 'static {
+pub trait ComponentCommand<W: ComponentWorld, Out = ()>: Send + 'static {
     /// Applies this command, causing it to mutate the provided `world`.
     ///
     /// This method is used to define what a command "does" when it is ultimately applied.
@@ -54,7 +54,7 @@ pub trait Command<W: ComponentWorld, Out = ()>: Send + 'static {
     fn apply(self, world: &mut World<W>) -> Out;
 }
 
-impl<F, W: ComponentWorld, Out> Command<W, Out> for F
+impl<F, W: ComponentWorld, Out> ComponentCommand<W, Out> for F
 where
     F: FnOnce(&mut World<W>) -> Out + Send + 'static,
 {
@@ -67,7 +67,7 @@ where
 ///
 /// This is more efficient than spawning the entities individually.
 #[track_caller]
-pub fn spawn_batch<I, W>(bundles_iter: I) -> impl Command<W>
+pub fn spawn_batch<I, W>(bundles_iter: I) -> impl ComponentCommand<W>
 where
     I: IntoIterator + Send + Sync + 'static,
     I::Item: Bundle<Effect: NoBundleEffect>,
@@ -86,7 +86,7 @@ where
 ///
 /// This is more efficient than inserting the bundles individually.
 #[track_caller]
-pub fn insert_batch<I, B, W>(batch: I, insert_mode: InsertMode) -> impl Command<W, Result>
+pub fn insert_batch<I, B, W>(batch: I, insert_mode: InsertMode) -> impl ComponentCommand<W, Result>
 where
     I: IntoIterator<Item = (Entity, B)> + Send + Sync + 'static,
     B: Bundle<Effect: NoBundleEffect>,
@@ -102,7 +102,8 @@ where
 /// A [`Command`] that inserts a [`Resource`] into the world using a value
 /// created with the [`FromWorld`] trait.
 #[track_caller]
-pub fn init_resource<R: Resource + FromWorld<ResourceWorld>>() -> impl Command<ResourceWorld> {
+pub fn init_resource<R: Resource + FromWorld<ResourceWorld>>(
+) -> impl ComponentCommand<ResourceWorld> {
     move |world: &mut World<ResourceWorld>| {
         world.init_resource::<R>();
     }
@@ -110,7 +111,7 @@ pub fn init_resource<R: Resource + FromWorld<ResourceWorld>>() -> impl Command<R
 
 /// A [`Command`] that inserts a [`Resource`] into the world.
 #[track_caller]
-pub fn insert_resource<R: Resource>(resource: R) -> impl Command<ResourceWorld> {
+pub fn insert_resource<R: Resource>(resource: R) -> impl ComponentCommand<ResourceWorld> {
     let caller = MaybeLocation::caller();
     move |world: &mut World<ResourceWorld>| {
         world.insert_resource_with_caller(resource, caller);
@@ -118,14 +119,16 @@ pub fn insert_resource<R: Resource>(resource: R) -> impl Command<ResourceWorld> 
 }
 
 /// A [`Command`] that removes a [`Resource`] from the world.
-pub fn remove_resource<R: Resource>() -> impl Command<ResourceWorld> {
+pub fn remove_resource<R: Resource>() -> impl ComponentCommand<ResourceWorld> {
     move |world: &mut World<ResourceWorld>| {
         world.remove_resource::<R>();
     }
 }
 
 /// A [`Command`] that runs the system corresponding to the given [`SystemId`].
-pub fn run_system<O: 'static, W: WorldLabel>(id: SystemId<(), O>) -> impl Command<W, Result> {
+pub fn run_system<O: 'static, W: WorldLabel>(
+    id: SystemId<(), O>,
+) -> impl ComponentCommand<W, Result> {
     move |world: &mut World<W>| -> Result {
         world.run_system(id)?;
         Ok(())
@@ -134,7 +137,10 @@ pub fn run_system<O: 'static, W: WorldLabel>(id: SystemId<(), O>) -> impl Comman
 
 /// A [`Command`] that runs the system corresponding to the given [`SystemId`]
 /// and provides the given input value.
-pub fn run_system_with<I, W>(id: SystemId<I>, input: I::Inner<'static>) -> impl Command<W, Result>
+pub fn run_system_with<I, W>(
+    id: SystemId<I>,
+    input: I::Inner<'static>,
+) -> impl ComponentCommand<W, Result>
 where
     I: SystemInput<Inner<'static>: Send> + 'static,
     W: WorldLabel,
@@ -147,7 +153,7 @@ where
 
 /// A [`Command`] that runs the given system,
 /// caching its [`SystemId`] in a [`CachedSystemId`](crate::system::CachedSystemId) resource.
-pub fn run_system_cached<M, S, W>(system: S) -> impl Command<W, Result>
+pub fn run_system_cached<M, S, W>(system: S) -> impl ComponentCommand<W, Result>
 where
     M: 'static,
     S: IntoSystem<(), (), M> + Send + 'static,
@@ -164,7 +170,7 @@ where
 pub fn run_system_cached_with<I, M, S, W>(
     system: S,
     input: I::Inner<'static>,
-) -> impl Command<W, Result>
+) -> impl ComponentCommand<W, Result>
 where
     I: SystemInput<Inner<'static>: Send> + Send + 'static,
     M: 'static,
@@ -180,7 +186,7 @@ where
 /// A [`Command`] that removes a system previously registered with
 /// [`Commands::register_system`](crate::system::Commands::register_system) or
 /// [`World::register_system`].
-pub fn unregister_system<I, O, W>(system_id: SystemId<I, O>) -> impl Command<W, Result>
+pub fn unregister_system<I, O, W>(system_id: SystemId<I, O>) -> impl ComponentCommand<W, Result>
 where
     I: SystemInput + Send + 'static,
     O: Send + 'static,
@@ -194,7 +200,7 @@ where
 
 /// A [`Command`] that removes a system previously registered with
 /// [`World::register_system_cached`].
-pub fn unregister_system_cached<I, O, M, S, W>(system: S) -> impl Command<W, Result>
+pub fn unregister_system_cached<I, O, M, S, W>(system: S) -> impl ComponentCommand<W, Result>
 where
     I: SystemInput + Send + 'static,
     O: 'static,
@@ -209,7 +215,7 @@ where
 }
 
 /// A [`Command`] that runs the schedule corresponding to the given [`ScheduleLabel`].
-pub fn run_schedule<W: WorldLabel>(label: impl ScheduleLabel) -> impl Command<W, Result> {
+pub fn run_schedule<W: WorldLabel>(label: impl ScheduleLabel) -> impl ComponentCommand<W, Result> {
     move |world: &mut World<W>| -> Result {
         world.try_run_schedule(label)?;
         Ok(())
@@ -218,7 +224,7 @@ pub fn run_schedule<W: WorldLabel>(label: impl ScheduleLabel) -> impl Command<W,
 
 /// A [`Command`] that sends a global [`Trigger`](crate::observer::Trigger) without any targets.
 #[track_caller]
-pub fn trigger<W: WorldLabel>(event: impl Event) -> impl Command<W> {
+pub fn trigger<W: WorldLabel>(event: impl Event) -> impl ComponentCommand<W> {
     let caller = MaybeLocation::caller();
     move |world: &mut World<W>| {
         world.trigger_with_caller(event, caller);
@@ -229,7 +235,7 @@ pub fn trigger<W: WorldLabel>(event: impl Event) -> impl Command<W> {
 pub fn trigger_targets<W: WorldLabel>(
     event: impl Event,
     targets: impl TriggerTargets + Send + Sync + 'static,
-) -> impl Command<W> {
+) -> impl ComponentCommand<W> {
     let caller = MaybeLocation::caller();
     move |world: &mut World<W>| {
         world.trigger_targets_with_caller(event, targets, caller);
@@ -238,7 +244,7 @@ pub fn trigger_targets<W: WorldLabel>(
 
 /// A [`Command`] that sends an arbitrary [`Event`].
 #[track_caller]
-pub fn send_event<E: Event>(event: E) -> impl Command<ResourceWorld> {
+pub fn send_event<E: Event>(event: E) -> impl ComponentCommand<ResourceWorld> {
     let caller = MaybeLocation::caller();
     move |world: &mut World<ResourceWorld>| {
         let mut events = world.resource_mut::<Events<E>>();
