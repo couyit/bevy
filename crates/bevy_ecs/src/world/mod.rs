@@ -202,40 +202,6 @@ impl Worlds {
         }
     }
 
-    /// Spawns a new [`Entity`] and returns a corresponding [`EntityWorldMut`], which can be used
-    /// to add components to the entity or retrieve its id.
-    ///
-    /// ```
-    /// use bevy_ecs::{component::Component, world::World};
-    ///
-    /// #[derive(Component)]
-    /// struct Position {
-    ///   x: f32,
-    ///   y: f32,
-    /// }
-    /// #[derive(Component)]
-    /// struct Label(&'static str);
-    /// #[derive(Component)]
-    /// struct Num(u32);
-    ///
-    /// let mut world = World::new();
-    /// let entity = world.spawn_empty()
-    ///     .insert(Position { x: 0.0, y: 0.0 }) // add a single component
-    ///     .insert((Num(1), Label("hello"))) // add a bundle of components
-    ///     .id();
-    ///
-    /// let position = world.entity(entity).get::<Position>().unwrap();
-    /// assert_eq!(position.x, 0.0);
-    /// ```
-    #[track_caller]
-    pub fn spawn_empty<W: ComponentWorld>(&mut self) -> EntityWorldMut {
-        let world = self.get_world_mut::<W>();
-        world.flush();
-        let entity = world.entities_mut().alloc();
-        // SAFETY: entity was just allocated
-        unsafe { self.spawn_at_empty_internal(entity, MaybeLocation::caller()) }
-    }
-
     /// Spawns a new [`Entity`] with a given [`Bundle`] of [components](`Component`) and returns
     /// a corresponding [`EntityWorldMut`], which can be used to add components to the entity or
     /// retrieve its id. In case large batches of entities need to be spawned, consider using
@@ -334,36 +300,6 @@ impl Worlds {
         entity
     }
 
-    /// # Safety
-    /// must be called on an entity that was just allocated
-    unsafe fn spawn_at_empty_internal<W: ComponentWorld>(
-        &mut self,
-        entity: Entity,
-        caller: MaybeLocation,
-    ) -> EntityWorldMut {
-        match self.get_world_mut::<W>().storage {
-            Storage::Components {
-                ref mut entities,
-                ref mut archetypes,
-                ref mut tables,
-                ..
-            } => {
-                let archetype = archetypes.empty_mut();
-                // PERF: consider avoiding allocating entities in the empty archetype unless needed
-                let table_row = tables[archetype.table_id()].allocate(entity);
-                // SAFETY: no components are allocated by archetype.allocate() because the archetype is
-                // empty
-                let location = unsafe { archetype.allocate(entity, table_row) };
-                entities.set(entity.index(), location);
-
-                entities.set_spawned_or_despawned_by(entity.index(), caller);
-
-                EntityWorldMut::new(self, entity, location)
-            }
-            Storage::Resources { .. } => unreachable!(),
-        }
-    }
-
     /// Spawns a batch of entities with the same component [`Bundle`] type. Takes a given
     /// [`Bundle`] iterator and returns a corresponding [`Entity`] iterator.
     /// This is more efficient than spawning entities and adding components to them individually
@@ -411,6 +347,119 @@ impl Worlds {
                     .apply_or_drop_queued(Some(self.into()));
             };
         }
+    }
+
+    /// Temporarily removes a [`Component`] `T` from the provided [`Entity`] and
+    /// runs the provided closure on it, returning the result if `T` was available.
+    /// This will trigger the `OnRemove` and `OnReplace` component hooks without
+    /// causing an archetype move.
+    ///
+    /// This is most useful with immutable components, where removal and reinsertion
+    /// is the only way to modify a value.
+    ///
+    /// If you do not need to ensure the above hooks are triggered, and your component
+    /// is mutable, prefer using [`get_mut`](World::get_mut).
+    ///
+    /// # Examples
+    ///
+    /// ```rust
+    /// # use bevy_ecs::prelude::*;
+    /// #
+    /// #[derive(Component, PartialEq, Eq, Debug)]
+    /// #[component(immutable)]
+    /// struct Foo(bool);
+    ///
+    /// # let mut world = World::default();
+    /// # world.register_component::<Foo>();
+    /// #
+    /// # let entity = world.spawn(Foo(false)).id();
+    /// #
+    /// world.modify_component(entity, |foo: &mut Foo| {
+    ///     foo.0 = true;
+    /// });
+    /// #
+    /// # assert_eq!(world.get::<Foo>(entity), Some(&Foo(true)));
+    /// ```
+    #[inline]
+    pub fn modify_component<T: Component, R>(
+        &mut self,
+        entity: Entity,
+        f: impl FnOnce(&mut T) -> R,
+    ) -> Result<Option<R>, EntityMutableFetchError> {
+        let mut world = DeferredWorld::from(&mut *self);
+
+        let result = world.modify_component(entity, f)?;
+
+        self.flush();
+        Ok(result)
+    }
+
+    /// Despawns the given [`Entity`], if it exists. This will also remove all of the entity's
+    /// [`Components`](Component).
+    ///
+    /// Returns `true` if the entity is successfully despawned and `false` if
+    /// the entity does not exist.
+    ///
+    /// # Note
+    ///
+    /// This will also despawn the entities in any [`RelationshipTarget`](crate::relationship::RelationshipTarget) that is configured
+    /// to despawn descendants. For example, this will recursively despawn [`Children`](crate::hierarchy::Children).
+    ///
+    /// ```
+    /// use bevy_ecs::{component::Component, world::World};
+    ///
+    /// #[derive(Component)]
+    /// struct Position {
+    ///   x: f32,
+    ///   y: f32,
+    /// }
+    ///
+    /// let mut world = World::new();
+    /// let entity = world.spawn(Position { x: 0.0, y: 0.0 }).id();
+    /// assert!(world.despawn(entity));
+    /// assert!(world.get_entity(entity).is_err());
+    /// assert!(world.get::<Position>(entity).is_none());
+    /// ```
+    #[track_caller]
+    #[inline]
+    pub fn despawn<W: ComponentWorld>(&mut self, entity: Entity) -> bool {
+        if let Err(error) = self.despawn_with_caller::<W>(entity, MaybeLocation::caller()) {
+            warn!("{error}");
+            false
+        } else {
+            true
+        }
+    }
+
+    /// Despawns the given `entity`, if it exists. This will also remove all of the entity's
+    /// [`Components`](Component).
+    ///
+    /// Returns an [`EntityDespawnError`] if the entity does not exist.
+    ///
+    /// # Note
+    ///
+    /// This will also despawn the entities in any [`RelationshipTarget`](crate::relationship::RelationshipTarget) that is configured
+    /// to despawn descendants. For example, this will recursively despawn [`Children`](crate::hierarchy::Children).
+    #[track_caller]
+    #[inline]
+    pub fn try_despawn<W: ComponentWorld>(
+        &mut self,
+        entity: Entity,
+    ) -> Result<(), EntityDespawnError> {
+        self.despawn_with_caller::<W>(entity, MaybeLocation::caller())
+    }
+
+    #[inline]
+    pub(crate) fn despawn_with_caller<W: ComponentWorld>(
+        &mut self,
+        entity: Entity,
+        caller: MaybeLocation,
+    ) -> Result<(), EntityDespawnError> {
+        let world = self.get_world_mut::<W>();
+        world.flush();
+        let entity = world.get_entity_mut(entity)?;
+        entity.despawn_with_caller(caller);
+        Ok(())
     }
 }
 
@@ -1726,61 +1775,8 @@ impl<W: ComponentWorld> World<W> {
         self.get_entity_mut(entity).ok()?.into_mut()
     }
 
-    /// Temporarily removes a [`Component`] `T` from the provided [`Entity`] and
-    /// runs the provided closure on it, returning the result if `T` was available.
-    /// This will trigger the `OnRemove` and `OnReplace` component hooks without
-    /// causing an archetype move.
-    ///
-    /// This is most useful with immutable components, where removal and reinsertion
-    /// is the only way to modify a value.
-    ///
-    /// If you do not need to ensure the above hooks are triggered, and your component
-    /// is mutable, prefer using [`get_mut`](World::get_mut).
-    ///
-    /// # Examples
-    ///
-    /// ```rust
-    /// # use bevy_ecs::prelude::*;
-    /// #
-    /// #[derive(Component, PartialEq, Eq, Debug)]
-    /// #[component(immutable)]
-    /// struct Foo(bool);
-    ///
-    /// # let mut world = World::default();
-    /// # world.register_component::<Foo>();
-    /// #
-    /// # let entity = world.spawn(Foo(false)).id();
-    /// #
-    /// world.modify_component(entity, |foo: &mut Foo| {
-    ///     foo.0 = true;
-    /// });
-    /// #
-    /// # assert_eq!(world.get::<Foo>(entity), Some(&Foo(true)));
-    /// ```
-    #[inline]
-    pub fn modify_component<T: Component, R>(
-        &mut self,
-        entity: Entity,
-        f: impl FnOnce(&mut T) -> R,
-    ) -> Result<Option<R>, EntityMutableFetchError> {
-        let mut world = DeferredWorld::from(&mut *self);
-
-        let result = world.modify_component(entity, f)?;
-
-        self.flush();
-        Ok(result)
-    }
-
-    /// Despawns the given [`Entity`], if it exists. This will also remove all of the entity's
-    /// [`Components`](Component).
-    ///
-    /// Returns `true` if the entity is successfully despawned and `false` if
-    /// the entity does not exist.
-    ///
-    /// # Note
-    ///
-    /// This will also despawn the entities in any [`RelationshipTarget`](crate::relationship::RelationshipTarget) that is configured
-    /// to despawn descendants. For example, this will recursively despawn [`Children`](crate::hierarchy::Children).
+    /// Spawns a new [`Entity`] and returns a corresponding [`EntityWorldMut`], which can be used
+    /// to add components to the entity or retrieve its id.
     ///
     /// ```
     /// use bevy_ecs::{component::Component, world::World};
@@ -1790,49 +1786,56 @@ impl<W: ComponentWorld> World<W> {
     ///   x: f32,
     ///   y: f32,
     /// }
+    /// #[derive(Component)]
+    /// struct Label(&'static str);
+    /// #[derive(Component)]
+    /// struct Num(u32);
     ///
     /// let mut world = World::new();
-    /// let entity = world.spawn(Position { x: 0.0, y: 0.0 }).id();
-    /// assert!(world.despawn(entity));
-    /// assert!(world.get_entity(entity).is_err());
-    /// assert!(world.get::<Position>(entity).is_none());
+    /// let entity = world.spawn_empty()
+    ///     .insert(Position { x: 0.0, y: 0.0 }) // add a single component
+    ///     .insert((Num(1), Label("hello"))) // add a bundle of components
+    ///     .id();
+    ///
+    /// let position = world.entity(entity).get::<Position>().unwrap();
+    /// assert_eq!(position.x, 0.0);
     /// ```
     #[track_caller]
-    #[inline]
-    pub fn despawn(&mut self, entity: Entity) -> bool {
-        if let Err(error) = self.despawn_with_caller(entity, MaybeLocation::caller()) {
-            warn!("{error}");
-            false
-        } else {
-            true
-        }
+    pub fn spawn_empty(&mut self) -> EntityWorldMut<W> {
+        self.flush();
+        let entity = self.entities_mut().alloc();
+        // SAFETY: entity was just allocated
+        unsafe { self.spawn_at_empty_internal(entity, MaybeLocation::caller()) }
     }
 
-    /// Despawns the given `entity`, if it exists. This will also remove all of the entity's
-    /// [`Components`](Component).
-    ///
-    /// Returns an [`EntityDespawnError`] if the entity does not exist.
-    ///
-    /// # Note
-    ///
-    /// This will also despawn the entities in any [`RelationshipTarget`](crate::relationship::RelationshipTarget) that is configured
-    /// to despawn descendants. For example, this will recursively despawn [`Children`](crate::hierarchy::Children).
-    #[track_caller]
-    #[inline]
-    pub fn try_despawn(&mut self, entity: Entity) -> Result<(), EntityDespawnError> {
-        self.despawn_with_caller(entity, MaybeLocation::caller())
-    }
-
-    #[inline]
-    pub(crate) fn despawn_with_caller(
+    /// # Safety
+    /// must be called on an entity that was just allocated
+    unsafe fn spawn_at_empty_internal(
         &mut self,
         entity: Entity,
         caller: MaybeLocation,
-    ) -> Result<(), EntityDespawnError> {
-        self.flush();
-        let entity = self.get_entity_mut(entity)?;
-        entity.despawn_with_caller(caller);
-        Ok(())
+    ) -> EntityWorldMut<W> {
+        match self.storage {
+            Storage::Components {
+                ref mut entities,
+                ref mut archetypes,
+                ref mut tables,
+                ..
+            } => {
+                let archetype = archetypes.empty_mut();
+                // PERF: consider avoiding allocating entities in the empty archetype unless needed
+                let table_row = tables[archetype.table_id()].allocate(entity);
+                // SAFETY: no components are allocated by archetype.allocate() because the archetype is
+                // empty
+                let location = unsafe { archetype.allocate(entity, table_row) };
+                entities.set(entity.index(), location);
+
+                entities.set_spawned_or_despawned_by(entity.index(), caller);
+
+                EntityWorldMut::new(self, entity, location)
+            }
+            Storage::Resources { .. } => unreachable!(),
+        }
     }
 
     /// Returns [`QueryState`] for the given [`QueryData`], which is used to efficiently

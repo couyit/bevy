@@ -9,8 +9,8 @@ use crate::{
     relationship::RelationshipHookMode,
     resource::Resource,
     storage::{SparseSetIndex, SparseSets, Table, TableRow},
-    system::{In, IntoSystem, Local, SystemId, SystemParam, TypeErasedCommands},
-    world::{DeferredWorld, FromWorld, InvalidWorld, World, WorldLabel},
+    system::{In, IntoSystem, Local, System, SystemId, SystemParam},
+    world::{FromWorld, InvalidWorld, World, WorldLabel, Worlds},
 };
 use alloc::boxed::Box;
 use alloc::{borrow::Cow, format, vec::Vec};
@@ -433,37 +433,28 @@ pub trait Component: Send + Sync + 'static {
     /// * For a component to be immutable, this type must be [`Immutable`].
     type Mutability: ComponentMutability;
 
-    /// Called when registering this component, allowing mutable access to its [`ComponentHooks`].
-    #[deprecated(
-        since = "0.16.0",
-        note = "Use the individual hook methods instead (e.g., `Component::on_add`, etc.)"
-    )]
-    fn register_component_hooks(hooks: &mut ComponentHooks) {
-        hooks.update_from_component::<Self>();
-    }
-
     /// Gets the `on_add` [`ComponentHook`] for this [`Component`] if one is defined.
-    fn on_add() -> Option<ComponentHook> {
+    fn on_add() -> Option<Box<dyn System<In = In<HookContext>, Out = ()>>> {
         None
     }
 
     /// Gets the `on_insert` [`ComponentHook`] for this [`Component`] if one is defined.
-    fn on_insert() -> Option<ComponentHook> {
+    fn on_insert() -> Option<Box<dyn System<In = In<HookContext>, Out = ()>>> {
         None
     }
 
     /// Gets the `on_replace` [`ComponentHook`] for this [`Component`] if one is defined.
-    fn on_replace() -> Option<ComponentHook> {
+    fn on_replace() -> Option<Box<dyn System<In = In<HookContext>, Out = ()>>> {
         None
     }
 
     /// Gets the `on_remove` [`ComponentHook`] for this [`Component`] if one is defined.
-    fn on_remove() -> Option<ComponentHook> {
+    fn on_remove() -> Option<Box<dyn System<In = In<HookContext>, Out = ()>>> {
         None
     }
 
     /// Gets the `on_despawn` [`ComponentHook`] for this [`Component`] if one is defined.
-    fn on_despawn() -> Option<ComponentHook> {
+    fn on_despawn() -> Option<Box<dyn System<In = In<HookContext>, Out = ()>>> {
         None
     }
 
@@ -639,29 +630,37 @@ pub struct HookContext {
 /// ```
 #[derive(Debug, Clone, Default)]
 pub struct ComponentHooks {
-    pub(crate) on_add: Option<SystemId<In<HookContext>>>,
-    pub(crate) on_insert: Option<SystemId<In<HookContext>>>,
-    pub(crate) on_replace: Option<SystemId<In<HookContext>>>,
-    pub(crate) on_remove: Option<SystemId<In<HookContext>>>,
-    pub(crate) on_despawn: Option<SystemId<In<HookContext>>>,
+    pub(crate) on_add: Option<SystemId>,
+    pub(crate) on_insert: Option<SystemId>,
+    pub(crate) on_replace: Option<SystemId>,
+    pub(crate) on_remove: Option<SystemId>,
+    pub(crate) on_despawn: Option<SystemId>,
 }
 
 impl ComponentHooks {
-    pub(crate) fn update_from_component<C: Component + ?Sized>(&mut self) -> &mut Self {
+    pub(crate) fn update_from_component<C: Component + ?Sized>(
+        &mut self,
+        worlds: &mut Worlds,
+    ) -> &mut Self {
         if let Some(hook) = C::on_add() {
-            self.on_add(hook);
+            let id = worlds.register_boxed_system(hook);
+            self.on_add(id);
         }
         if let Some(hook) = C::on_insert() {
-            self.on_insert(hook);
+            let id = worlds.register_boxed_system(hook);
+            self.on_insert(id);
         }
         if let Some(hook) = C::on_replace() {
-            self.on_replace(hook);
+            let id = worlds.register_boxed_system(hook);
+            self.on_replace(id);
         }
         if let Some(hook) = C::on_remove() {
-            self.on_remove(hook);
+            let id = worlds.register_boxed_system(hook);
+            self.on_remove(id);
         }
         if let Some(hook) = C::on_despawn() {
-            self.on_despawn(hook);
+            let id = worlds.register_boxed_system(hook);
+            self.on_despawn(id);
         }
 
         self
@@ -674,7 +673,7 @@ impl ComponentHooks {
     /// # Panics
     ///
     /// Will panic if the component already has an `on_add` hook
-    pub fn on_add(&mut self, hook: SystemId<In<HookContext>>) -> &mut Self {
+    pub fn on_add(&mut self, hook: SystemId) -> &mut Self {
         self.try_on_add(hook)
             .expect("Component already has an on_add hook")
     }
@@ -692,7 +691,7 @@ impl ComponentHooks {
     /// # Panics
     ///
     /// Will panic if the component already has an `on_insert` hook
-    pub fn on_insert(&mut self, hook: SystemId<In<HookContext>>) -> &mut Self {
+    pub fn on_insert(&mut self, hook: SystemId) -> &mut Self {
         self.try_on_insert(hook)
             .expect("Component already has an on_insert hook")
     }
@@ -714,7 +713,7 @@ impl ComponentHooks {
     /// # Panics
     ///
     /// Will panic if the component already has an `on_replace` hook
-    pub fn on_replace(&mut self, hook: SystemId<In<HookContext>>) -> &mut Self {
+    pub fn on_replace(&mut self, hook: SystemId) -> &mut Self {
         self.try_on_replace(hook)
             .expect("Component already has an on_replace hook")
     }
@@ -725,7 +724,7 @@ impl ComponentHooks {
     /// # Panics
     ///
     /// Will panic if the component already has an `on_remove` hook
-    pub fn on_remove(&mut self, hook: SystemId<In<HookContext>>) -> &mut Self {
+    pub fn on_remove(&mut self, hook: SystemId) -> &mut Self {
         self.try_on_remove(hook)
             .expect("Component already has an on_remove hook")
     }
@@ -735,7 +734,7 @@ impl ComponentHooks {
     /// # Panics
     ///
     /// Will panic if the component already has an `on_despawn` hook
-    pub fn on_despawn(&mut self, hook: SystemId<In<HookContext>>) -> &mut Self {
+    pub fn on_despawn(&mut self, hook: SystemId) -> &mut Self {
         self.try_on_despawn(hook)
             .expect("Component already has an on_despawn hook")
     }
@@ -745,7 +744,7 @@ impl ComponentHooks {
     /// This is a fallible version of [`Self::on_add`].
     ///
     /// Returns `None` if the component already has an `on_add` hook.
-    pub fn try_on_add(&mut self, hook: SystemId<In<HookContext>>) -> Option<&mut Self> {
+    pub fn try_on_add(&mut self, hook: SystemId) -> Option<&mut Self> {
         if self.on_add.is_some() {
             return None;
         }
@@ -758,7 +757,7 @@ impl ComponentHooks {
     /// This is a fallible version of [`Self::on_insert`].
     ///
     /// Returns `None` if the component already has an `on_insert` hook.
-    pub fn try_on_insert(&mut self, hook: SystemId<In<HookContext>>) -> Option<&mut Self> {
+    pub fn try_on_insert(&mut self, hook: SystemId) -> Option<&mut Self> {
         if self.on_insert.is_some() {
             return None;
         }
@@ -771,7 +770,7 @@ impl ComponentHooks {
     /// This is a fallible version of [`Self::on_replace`].
     ///
     /// Returns `None` if the component already has an `on_replace` hook.
-    pub fn try_on_replace(&mut self, hook: SystemId<In<HookContext>>) -> Option<&mut Self> {
+    pub fn try_on_replace(&mut self, hook: SystemId) -> Option<&mut Self> {
         if self.on_replace.is_some() {
             return None;
         }
@@ -784,7 +783,7 @@ impl ComponentHooks {
     /// This is a fallible version of [`Self::on_remove`].
     ///
     /// Returns `None` if the component already has an `on_remove` hook.
-    pub fn try_on_remove(&mut self, hook: SystemId<In<HookContext>>) -> Option<&mut Self> {
+    pub fn try_on_remove(&mut self, hook: SystemId) -> Option<&mut Self> {
         if self.on_remove.is_some() {
             return None;
         }
@@ -797,7 +796,7 @@ impl ComponentHooks {
     /// This is a fallible version of [`Self::on_despawn`].
     ///
     /// Returns `None` if the component already has an `on_despawn` hook.
-    pub fn try_on_despawn(&mut self, hook: SystemId<In<HookContext>>) -> Option<&mut Self> {
+    pub fn try_on_despawn(&mut self, hook: SystemId) -> Option<&mut Self> {
         if self.on_despawn.is_some() {
             return None;
         }

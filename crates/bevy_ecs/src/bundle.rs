@@ -967,7 +967,7 @@ impl BundleInfo {
 }
 
 // SAFETY: We have exclusive world access so our pointers can't be invalidated externally
-pub(crate) struct BundleInserter<'w> {
+pub(crate) struct BundleInserter<'w, W: ComponentWorld> {
     world: UnsafeWorldCell<'w>,
     bundle_info: ConstNonNull<BundleInfo>,
     archetype_after_insert: ConstNonNull<ArchetypeAfterBundleInsert>,
@@ -975,6 +975,7 @@ pub(crate) struct BundleInserter<'w> {
     archetype: NonNull<Archetype>,
     archetype_move_type: ArchetypeMoveType,
     change_tick: Tick,
+    marker: PhantomData<W>,
 }
 
 /// The type of archetype move (or lack thereof) that will result from a bundle
@@ -994,26 +995,34 @@ pub(crate) enum ArchetypeMoveType {
     },
 }
 
-impl<'w> BundleInserter<'w> {
+impl<'w, W: ComponentWorld> BundleInserter<'w, W> {
     #[inline]
     pub(crate) fn new<T: Bundle>(
-        world: UnsafeWorldCell<'w>,
+        world: &'w mut World<W>,
         archetype_id: ArchetypeId,
         change_tick: Tick,
     ) -> Self {
-        let mut registrator = unsafe { world.world_mut() }.components_registrator();
+        let mut registrator =
+            unsafe { ComponentsRegistrator::new(&mut world.components, &mut world.component_ids) };
 
-        let bundle_id = match unsafe { world.world_mut() }.storage {
+        let bundle_id = match world.storage {
             Storage::Components {
                 ref mut bundles,
                 ref mut sparse_sets,
                 ..
             } => bundles.register_info::<T>(&mut registrator, sparse_sets),
-            Storage::Resources { .. } => panic!("Storage is not for Components."),
+            Storage::Resources { .. } => unreachable!(),
         };
 
         // SAFETY: We just ensured this bundle exists
-        unsafe { Self::new_with_id(world, archetype_id, bundle_id, change_tick) }
+        unsafe {
+            Self::new_with_id(
+                world.as_unsafe_world_cell(),
+                archetype_id,
+                bundle_id,
+                change_tick,
+            )
+        }
     }
 
     /// Creates a new [`BundleInserter`].
@@ -1022,22 +1031,25 @@ impl<'w> BundleInserter<'w> {
     /// - Caller must ensure that `bundle_id` exists in `world.bundles`.
     #[inline]
     pub(crate) unsafe fn new_with_id(
-        cell: UnsafeWorldCell<'w>,
+        world: UnsafeWorldCell<'w>,
         archetype_id: ArchetypeId,
         bundle_id: BundleId,
         change_tick: Tick,
     ) -> Self {
-        let (archetypes, bundles, tables) = match unsafe { cell.world_mut() }.storage {
+        let (archetypes, bundles, tables) = match unsafe { world.world_mut() }.storage {
             Storage::Components {
                 ref mut archetypes,
                 ref mut bundles,
                 ref mut tables,
                 ..
             } => (archetypes, bundles, tables),
-            Storage::Resources { .. } => panic!("Storage is not for Components"),
+            Storage::Resources { .. } => unreachable!(),
         };
 
-        let world = unsafe { cell.world() };
+        let (components, observers) = unsafe {
+            let world = world.world();
+            (&world.components, &world.observers)
+        };
 
         // SAFETY: We will not make any accesses to the command queue, component or resource data of this world
         let bundle_info = bundles.get_unchecked(bundle_id);
@@ -1045,8 +1057,8 @@ impl<'w> BundleInserter<'w> {
         let new_archetype_id = bundle_info.insert_bundle_into_archetype(
             archetypes,
             tables,
-            &world.components,
-            &world.observers,
+            components,
+            observers,
             archetype_id,
         );
         if new_archetype_id == archetype_id {
@@ -1067,7 +1079,8 @@ impl<'w> BundleInserter<'w> {
                 table: table.into(),
                 archetype_move_type: ArchetypeMoveType::SameArchetype,
                 change_tick,
-                world: cell,
+                world,
+                marker: PhantomData,
             }
         } else {
             let (archetype, new_archetype) = archetypes.get_2_mut(archetype_id, new_archetype_id);
@@ -1091,7 +1104,8 @@ impl<'w> BundleInserter<'w> {
                         new_archetype: new_archetype.into(),
                     },
                     change_tick,
-                    world: cell,
+                    world,
+                    marker: PhantomData,
                 }
             } else {
                 let (table, new_table) = tables.get_2_mut(table_id, new_table_id);
@@ -1105,18 +1119,27 @@ impl<'w> BundleInserter<'w> {
                         new_table: new_table.into(),
                     },
                     change_tick,
-                    world: cell,
+                    world,
+                    marker: PhantomData,
                 }
             }
         }
     }
 
-    /// # Safety
-    /// `entity` must currently exist in the source archetype for this inserter. `location`
-    /// must be `entity`'s location in the archetype. `T` must match this [`BundleInfo`]'s type
-    #[inline]
-    pub(crate) unsafe fn insert<T: DynamicBundle>(
+    pub fn insert<T: DynamicBundle>(
         &mut self,
+        entity: Entity,
+        location: EntityLocation,
+        bundle: T,
+        insert_mode: InsertMode,
+        caller: MaybeLocation,
+    ) -> (EntityLocation, T::Effect) {
+        unsafe { self.insert_internal(None, entity, location, bundle, insert_mode, caller, None) }
+    }
+
+    pub fn insert_and_trigger<T: DynamicBundle>(
+        &mut self,
+        worlds: &'w mut Worlds,
         entity: Entity,
         location: EntityLocation,
         bundle: T,
@@ -1124,15 +1147,42 @@ impl<'w> BundleInserter<'w> {
         caller: MaybeLocation,
         relationship_hook_mode: RelationshipHookMode,
     ) -> (EntityLocation, T::Effect) {
+        unsafe {
+            self.insert_internal(
+                Some(worlds.as_unsafe_cell()),
+                entity,
+                location,
+                bundle,
+                insert_mode,
+                caller,
+                Some(relationship_hook_mode),
+            )
+        }
+    }
+
+    /// # Safety
+    /// `entity` must currently exist in the source archetype for this inserter. `location`
+    /// must be `entity`'s location in the archetype. `T` must match this [`BundleInfo`]'s type
+    #[inline]
+    pub unsafe fn insert_internal<T: DynamicBundle>(
+        &mut self,
+        worlds: Option<UnsafeWorldsCell<'w>>,
+        entity: Entity,
+        location: EntityLocation,
+        bundle: T,
+        insert_mode: InsertMode,
+        caller: MaybeLocation,
+        relationship_hook_mode: Option<RelationshipHookMode>,
+    ) -> (EntityLocation, T::Effect) {
         let bundle_info = self.bundle_info.as_ref();
         let archetype_after_insert = self.archetype_after_insert.as_ref();
         let archetype = self.archetype.as_ref();
 
         // SAFETY: All components in the bundle are guaranteed to exist in the World
         // as they must be initialized before creating the BundleInfo.
-        unsafe {
+        worlds.map(|worlds| unsafe {
             // SAFETY: Mutable references do not alias and will be dropped after this block
-            let mut deferred_world = self.world.into_deferred();
+            let mut deferred_world = worlds.into_deferred::<W>();
 
             if insert_mode == InsertMode::Replace {
                 if archetype.has_replace_observer() {
@@ -1148,10 +1198,10 @@ impl<'w> BundleInserter<'w> {
                     entity,
                     archetype_after_insert.iter_existing(),
                     caller,
-                    relationship_hook_mode,
+                    relationship_hook_mode.unwrap(),
                 );
             }
-        }
+        });
 
         let table = self.table.as_mut();
 
@@ -1330,11 +1380,11 @@ impl<'w> BundleInserter<'w> {
 
         let new_archetype = &*new_archetype;
         // SAFETY: We have no outstanding mutable references to world as they were dropped
-        let mut deferred_world = unsafe { self.world.into_deferred() };
 
         // SAFETY: All components in the bundle are guaranteed to exist in the World
         // as they must be initialized before creating the BundleInfo.
-        unsafe {
+        worlds.map(|worlds| unsafe {
+            let mut deferred_world = worlds.into_deferred::<W>();
             deferred_world.trigger_on_add(
                 new_archetype,
                 entity,
@@ -1357,7 +1407,7 @@ impl<'w> BundleInserter<'w> {
                         entity,
                         archetype_after_insert.iter_inserted(),
                         caller,
-                        relationship_hook_mode,
+                        relationship_hook_mode.unwrap(),
                     );
                     if new_archetype.has_insert_observer() {
                         deferred_world.trigger_observers(
@@ -1376,7 +1426,7 @@ impl<'w> BundleInserter<'w> {
                         entity,
                         archetype_after_insert.iter_added(),
                         caller,
-                        relationship_hook_mode,
+                        relationship_hook_mode.unwrap(),
                     );
                     if new_archetype.has_insert_observer() {
                         deferred_world.trigger_observers(
@@ -1388,31 +1438,31 @@ impl<'w> BundleInserter<'w> {
                     }
                 }
             }
-        }
+        });
 
         (new_location, after_effect)
     }
 
     #[inline]
-    pub(crate) fn entities<W: ComponentWorld>(&mut self) -> &mut Entities<W> {
+    pub(crate) fn entities(&mut self) -> &mut Entities<W> {
         // SAFETY: No outstanding references to self.world, changes to entities cannot invalidate our internal pointers
         unsafe { self.world.world_mut().as_world_mut::<W>().entities_mut() }
     }
 }
 
 // SAFETY: We have exclusive world access so our pointers can't be invalidated externally
-pub(crate) struct BundleSpawner<'w> {
-    worlds: UnsafeWorldsCell<'w>,
+pub(crate) struct BundleSpawner<'w, W: ComponentWorld> {
+    world: UnsafeWorldCell<'w>,
     bundle_info: ConstNonNull<BundleInfo>,
     table: NonNull<Table>,
     archetype: NonNull<Archetype>,
     change_tick: Tick,
+    marker: PhantomData<W>,
 }
 
-impl<'w> BundleSpawner<'w> {
+impl<'w, W: ComponentWorld> BundleSpawner<'w, W> {
     #[inline]
-    pub fn new<W: ComponentWorld, T: Bundle>(worlds: &'w mut Worlds, change_tick: Tick) -> Self {
-        let world = worlds.get_world_mut::<W>();
+    pub fn new<T: Bundle>(world: &'w mut World<W>, change_tick: Tick) -> Self {
         let (bundles, sparse_sets) = match world.storage {
             Storage::Components {
                 ref mut bundles,
@@ -1422,10 +1472,11 @@ impl<'w> BundleSpawner<'w> {
             Storage::Resources { .. } => panic!("Storage is not for Components"),
         };
 
-        let mut registrator = world.components_registrator();
+        let mut registrator =
+            unsafe { ComponentsRegistrator::new(&mut world.components, &mut world.component_ids) };
         let bundle_id = bundles.register_info::<T>(&mut registrator, sparse_sets);
         // SAFETY: we initialized this bundle_id in `init_info`
-        unsafe { Self::new_with_id::<W>(worlds, bundle_id, change_tick) }
+        unsafe { Self::new_with_id(world.as_unsafe_world_cell(), bundle_id, change_tick) }
     }
 
     /// Creates a new [`BundleSpawner`].
@@ -1433,13 +1484,12 @@ impl<'w> BundleSpawner<'w> {
     /// # Safety
     /// Caller must ensure that `bundle_id` exists in `world.bundles`
     #[inline]
-    pub(crate) unsafe fn new_with_id<W: ComponentWorld>(
-        worlds: &'w mut Worlds,
+    pub(crate) unsafe fn new_with_id(
+        world: UnsafeWorldCell<'w>,
         bundle_id: BundleId,
         change_tick: Tick,
     ) -> Self {
-        let world = worlds.get_world_mut::<W>();
-        let (archetypes, bundles, tables) = match world.storage {
+        let (archetypes, bundles, tables) = match unsafe { world.world_mut() }.storage {
             Storage::Components {
                 ref mut archetypes,
                 ref mut bundles,
@@ -1449,12 +1499,16 @@ impl<'w> BundleSpawner<'w> {
             Storage::Resources { .. } => panic!("Storage is not for Components"),
         };
 
+        let (components, observers) = {
+            let world = unsafe { world.world() };
+            (&world.components, &world.observers)
+        };
         let bundle_info = bundles.get_unchecked(bundle_id);
         let new_archetype_id = bundle_info.insert_bundle_into_archetype(
             archetypes,
             tables,
-            &world.components,
-            &world.observers,
+            components,
+            observers,
             ArchetypeId::EMPTY,
         );
         let archetype = &mut archetypes[new_archetype_id];
@@ -1464,7 +1518,8 @@ impl<'w> BundleSpawner<'w> {
             table: table.into(),
             archetype: archetype.into(),
             change_tick,
-            worlds: worlds.as_unsafe_cell(),
+            world,
+            marker: PhantomData,
         }
     }
 
@@ -1524,6 +1579,7 @@ impl<'w> BundleSpawner<'w> {
     #[inline]
     pub unsafe fn spawn_non_existent_and_trigger<T: DynamicBundle>(
         &mut self,
+        worlds: UnsafeWorldsCell<'w>,
         entity: Entity,
         bundle: T,
         caller: MaybeLocation,
@@ -1531,7 +1587,7 @@ impl<'w> BundleSpawner<'w> {
         let (location, after_effect) = self.spawn_non_existent(entity, bundle, caller);
 
         // SAFETY: We have no outstanding mutable references to world as they were dropped
-        let mut deferred_world = unsafe { self.world.into_deferred() };
+        let mut deferred_world = unsafe { worlds.into_deferred::<W>() };
         // SAFETY: `DeferredWorld` cannot provide mutable access to `Archetypes`.
         let archetype = self.archetype.as_ref();
         let bundle_info = self.bundle_info.as_ref();
@@ -1580,14 +1636,30 @@ impl<'w> BundleSpawner<'w> {
         bundle: T,
         caller: MaybeLocation,
     ) -> (Entity, T::Effect) {
-        let entity = self.entities::<InvalidComponentWorld>().alloc();
+        let entity = self.entities().alloc();
         // SAFETY: entity is allocated (but non-existent), `T` matches this BundleInfo's type
         let (_, after_effect) = unsafe { self.spawn_non_existent(entity, bundle, caller) };
         (entity, after_effect)
     }
 
+    /// # Safety
+    /// `T` must match this [`BundleInfo`]'s type
     #[inline]
-    pub(crate) fn entities<W: ComponentWorld>(&mut self) -> &mut Entities<W> {
+    pub unsafe fn spawn_and_trigger<T: Bundle>(
+        &mut self,
+        worlds: UnsafeWorldsCell<'w>,
+        bundle: T,
+        caller: MaybeLocation,
+    ) -> (Entity, T::Effect) {
+        let entity = self.entities().alloc();
+        // SAFETY: entity is allocated (but non-existent), `T` matches this BundleInfo's type
+        let (_, after_effect) =
+            unsafe { self.spawn_non_existent_and_trigger(worlds, entity, bundle, caller) };
+        (entity, after_effect)
+    }
+
+    #[inline]
+    pub(crate) fn entities(&mut self) -> &mut Entities<W> {
         // SAFETY: No outstanding references to self.world, changes to entities cannot invalidate our internal pointers
         unsafe { self.world.world_mut().as_world_mut::<W>().entities_mut() }
     }
@@ -1856,19 +1928,19 @@ mod tests {
     #[component(on_add = a_on_add, on_insert = a_on_insert, on_replace = a_on_replace, on_remove = a_on_remove)]
     struct AMacroHooks;
 
-    fn a_on_add(mut world: DeferredWorld<ResourceWorld>, _: In<HookContext>) {
+    fn a_on_add(_: In<HookContext>, mut world: DeferredWorld<ResourceWorld>) {
         world.resource_mut::<R>().assert_order(0);
     }
 
-    fn a_on_insert(mut world: DeferredWorld<ResourceWorld>, _: In<HookContext>) {
+    fn a_on_insert(_: In<HookContext>, mut world: DeferredWorld<ResourceWorld>) {
         world.resource_mut::<R>().assert_order(1);
     }
 
-    fn a_on_replace(mut world: DeferredWorld<ResourceWorld>, _: In<HookContext>) {
+    fn a_on_replace(_: In<HookContext>, mut world: DeferredWorld<ResourceWorld>) {
         world.resource_mut::<R>().assert_order(2);
     }
 
-    fn a_on_remove(mut world: DeferredWorld<ResourceWorld>, _: In<HookContext>) {
+    fn a_on_remove(_: In<HookContext>, mut world: DeferredWorld<ResourceWorld>) {
         world.resource_mut::<R>().assert_order(3);
     }
 
@@ -1899,28 +1971,33 @@ mod tests {
     fn component_hook_order_spawn_despawn() {
         let mut worlds = Worlds::new();
 
+        let on_add = worlds.register_system(a_on_add);
+        let on_insert = worlds.register_system(a_on_insert);
+        let on_replace = worlds.register_system(a_on_replace);
+        let on_remove = worlds.register_system(a_on_remove);
+
         let (world, resource_world) = worlds.get_2_mut::<MainWorld, ResourceWorld>();
         resource_world.init_resource::<R>();
         world
             .register_component_hooks::<A>()
-            .on_add(|mut world, _| world.resource_mut::<R>().assert_order(0))
-            .on_insert(|mut world, _| world.resource_mut::<R>().assert_order(1))
-            .on_replace(|mut world, _| world.resource_mut::<R>().assert_order(2))
-            .on_remove(|mut world, _| world.resource_mut::<R>().assert_order(3));
+            .on_add(on_add)
+            .on_insert(on_insert)
+            .on_replace(on_replace)
+            .on_remove(on_remove);
 
-        let entity = world.spawn(A).id();
-        world.despawn(entity);
+        let entity = worlds.spawn::<MainWorld, _>(A).id();
+        worlds.despawn::<MainWorld>(entity);
         assert_eq!(4, resource_world.resource::<R>().0);
     }
 
     #[test]
     fn component_hook_order_spawn_despawn_with_macro_hooks() {
         let mut worlds = Worlds::new();
-        let (world, resource_world) = worlds.get_2_mut::<MainWorld, ResourceWorld>();
+        let resource_world = worlds.get_world_mut::<ResourceWorld>();
         resource_world.init_resource::<R>();
 
-        let entity = world.spawn(AMacroHooks).id();
-        world.despawn(entity);
+        let entity = worlds.spawn::<MainWorld, _>(AMacroHooks).id();
+        worlds.despawn::<MainWorld>(entity);
 
         assert_eq!(4, resource_world.resource::<R>().0);
     }
@@ -1930,12 +2007,18 @@ mod tests {
         let mut worlds = Worlds::new();
         let (world, resource_world) = worlds.get_2_mut::<MainWorld, ResourceWorld>();
         resource_world.init_resource::<R>();
+
+        let on_add = worlds.register_system(a_on_add);
+        let on_insert = worlds.register_system(a_on_insert);
+        let on_replace = worlds.register_system(a_on_replace);
+        let on_remove = worlds.register_system(a_on_remove);
+
         world
             .register_component_hooks::<A>()
-            .on_add(|mut world, _| world.resource_mut::<R>().assert_order(0))
-            .on_insert(|mut world, _| world.resource_mut::<R>().assert_order(1))
-            .on_replace(|mut world, _| world.resource_mut::<R>().assert_order(2))
-            .on_remove(|mut world, _| world.resource_mut::<R>().assert_order(3));
+            .on_add(on_add)
+            .on_insert(on_insert)
+            .on_replace(on_replace)
+            .on_remove(on_remove);
 
         let mut entity = world.spawn_empty();
         entity.insert(A);
