@@ -70,6 +70,10 @@ impl<'w> UnsafeWorldsCell<'w> {
         unsafe { &mut *self.ptr }
     }
 
+    pub unsafe fn get(self) -> &'w Worlds {
+        unsafe { &*self.ptr }
+    }
+
     pub unsafe fn get_unsafe_world_cell_mut<W: WorldLabel>(self) -> UnsafeWorldCell<'w> {
         unsafe { self.get_mut().get_world_mut::<W>().as_unsafe_world_cell() }
     }
@@ -86,6 +90,19 @@ impl<'w> UnsafeWorldsCell<'w> {
             self.allows_mutable_access,
             "mutating worlds data via `Worlds::as_unsafe_cell_readonly` is forbidden"
         );
+    }
+
+    // Returns a mutable reference to the underlying world's [`CommandQueue`].
+    /// # Safety
+    /// It is the callers responsibility to ensure that
+    /// - the [`UnsafeWorldCell`] has permission to access the queue mutably
+    /// - no mutable references to the queue exist at the same time
+    pub(crate) unsafe fn get_raw_command_queue(self) -> RawCommandQueue {
+        self.assert_allows_mutable_access();
+        // SAFETY:
+        // - caller ensures there are no existing mutable references
+        // - caller ensures that we have permission to access the queue
+        unsafe { (*self.ptr).command_queue.clone() }
     }
 }
 
@@ -732,19 +749,6 @@ impl<'w> UnsafeWorldCell<'w> {
             .non_send_resources()
             .get(component_id)?
             .get_with_ticks()
-    }
-
-    // Returns a mutable reference to the underlying world's [`CommandQueue`].
-    /// # Safety
-    /// It is the callers responsibility to ensure that
-    /// - the [`UnsafeWorldCell`] has permission to access the queue mutably
-    /// - no mutable references to the queue exist at the same time
-    pub(crate) unsafe fn get_raw_command_queue(self) -> RawCommandQueue {
-        self.assert_allows_mutable_access();
-        // SAFETY:
-        // - caller ensures there are no existing mutable references
-        // - caller ensures that we have permission to access the queue
-        unsafe { (*self.ptr).command_queue.clone() }
     }
 
     /// # Safety

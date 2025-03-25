@@ -432,7 +432,7 @@ fn hook_on_add<E: Event, B: Bundle, S: ObserverSystem<E, B>>(
     mut world: DeferredWorld<'_>,
     HookContext { entity, .. }: HookContext,
 ) {
-    world.commands().queue(move |world: &mut World| {
+    world.component_commands().queue(move |world: &mut World| {
         let event_id = E::register_component_id(world);
         let mut components = Vec::new();
         B::component_ids(&mut world.components_registrator(), &mut |id| {

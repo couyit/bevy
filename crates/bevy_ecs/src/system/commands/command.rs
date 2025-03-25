@@ -14,7 +14,10 @@ use crate::{
     resource::Resource,
     schedule::ScheduleLabel,
     system::{IntoSystem, SystemId, SystemInput},
-    world::{ComponentWorld, FromWorld, ResourceWorld, SpawnBatchIter, World, WorldLabel},
+    world::{
+        AllWorlds, FromWorld, ManyWorldLabel, ResourceWorld, SpawnBatchIter, World, WorldLabel,
+        Worlds,
+    },
 };
 
 /// A [`World`] mutation.
@@ -45,21 +48,30 @@ use crate::{
 ///     commands.queue(AddToCounter(42));
 /// }
 /// ```
-pub trait Command<W: ComponentWorld, Out = ()>: Send + 'static {
+pub trait Command<W: ManyWorldLabel, Out = ()>: Send + 'static {
     /// Applies this command, causing it to mutate the provided `world`.
     ///
     /// This method is used to define what a command "does" when it is ultimately applied.
     /// Because this method takes `self`, you can store data or settings on the type that implements this trait.
     /// This data is set by the system or other source of the command, and then ultimately read in this method.
-    fn apply(self, world: &mut World<W>) -> Out;
+    fn apply(self, world: W::World<'_>) -> Out;
 }
 
-impl<F, W: ComponentWorld, Out> Command<W, Out> for F
+impl<F, Out> Command<AllWorlds, Out> for F
 where
-    F: FnOnce(&mut World<W>) -> Out + Send + 'static,
+    F: FnOnce(&mut Worlds) -> Out + Send + 'static,
 {
-    fn apply(self, world: &mut World<W>) -> Out {
-        self(world)
+    fn apply(self, worlds: <AllWorlds as ManyWorldLabel>::World<'_>) -> Out {
+        self(unsafe { worlds.get_mut() })
+    }
+}
+
+impl<F, Out> Command<ResourceWorld, Out> for F
+where
+    F: FnOnce(&mut World<ResourceWorld>) -> Out + Send + 'static,
+{
+    fn apply(self, world: <ResourceWorld as ManyWorldLabel>::World<'_>) -> Out {
+        self(unsafe { world.world_mut() }.as_world_mut())
     }
 }
 
@@ -67,15 +79,14 @@ where
 ///
 /// This is more efficient than spawning the entities individually.
 #[track_caller]
-pub fn spawn_batch<I, W>(bundles_iter: I) -> impl Command<W>
+pub fn spawn_batch<I>(bundles_iter: I) -> impl Command<AllWorlds>
 where
     I: IntoIterator + Send + Sync + 'static,
     I::Item: Bundle<Effect: NoBundleEffect>,
-    W: ComponentWorld,
 {
     let caller = MaybeLocation::caller();
-    move |world: &mut World<W>| {
-        SpawnBatchIter::new(world, bundles_iter.into_iter(), caller);
+    move |worlds: &mut Worlds| {
+        SpawnBatchIter::new(worlds, bundles_iter.into_iter(), caller);
     }
 }
 
@@ -86,15 +97,14 @@ where
 ///
 /// This is more efficient than inserting the bundles individually.
 #[track_caller]
-pub fn insert_batch<I, B, W>(batch: I, insert_mode: InsertMode) -> impl Command<W, Result>
+pub fn insert_batch<I, B>(batch: I, insert_mode: InsertMode) -> impl Command<AllWorlds, Result>
 where
     I: IntoIterator<Item = (Entity, B)> + Send + Sync + 'static,
     B: Bundle<Effect: NoBundleEffect>,
-    W: ComponentWorld,
 {
     let caller = MaybeLocation::caller();
-    move |world: &mut World<W>| -> Result {
-        world.try_insert_batch_with_caller(batch, insert_mode, caller)?;
+    move |worlds: &mut Worlds| -> Result {
+        worlds.try_insert_batch_with_caller(batch, insert_mode, caller)?;
         Ok(())
     }
 }
@@ -125,54 +135,51 @@ pub fn remove_resource<R: Resource>() -> impl Command<ResourceWorld> {
 }
 
 /// A [`Command`] that runs the system corresponding to the given [`SystemId`].
-pub fn run_system<O: 'static, W: WorldLabel>(id: SystemId<(), O>) -> impl Command<W, Result> {
-    move |world: &mut World<W>| -> Result {
-        world.run_system(id)?;
+pub fn run_system<O: 'static>(id: SystemId) -> impl Command<AllWorlds, Result> {
+    move |worlds: &mut Worlds| -> Result {
+        worlds.run_system(id)?;
         Ok(())
     }
 }
 
 /// A [`Command`] that runs the system corresponding to the given [`SystemId`]
 /// and provides the given input value.
-pub fn run_system_with<I, W>(id: SystemId<I>, input: I::Inner<'static>) -> impl Command<W, Result>
+pub fn run_system_with<I>(id: SystemId, input: I::Inner<'static>) -> impl Command<AllWorlds, Result>
 where
     I: SystemInput<Inner<'static>: Send> + 'static,
-    W: WorldLabel,
 {
-    move |world: &mut World<W>| -> Result {
-        world.run_system_with(id, input)?;
+    move |worlds: &mut Worlds| -> Result {
+        worlds.run_system_with::<I, _>(id, input)?;
         Ok(())
     }
 }
 
 /// A [`Command`] that runs the given system,
 /// caching its [`SystemId`] in a [`CachedSystemId`](crate::system::CachedSystemId) resource.
-pub fn run_system_cached<M, S, W>(system: S) -> impl Command<W, Result>
+pub fn run_system_cached<M, S>(system: S) -> impl Command<AllWorlds, Result>
 where
     M: 'static,
     S: IntoSystem<(), (), M> + Send + 'static,
-    W: WorldLabel,
 {
-    move |world: &mut World<W>| -> Result {
-        world.run_system_cached(system)?;
+    move |worlds: &mut Worlds| -> Result {
+        worlds.run_system_cached(system)?;
         Ok(())
     }
 }
 
 /// A [`Command`] that runs the given system with the given input value,
 /// caching its [`SystemId`] in a [`CachedSystemId`](crate::system::CachedSystemId) resource.
-pub fn run_system_cached_with<I, M, S, W>(
+pub fn run_system_cached_with<I, M, S>(
     system: S,
     input: I::Inner<'static>,
-) -> impl Command<W, Result>
+) -> impl Command<AllWorlds, Result>
 where
     I: SystemInput<Inner<'static>: Send> + Send + 'static,
     M: 'static,
     S: IntoSystem<I, (), M> + Send + 'static,
-    W: WorldLabel,
 {
-    move |world: &mut World<W>| -> Result {
-        world.run_system_cached_with(system, input)?;
+    move |worlds: &mut Worlds| -> Result {
+        worlds.run_system_cached_with(system, input)?;
         Ok(())
     }
 }
@@ -180,38 +187,36 @@ where
 /// A [`Command`] that removes a system previously registered with
 /// [`Commands::register_system`](crate::system::Commands::register_system) or
 /// [`World::register_system`].
-pub fn unregister_system<I, O, W>(system_id: SystemId<I, O>) -> impl Command<W, Result>
+pub fn unregister_system<I, O>(system_id: SystemId) -> impl Command<AllWorlds, Result>
 where
     I: SystemInput + Send + 'static,
     O: Send + 'static,
-    W: WorldLabel,
 {
-    move |world: &mut World<W>| -> Result {
-        world.unregister_system(system_id)?;
+    move |worlds: &mut Worlds| -> Result {
+        worlds.unregister_system::<I, O>(system_id)?;
         Ok(())
     }
 }
 
 /// A [`Command`] that removes a system previously registered with
 /// [`World::register_system_cached`].
-pub fn unregister_system_cached<I, O, M, S, W>(system: S) -> impl Command<W, Result>
+pub fn unregister_system_cached<I, O, M, S>(system: S) -> impl Command<AllWorlds, Result>
 where
     I: SystemInput + Send + 'static,
     O: 'static,
     M: 'static,
     S: IntoSystem<I, O, M> + Send + 'static,
-    W: WorldLabel,
 {
-    move |world: &mut World<W>| -> Result {
-        world.unregister_system_cached(system)?;
+    move |worlds: &mut Worlds| -> Result {
+        worlds.unregister_system_cached(system)?;
         Ok(())
     }
 }
 
 /// A [`Command`] that runs the schedule corresponding to the given [`ScheduleLabel`].
-pub fn run_schedule<W: WorldLabel>(label: impl ScheduleLabel) -> impl Command<W, Result> {
-    move |world: &mut World<W>| -> Result {
-        world.try_run_schedule(label)?;
+pub fn run_schedule(label: impl ScheduleLabel) -> impl Command<AllWorlds, Result> {
+    move |worlds: &mut Worlds| -> Result {
+        worlds.try_run_schedule(label)?;
         Ok(())
     }
 }

@@ -111,7 +111,7 @@ pub trait Relationship: Component + Sized {
                 core::any::type_name::<Self>(),
                 core::any::type_name::<Self>()
             );
-            world.commands().entity(entity).remove::<Self>();
+            world.component_commands().entity(entity).remove::<Self>();
             return;
         }
         if let Ok(mut target_entity_mut) = world.get_entity_mut(target_entity) {
@@ -122,7 +122,10 @@ pub trait Relationship: Component + Sized {
             } else {
                 let mut target = <Self::RelationshipTarget as RelationshipTarget>::with_capacity(1);
                 target.collection_mut_risky().add(entity);
-                world.commands().entity(target_entity).insert(target);
+                world
+                    .component_commands()
+                    .entity(target_entity)
+                    .insert(target);
             }
         } else {
             warn!(
@@ -131,7 +134,7 @@ pub trait Relationship: Component + Sized {
                 core::any::type_name::<Self>(),
                 core::any::type_name::<Self>()
             );
-            world.commands().entity(entity).remove::<Self>();
+            world.component_commands().entity(entity).remove::<Self>();
         }
     }
 
@@ -161,7 +164,7 @@ pub trait Relationship: Component + Sized {
             {
                 relationship_target.collection_mut_risky().remove(entity);
                 if relationship_target.len() == 0 {
-                    if let Ok(mut entity) = world.commands().get_entity(target_entity) {
+                    if let Ok(mut entity) = world.component_commands().get_entity(target_entity) {
                         // this "remove" operation must check emptiness because in the event that an identical
                         // relationship is inserted on top, this despawn would result in the removal of that identical
                         // relationship ... not what we want!

@@ -20,8 +20,9 @@ use crate::{
     relationship::RelationshipHookMode,
     storage::{SparseSetIndex, SparseSets, Table, TableRow, Tables},
     world::{
-        unsafe_world_cell::UnsafeWorldCell, ComponentWorld, EntityWorldMut, InvalidComponentWorld,
-        InvalidWorld, Storage, ON_ADD, ON_INSERT, ON_REPLACE,
+        unsafe_world_cell::{UnsafeWorldCell, UnsafeWorldsCell},
+        ComponentWorld, EntityWorldMut, InvalidComponentWorld, InvalidWorld, Storage, World,
+        Worlds, ON_ADD, ON_INSERT, ON_REPLACE,
     },
 };
 use alloc::{boxed::Box, vec, vec::Vec};
@@ -1401,7 +1402,7 @@ impl<'w> BundleInserter<'w> {
 
 // SAFETY: We have exclusive world access so our pointers can't be invalidated externally
 pub(crate) struct BundleSpawner<'w> {
-    world: UnsafeWorldCell<'w>,
+    worlds: UnsafeWorldsCell<'w>,
     bundle_info: ConstNonNull<BundleInfo>,
     table: NonNull<Table>,
     archetype: NonNull<Archetype>,
@@ -1410,8 +1411,9 @@ pub(crate) struct BundleSpawner<'w> {
 
 impl<'w> BundleSpawner<'w> {
     #[inline]
-    pub fn new<T: Bundle>(world: UnsafeWorldCell<'w>, change_tick: Tick) -> Self {
-        let (bundles, sparse_sets) = match unsafe { world.world_mut() }.storage {
+    pub fn new<W: ComponentWorld, T: Bundle>(worlds: &'w mut Worlds, change_tick: Tick) -> Self {
+        let world = worlds.get_world_mut::<W>();
+        let (bundles, sparse_sets) = match world.storage {
             Storage::Components {
                 ref mut bundles,
                 ref mut sparse_sets,
@@ -1420,10 +1422,10 @@ impl<'w> BundleSpawner<'w> {
             Storage::Resources { .. } => panic!("Storage is not for Components"),
         };
 
-        let mut registrator = unsafe { world.world_mut() }.components_registrator();
+        let mut registrator = world.components_registrator();
         let bundle_id = bundles.register_info::<T>(&mut registrator, sparse_sets);
         // SAFETY: we initialized this bundle_id in `init_info`
-        unsafe { Self::new_with_id(world, bundle_id, change_tick) }
+        unsafe { Self::new_with_id::<W>(worlds, bundle_id, change_tick) }
     }
 
     /// Creates a new [`BundleSpawner`].
@@ -1431,12 +1433,13 @@ impl<'w> BundleSpawner<'w> {
     /// # Safety
     /// Caller must ensure that `bundle_id` exists in `world.bundles`
     #[inline]
-    pub(crate) unsafe fn new_with_id(
-        cell: UnsafeWorldCell<'w>,
+    pub(crate) unsafe fn new_with_id<W: ComponentWorld>(
+        worlds: &'w mut Worlds,
         bundle_id: BundleId,
         change_tick: Tick,
     ) -> Self {
-        let (archetypes, bundles, tables) = match unsafe { cell.world_mut() }.storage {
+        let world = worlds.get_world_mut::<W>();
+        let (archetypes, bundles, tables) = match world.storage {
             Storage::Components {
                 ref mut archetypes,
                 ref mut bundles,
@@ -1445,8 +1448,6 @@ impl<'w> BundleSpawner<'w> {
             } => (archetypes, bundles, tables),
             Storage::Resources { .. } => panic!("Storage is not for Components"),
         };
-
-        let world = unsafe { cell.world() };
 
         let bundle_info = bundles.get_unchecked(bundle_id);
         let new_archetype_id = bundle_info.insert_bundle_into_archetype(
@@ -1463,7 +1464,7 @@ impl<'w> BundleSpawner<'w> {
             table: table.into(),
             archetype: archetype.into(),
             change_tick,
-            world: cell,
+            worlds: worlds.as_unsafe_cell(),
         }
     }
 
@@ -1475,8 +1476,6 @@ impl<'w> BundleSpawner<'w> {
         table.reserve(additional);
     }
 
-    /// # Safety
-    /// `entity` must be allocated (but non-existent), `T` must match this [`BundleInfo`]'s type
     #[inline]
     #[track_caller]
     pub unsafe fn spawn_non_existent<T: DynamicBundle>(
@@ -1517,10 +1516,25 @@ impl<'w> BundleSpawner<'w> {
             (location, after_effect)
         };
 
+        (location, after_effect)
+    }
+
+    /// # Safety
+    /// `entity` must be allocated (but non-existent), `T` must match this [`BundleInfo`]'s type
+    #[inline]
+    pub unsafe fn spawn_non_existent_and_trigger<T: DynamicBundle>(
+        &mut self,
+        entity: Entity,
+        bundle: T,
+        caller: MaybeLocation,
+    ) -> (EntityLocation, T::Effect) {
+        let (location, after_effect) = self.spawn_non_existent(entity, bundle, caller);
+
         // SAFETY: We have no outstanding mutable references to world as they were dropped
         let mut deferred_world = unsafe { self.world.into_deferred() };
         // SAFETY: `DeferredWorld` cannot provide mutable access to `Archetypes`.
         let archetype = self.archetype.as_ref();
+        let bundle_info = self.bundle_info.as_ref();
         // SAFETY: All components in the bundle are guaranteed to exist in the World
         // as they must be initialized before creating the BundleInfo.
         unsafe {

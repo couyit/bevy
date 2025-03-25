@@ -328,7 +328,7 @@ impl SystemBuffer for CommandQueue {
 
     #[inline]
     fn queue(&mut self, _system_meta: &SystemMeta, mut world: DeferredWorld) {
-        world.commands().append(self);
+        world.component_commands().append(self);
     }
 }
 

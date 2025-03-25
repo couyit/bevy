@@ -5583,9 +5583,11 @@ mod tests {
         let mut world = World::new();
         let entity = world
             .spawn_empty()
-            .observe(|trigger: Trigger<TestEvent>, mut commands: ComponentCommands| {
-                commands.entity(trigger.target()).insert(TestComponent(0));
-            })
+            .observe(
+                |trigger: Trigger<TestEvent>, mut commands: ComponentCommands| {
+                    commands.entity(trigger.target()).insert(TestComponent(0));
+                },
+            )
             .id();
 
         // this should not be needed, but is currently required to tease out the bug
@@ -5624,9 +5626,11 @@ mod tests {
     fn archetype_modifications_trigger_flush() {
         let mut world = World::new();
         world.insert_resource(TestFlush(0));
-        world.add_observer(|_: Trigger<OnAdd, TestComponent>, mut commands: ComponentCommands| {
-            commands.queue(count_flush);
-        });
+        world.add_observer(
+            |_: Trigger<OnAdd, TestComponent>, mut commands: ComponentCommands| {
+                commands.queue(count_flush);
+            },
+        );
         world.add_observer(
             |_: Trigger<OnRemove, TestComponent>, mut commands: ComponentCommands| {
                 commands.queue(count_flush);
@@ -5670,7 +5674,7 @@ mod tests {
 
     fn ord_a_hook_on_add(mut world: DeferredWorld, HookContext { entity, .. }: HookContext) {
         world.resource_mut::<TestVec>().0.push("OrdA hook on_add");
-        world.commands().entity(entity).insert(OrdB);
+        world.component_commands().entity(entity).insert(OrdB);
     }
 
     fn ord_a_hook_on_insert(mut world: DeferredWorld, HookContext { entity, .. }: HookContext) {
@@ -5678,8 +5682,8 @@ mod tests {
             .resource_mut::<TestVec>()
             .0
             .push("OrdA hook on_insert");
-        world.commands().entity(entity).remove::<OrdA>();
-        world.commands().entity(entity).remove::<OrdB>();
+        world.component_commands().entity(entity).remove::<OrdA>();
+        world.component_commands().entity(entity).remove::<OrdB>();
     }
 
     fn ord_a_hook_on_replace(mut world: DeferredWorld, _: HookContext) {
@@ -5718,7 +5722,7 @@ mod tests {
 
     fn ord_b_hook_on_add(mut world: DeferredWorld, _: HookContext) {
         world.resource_mut::<TestVec>().0.push("OrdB hook on_add");
-        world.commands().queue(|world: &mut World| {
+        world.component_commands().queue(|world: &mut World| {
             world
                 .resource_mut::<TestVec>()
                 .0

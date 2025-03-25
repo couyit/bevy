@@ -89,6 +89,7 @@ pub struct Worlds {
     pub(crate) indices: TypeIdMap<WorldId>,
     pub(crate) worlds: Vec<World<InvalidWorld>>,
     pub(crate) systems: Systems,
+    pub(crate) command_queue: RawCommandQueue,
 }
 
 impl Default for Worlds {
@@ -97,11 +98,26 @@ impl Default for Worlds {
             id: WorldsId::new().unwrap(),
             indices: TypeIdMap::default(),
             worlds: Vec::with_capacity(2),
+            systems: Default::default(),
+            command_queue: RawCommandQueue::new(),
         };
 
         world.create_world::<MainWorld>();
 
         world
+    }
+}
+
+impl Drop for Worlds {
+    fn drop(&mut self) {
+        // SAFETY: Not passing a pointer so the argument is always valid
+        unsafe { self.command_queue.apply_or_drop_queued(None) };
+        // SAFETY: Pointers in internal command queue are only invalidated here
+        drop(unsafe { Box::from_raw(self.command_queue.bytes.as_ptr()) });
+        // SAFETY: Pointers in internal command queue are only invalidated here
+        drop(unsafe { Box::from_raw(self.command_queue.cursor.as_ptr()) });
+        // SAFETY: Pointers in internal command queue are only invalidated here
+        drop(unsafe { Box::from_raw(self.command_queue.panic_recovery.as_ptr()) });
     }
 }
 
@@ -183,6 +199,217 @@ impl Worlds {
             (right[v_id.0].as_world_mut(), left[w_id.0].as_world_mut())
         } else {
             panic!()
+        }
+    }
+
+    /// Spawns a new [`Entity`] and returns a corresponding [`EntityWorldMut`], which can be used
+    /// to add components to the entity or retrieve its id.
+    ///
+    /// ```
+    /// use bevy_ecs::{component::Component, world::World};
+    ///
+    /// #[derive(Component)]
+    /// struct Position {
+    ///   x: f32,
+    ///   y: f32,
+    /// }
+    /// #[derive(Component)]
+    /// struct Label(&'static str);
+    /// #[derive(Component)]
+    /// struct Num(u32);
+    ///
+    /// let mut world = World::new();
+    /// let entity = world.spawn_empty()
+    ///     .insert(Position { x: 0.0, y: 0.0 }) // add a single component
+    ///     .insert((Num(1), Label("hello"))) // add a bundle of components
+    ///     .id();
+    ///
+    /// let position = world.entity(entity).get::<Position>().unwrap();
+    /// assert_eq!(position.x, 0.0);
+    /// ```
+    #[track_caller]
+    pub fn spawn_empty<W: ComponentWorld>(&mut self) -> EntityWorldMut {
+        let world = self.get_world_mut::<W>();
+        world.flush();
+        let entity = world.entities_mut().alloc();
+        // SAFETY: entity was just allocated
+        unsafe { self.spawn_at_empty_internal(entity, MaybeLocation::caller()) }
+    }
+
+    /// Spawns a new [`Entity`] with a given [`Bundle`] of [components](`Component`) and returns
+    /// a corresponding [`EntityWorldMut`], which can be used to add components to the entity or
+    /// retrieve its id. In case large batches of entities need to be spawned, consider using
+    /// [`World::spawn_batch`] instead.
+    ///
+    /// ```
+    /// use bevy_ecs::{bundle::Bundle, component::Component, world::World};
+    ///
+    /// #[derive(Component)]
+    /// struct Position {
+    ///   x: f32,
+    ///   y: f32,
+    /// }
+    ///
+    /// #[derive(Component)]
+    /// struct Velocity {
+    ///     x: f32,
+    ///     y: f32,
+    /// };
+    ///
+    /// #[derive(Component)]
+    /// struct Name(&'static str);
+    ///
+    /// #[derive(Bundle)]
+    /// struct PhysicsBundle {
+    ///     position: Position,
+    ///     velocity: Velocity,
+    /// }
+    ///
+    /// let mut world = World::new();
+    ///
+    /// // `spawn` can accept a single component:
+    /// world.spawn(Position { x: 0.0, y: 0.0 });
+    ///
+    /// // It can also accept a tuple of components:
+    /// world.spawn((
+    ///     Position { x: 0.0, y: 0.0 },
+    ///     Velocity { x: 1.0, y: 1.0 },
+    /// ));
+    ///
+    /// // Or it can accept a pre-defined Bundle of components:
+    /// world.spawn(PhysicsBundle {
+    ///     position: Position { x: 2.0, y: 2.0 },
+    ///     velocity: Velocity { x: 0.0, y: 4.0 },
+    /// });
+    ///
+    /// let entity = world
+    ///     // Tuples can also mix Bundles and Components
+    ///     .spawn((
+    ///         PhysicsBundle {
+    ///             position: Position { x: 2.0, y: 2.0 },
+    ///             velocity: Velocity { x: 0.0, y: 4.0 },
+    ///         },
+    ///         Name("Elaina Proctor"),
+    ///     ))
+    ///     // Calling id() will return the unique identifier for the spawned entity
+    ///     .id();
+    /// let position = world.entity(entity).get::<Position>().unwrap();
+    /// assert_eq!(position.x, 2.0);
+    /// ```
+    #[track_caller]
+    pub fn spawn<W: ComponentWorld, B: Bundle>(&mut self, bundle: B) -> EntityWorldMut {
+        self.spawn_with_caller::<W, B>(bundle, MaybeLocation::caller())
+    }
+
+    pub(crate) fn spawn_with_caller<W: ComponentWorld, B: Bundle>(
+        &mut self,
+        bundle: B,
+        caller: MaybeLocation,
+    ) -> EntityWorldMut {
+        let world = self.get_world_mut::<W>();
+        world.flush();
+        let change_tick = world.change_tick();
+        let entity = world.entities_mut().alloc();
+        let mut bundle_spawner = BundleSpawner::new::<B>(self, change_tick);
+        // SAFETY: bundle's type matches `bundle_info`, entity is allocated but non-existent
+        let (mut entity_location, after_effect) =
+            unsafe { bundle_spawner.spawn_non_existent(entity, bundle, caller) };
+
+        // SAFETY: command_queue is not referenced anywhere else
+        if !unsafe { self.command_queue.is_empty() } {
+            self.flush_commands();
+            entity_location = world
+                .entities()
+                .get(entity)
+                .unwrap_or(EntityLocation::INVALID);
+        }
+
+        world
+            .entities_mut()
+            .set_spawned_or_despawned_by(entity.index(), caller);
+
+        // SAFETY: entity and location are valid, as they were just created above
+        let mut entity = unsafe { EntityWorldMut::new(self, entity, entity_location) };
+        after_effect.apply(&mut entity);
+        entity
+    }
+
+    /// # Safety
+    /// must be called on an entity that was just allocated
+    unsafe fn spawn_at_empty_internal<W: ComponentWorld>(
+        &mut self,
+        entity: Entity,
+        caller: MaybeLocation,
+    ) -> EntityWorldMut {
+        match self.get_world_mut::<W>().storage {
+            Storage::Components {
+                ref mut entities,
+                ref mut archetypes,
+                ref mut tables,
+                ..
+            } => {
+                let archetype = archetypes.empty_mut();
+                // PERF: consider avoiding allocating entities in the empty archetype unless needed
+                let table_row = tables[archetype.table_id()].allocate(entity);
+                // SAFETY: no components are allocated by archetype.allocate() because the archetype is
+                // empty
+                let location = unsafe { archetype.allocate(entity, table_row) };
+                entities.set(entity.index(), location);
+
+                entities.set_spawned_or_despawned_by(entity.index(), caller);
+
+                EntityWorldMut::new(self, entity, location)
+            }
+            Storage::Resources { .. } => unreachable!(),
+        }
+    }
+
+    /// Spawns a batch of entities with the same component [`Bundle`] type. Takes a given
+    /// [`Bundle`] iterator and returns a corresponding [`Entity`] iterator.
+    /// This is more efficient than spawning entities and adding components to them individually
+    /// using [`World::spawn`], but it is limited to spawning entities with the same [`Bundle`]
+    /// type, whereas spawning individually is more flexible.
+    ///
+    /// ```
+    /// use bevy_ecs::{component::Component, entity::Entity, world::World};
+    ///
+    /// #[derive(Component)]
+    /// struct Str(&'static str);
+    /// #[derive(Component)]
+    /// struct Num(u32);
+    ///
+    /// let mut world = World::new();
+    /// let entities = world.spawn_batch(vec![
+    ///   (Str("a"), Num(0)), // the first entity
+    ///   (Str("b"), Num(1)), // the second entity
+    /// ]).collect::<Vec<Entity>>();
+    ///
+    /// assert_eq!(entities.len(), 2);
+    /// ```
+    #[track_caller]
+    pub fn spawn_batch<I>(&mut self, iter: I) -> SpawnBatchIter<'_, I::IntoIter>
+    where
+        I: IntoIterator,
+        I::Item: Bundle<Effect: NoBundleEffect>,
+    {
+        SpawnBatchIter::new(self, iter.into_iter(), MaybeLocation::caller())
+    }
+
+    /// Applies any commands in the world's internal [`CommandQueue`].
+    /// This does not apply commands from any systems, only those stored in the world.
+    ///
+    /// # Panics
+    /// This will panic if any of the queued commands are [`spawn`](Commands::spawn).
+    /// If this is possible, you should instead use [`flush`](Self::flush).
+    pub(crate) fn flush_commands(&mut self) {
+        // SAFETY: `self.command_queue` is only de-allocated in `World`'s `Drop`
+        if !unsafe { self.command_queue.is_empty() } {
+            // SAFETY: `self.command_queue` is only de-allocated in `World`'s `Drop`
+            unsafe {
+                self.command_queue
+                    .clone()
+                    .apply_or_drop_queued(Some(self.into()));
+            };
         }
     }
 }
@@ -278,20 +505,6 @@ pub struct World<W: WorldLabel> {
     pub(crate) last_change_tick: Tick,
     pub(crate) last_check_tick: Tick,
     pub(crate) last_trigger_id: u32,
-    pub(crate) command_queue: RawCommandQueue,
-}
-
-impl<W: WorldLabel> Drop for World<W> {
-    fn drop(&mut self) {
-        // SAFETY: Not passing a pointer so the argument is always valid
-        unsafe { self.command_queue.apply_or_drop_queued(None) };
-        // SAFETY: Pointers in internal command queue are only invalidated here
-        drop(unsafe { Box::from_raw(self.command_queue.bytes.as_ptr()) });
-        // SAFETY: Pointers in internal command queue are only invalidated here
-        drop(unsafe { Box::from_raw(self.command_queue.cursor.as_ptr()) });
-        // SAFETY: Pointers in internal command queue are only invalidated here
-        drop(unsafe { Box::from_raw(self.command_queue.panic_recovery.as_ptr()) });
-    }
 }
 
 impl World<InvalidWorld> {
@@ -318,7 +531,6 @@ impl<W: WorldLabel> World<W> {
             last_change_tick: Tick::new(0),
             last_check_tick: Tick::new(0),
             last_trigger_id: 0,
-            command_queue: RawCommandQueue::new(),
             component_ids: ComponentIds::default(),
         };
         world.bootstrap();
@@ -1469,196 +1681,6 @@ impl<W: ComponentWorld> World<W> {
         (fetcher, commands)
     }
 
-    /// Spawns a new [`Entity`] and returns a corresponding [`EntityWorldMut`], which can be used
-    /// to add components to the entity or retrieve its id.
-    ///
-    /// ```
-    /// use bevy_ecs::{component::Component, world::World};
-    ///
-    /// #[derive(Component)]
-    /// struct Position {
-    ///   x: f32,
-    ///   y: f32,
-    /// }
-    /// #[derive(Component)]
-    /// struct Label(&'static str);
-    /// #[derive(Component)]
-    /// struct Num(u32);
-    ///
-    /// let mut world = World::new();
-    /// let entity = world.spawn_empty()
-    ///     .insert(Position { x: 0.0, y: 0.0 }) // add a single component
-    ///     .insert((Num(1), Label("hello"))) // add a bundle of components
-    ///     .id();
-    ///
-    /// let position = world.entity(entity).get::<Position>().unwrap();
-    /// assert_eq!(position.x, 0.0);
-    /// ```
-    #[track_caller]
-    pub fn spawn_empty(&mut self) -> EntityWorldMut {
-        self.flush();
-        let entity = self.entities_mut().alloc();
-        // SAFETY: entity was just allocated
-        unsafe { self.spawn_at_empty_internal(entity, MaybeLocation::caller()) }
-    }
-
-    /// Spawns a new [`Entity`] with a given [`Bundle`] of [components](`Component`) and returns
-    /// a corresponding [`EntityWorldMut`], which can be used to add components to the entity or
-    /// retrieve its id. In case large batches of entities need to be spawned, consider using
-    /// [`World::spawn_batch`] instead.
-    ///
-    /// ```
-    /// use bevy_ecs::{bundle::Bundle, component::Component, world::World};
-    ///
-    /// #[derive(Component)]
-    /// struct Position {
-    ///   x: f32,
-    ///   y: f32,
-    /// }
-    ///
-    /// #[derive(Component)]
-    /// struct Velocity {
-    ///     x: f32,
-    ///     y: f32,
-    /// };
-    ///
-    /// #[derive(Component)]
-    /// struct Name(&'static str);
-    ///
-    /// #[derive(Bundle)]
-    /// struct PhysicsBundle {
-    ///     position: Position,
-    ///     velocity: Velocity,
-    /// }
-    ///
-    /// let mut world = World::new();
-    ///
-    /// // `spawn` can accept a single component:
-    /// world.spawn(Position { x: 0.0, y: 0.0 });
-    ///
-    /// // It can also accept a tuple of components:
-    /// world.spawn((
-    ///     Position { x: 0.0, y: 0.0 },
-    ///     Velocity { x: 1.0, y: 1.0 },
-    /// ));
-    ///
-    /// // Or it can accept a pre-defined Bundle of components:
-    /// world.spawn(PhysicsBundle {
-    ///     position: Position { x: 2.0, y: 2.0 },
-    ///     velocity: Velocity { x: 0.0, y: 4.0 },
-    /// });
-    ///
-    /// let entity = world
-    ///     // Tuples can also mix Bundles and Components
-    ///     .spawn((
-    ///         PhysicsBundle {
-    ///             position: Position { x: 2.0, y: 2.0 },
-    ///             velocity: Velocity { x: 0.0, y: 4.0 },
-    ///         },
-    ///         Name("Elaina Proctor"),
-    ///     ))
-    ///     // Calling id() will return the unique identifier for the spawned entity
-    ///     .id();
-    /// let position = world.entity(entity).get::<Position>().unwrap();
-    /// assert_eq!(position.x, 2.0);
-    /// ```
-    #[track_caller]
-    pub fn spawn<B: Bundle>(&mut self, bundle: B) -> EntityWorldMut {
-        self.spawn_with_caller(bundle, MaybeLocation::caller())
-    }
-
-    pub(crate) fn spawn_with_caller<B: Bundle>(
-        &mut self,
-        bundle: B,
-        caller: MaybeLocation,
-    ) -> EntityWorldMut {
-        self.flush();
-        let change_tick = self.change_tick();
-        let entity = self.entities_mut().alloc();
-        let mut bundle_spawner = BundleSpawner::new::<B>(self, change_tick);
-        // SAFETY: bundle's type matches `bundle_info`, entity is allocated but non-existent
-        let (mut entity_location, after_effect) =
-            unsafe { bundle_spawner.spawn_non_existent(entity, bundle, caller) };
-
-        // SAFETY: command_queue is not referenced anywhere else
-        if !unsafe { self.command_queue.is_empty() } {
-            self.flush_commands();
-            entity_location = self
-                .entities()
-                .get(entity)
-                .unwrap_or(EntityLocation::INVALID);
-        }
-
-        self.entities_mut()
-            .set_spawned_or_despawned_by(entity.index(), caller);
-
-        // SAFETY: entity and location are valid, as they were just created above
-        let mut entity = unsafe { EntityWorldMut::new(self, entity, entity_location) };
-        after_effect.apply(&mut entity);
-        entity
-    }
-
-    /// # Safety
-    /// must be called on an entity that was just allocated
-    unsafe fn spawn_at_empty_internal(
-        &mut self,
-        entity: Entity,
-        caller: MaybeLocation,
-    ) -> EntityWorldMut {
-        match self.storage {
-            Storage::Components {
-                ref mut entities,
-                ref mut archetypes,
-                ref mut tables,
-                ..
-            } => {
-                let archetype = archetypes.empty_mut();
-                // PERF: consider avoiding allocating entities in the empty archetype unless needed
-                let table_row = tables[archetype.table_id()].allocate(entity);
-                // SAFETY: no components are allocated by archetype.allocate() because the archetype is
-                // empty
-                let location = unsafe { archetype.allocate(entity, table_row) };
-                entities.set(entity.index(), location);
-
-                entities.set_spawned_or_despawned_by(entity.index(), caller);
-
-                EntityWorldMut::new(self, entity, location)
-            }
-            Storage::Resources { .. } => panic!("Storage is not for Components"),
-        }
-    }
-
-    /// Spawns a batch of entities with the same component [`Bundle`] type. Takes a given
-    /// [`Bundle`] iterator and returns a corresponding [`Entity`] iterator.
-    /// This is more efficient than spawning entities and adding components to them individually
-    /// using [`World::spawn`], but it is limited to spawning entities with the same [`Bundle`]
-    /// type, whereas spawning individually is more flexible.
-    ///
-    /// ```
-    /// use bevy_ecs::{component::Component, entity::Entity, world::World};
-    ///
-    /// #[derive(Component)]
-    /// struct Str(&'static str);
-    /// #[derive(Component)]
-    /// struct Num(u32);
-    ///
-    /// let mut world = World::new();
-    /// let entities = world.spawn_batch(vec![
-    ///   (Str("a"), Num(0)), // the first entity
-    ///   (Str("b"), Num(1)), // the second entity
-    /// ]).collect::<Vec<Entity>>();
-    ///
-    /// assert_eq!(entities.len(), 2);
-    /// ```
-    #[track_caller]
-    pub fn spawn_batch<I>(&mut self, iter: I) -> SpawnBatchIter<'_, I::IntoIter>
-    where
-        I: IntoIterator,
-        I::Item: Bundle<Effect: NoBundleEffect>,
-    {
-        SpawnBatchIter::new(self, iter.into_iter(), MaybeLocation::caller())
-    }
-
     /// Retrieves a reference to the given `entity`'s [`Component`] of the given type.
     /// Returns `None` if the `entity` does not have a [`Component`] of the given type.
     /// ```
@@ -2524,24 +2546,6 @@ impl<W: ComponentWorld> World<W> {
                 }
             }
             Storage::Resources { .. } => panic!("Storage is not for Resources."),
-        }
-    }
-
-    /// Applies any commands in the world's internal [`CommandQueue`].
-    /// This does not apply commands from any systems, only those stored in the world.
-    ///
-    /// # Panics
-    /// This will panic if any of the queued commands are [`spawn`](Commands::spawn).
-    /// If this is possible, you should instead use [`flush`](Self::flush).
-    pub(crate) fn flush_commands(&mut self) {
-        // SAFETY: `self.command_queue` is only de-allocated in `World`'s `Drop`
-        if !unsafe { self.command_queue.is_empty() } {
-            // SAFETY: `self.command_queue` is only de-allocated in `World`'s `Drop`
-            unsafe {
-                self.command_queue
-                    .clone()
-                    .apply_or_drop_queued(Some(self.into()));
-            };
         }
     }
 

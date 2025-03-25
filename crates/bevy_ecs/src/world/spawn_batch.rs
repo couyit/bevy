@@ -6,6 +6,8 @@ use crate::{
 };
 use core::iter::FusedIterator;
 
+use super::Worlds;
+
 /// An iterator that spawns a series of entities and returns the [ID](Entity) of
 /// each spawned entity.
 ///
@@ -27,7 +29,7 @@ where
 {
     #[inline]
     #[track_caller]
-    pub(crate) fn new(world: &'w mut World, iter: I, caller: MaybeLocation) -> Self {
+    pub(crate) fn new(worlds: &'w mut Worlds, iter: I, caller: MaybeLocation) -> Self {
         // Ensure all entity allocations are accounted for so `self.entities` can realloc if
         // necessary
         world.flush();
@@ -38,7 +40,7 @@ where
         let length = upper.unwrap_or(lower);
         world.entities.reserve(length as u32);
 
-        let mut spawner = BundleSpawner::new::<I::Item>(world, change_tick);
+        let mut spawner = BundleSpawner::new::<I::Item>(worlds, change_tick);
         spawner.reserve_storage(length);
 
         Self {
