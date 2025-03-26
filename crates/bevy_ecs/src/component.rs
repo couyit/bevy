@@ -1870,6 +1870,7 @@ pub struct Components<W: WorldLabel> {
     resource_indices: TypeIdMap<ComponentId>,
     // This is kept internal and local to verify that no deadlocks can occor.
     queued: bevy_platform_support::sync::RwLock<QueuedComponents>,
+    marker: PhantomData<W>,
 }
 
 impl<W: WorldLabel> Components<W> {
