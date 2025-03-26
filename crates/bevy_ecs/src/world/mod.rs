@@ -89,7 +89,6 @@ pub struct Worlds {
     pub(crate) indices: TypeIdMap<WorldId>,
     pub(crate) worlds: Vec<World<InvalidWorld>>,
     pub(crate) systems: Systems,
-    pub(crate) command_queue: RawCommandQueue,
 }
 
 impl Default for Worlds {
@@ -99,25 +98,11 @@ impl Default for Worlds {
             indices: TypeIdMap::default(),
             worlds: Vec::with_capacity(2),
             systems: Default::default(),
-            command_queue: RawCommandQueue::new(),
         };
 
         world.create_world::<MainWorld>();
 
         world
-    }
-}
-
-impl Drop for Worlds {
-    fn drop(&mut self) {
-        // SAFETY: Not passing a pointer so the argument is always valid
-        unsafe { self.command_queue.apply_or_drop_queued(None) };
-        // SAFETY: Pointers in internal command queue are only invalidated here
-        drop(unsafe { Box::from_raw(self.command_queue.bytes.as_ptr()) });
-        // SAFETY: Pointers in internal command queue are only invalidated here
-        drop(unsafe { Box::from_raw(self.command_queue.cursor.as_ptr()) });
-        // SAFETY: Pointers in internal command queue are only invalidated here
-        drop(unsafe { Box::from_raw(self.command_queue.panic_recovery.as_ptr()) });
     }
 }
 
@@ -1092,6 +1077,20 @@ pub struct World<W: WorldLabel> {
     pub(crate) last_change_tick: Tick,
     pub(crate) last_check_tick: Tick,
     pub(crate) last_trigger_id: u32,
+    pub(crate) command_queue: RawCommandQueue,
+}
+
+impl<W: WorldLabel> Drop for World<W> {
+    fn drop(&mut self) {
+        // SAFETY: Not passing a pointer so the argument is always valid
+        unsafe { self.command_queue.apply_or_drop_queued(None) };
+        // SAFETY: Pointers in internal command queue are only invalidated here
+        drop(unsafe { Box::from_raw(self.command_queue.bytes.as_ptr()) });
+        // SAFETY: Pointers in internal command queue are only invalidated here
+        drop(unsafe { Box::from_raw(self.command_queue.cursor.as_ptr()) });
+        // SAFETY: Pointers in internal command queue are only invalidated here
+        drop(unsafe { Box::from_raw(self.command_queue.panic_recovery.as_ptr()) });
+    }
 }
 
 impl World<InvalidWorld> {
@@ -1119,6 +1118,7 @@ impl<W: WorldLabel> World<W> {
             last_check_tick: Tick::new(0),
             last_trigger_id: 0,
             component_ids: ComponentIds::default(),
+            command_queue: RawCommandQueue::new(),
         };
         world.bootstrap();
         world

@@ -591,7 +591,7 @@ impl<'w, 's, W: ComponentWorld> ComponentCommands<'w, 's, W> {
     /// # bevy_ecs::system::assert_is_system(add_three_to_counter_system);
     /// # bevy_ecs::system::assert_is_system(add_twenty_five_to_counter_system);
     /// ```
-    pub fn queue<C: Command<W, T> + HandleError<W, T>, T>(&mut self, command: C) {
+    pub fn queue<C: Command<T> + HandleError<T>, T>(&mut self, command: C) {
         self.queue_internal(command.handle_error());
     }
 
@@ -641,7 +641,7 @@ impl<'w, 's, W: ComponentWorld> ComponentCommands<'w, 's, W> {
     /// # bevy_ecs::system::assert_is_system(add_three_to_counter_system);
     /// # bevy_ecs::system::assert_is_system(add_twenty_five_to_counter_system);
     /// ```
-    pub fn queue_handled<C: Command<W, T> + HandleError<W, T>, T>(
+    pub fn queue_handled<C: Command<WT> + HandleError<T>, T>(
         &mut self,
         command: C,
         error_handler: fn(BevyError, ErrorContext),

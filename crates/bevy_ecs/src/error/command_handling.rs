@@ -3,20 +3,20 @@ use core::{any::type_name, fmt};
 use crate::{
     entity::Entity,
     system::{entity_command::EntityCommandError, Command, EntityCommand},
-    world::{error::EntityMutableFetchError, ComponentWorld, World},
+    world::{error::EntityMutableFetchError, ComponentWorld, Worlds},
 };
 
 use super::{default_error_handler, BevyError, ErrorContext};
 
 /// Takes a [`Command`] that returns a Result and uses a given error handler function to convert it into
 /// a [`Command`] that internally handles an error if it occurs and returns `()`.
-pub trait HandleError<W: ComponentWorld, Out = ()> {
+pub trait HandleError<Out = ()> {
     /// Takes a [`Command`] that returns a Result and uses a given error handler function to convert it into
     /// a [`Command`] that internally handles an error if it occurs and returns `()`.
-    fn handle_error_with(self, error_handler: fn(BevyError, ErrorContext)) -> impl Command<W>;
+    fn handle_error_with(self, error_handler: fn(BevyError, ErrorContext)) -> impl Command;
     /// Takes a [`Command`] that returns a Result and uses the default error handler function to convert it into
     /// a [`Command`] that internally handles an error if it occurs and returns `()`.
-    fn handle_error(self) -> impl Command<W>
+    fn handle_error(self) -> impl Command
     where
         Self: Sized,
     {
@@ -24,14 +24,13 @@ pub trait HandleError<W: ComponentWorld, Out = ()> {
     }
 }
 
-impl<C, T, E, W> HandleError<W, Result<T, E>> for C
+impl<C, T, E> HandleError<Result<T, E>> for C
 where
-    C: Command<W, Result<T, E>>,
+    C: Command<Result<T, E>>,
     E: Into<BevyError>,
-    W: ComponentWorld,
 {
-    fn handle_error_with(self, error_handler: fn(BevyError, ErrorContext)) -> impl Command<W> {
-        move |world: &mut World<W>| match self.apply(world) {
+    fn handle_error_with(self, error_handler: fn(BevyError, ErrorContext)) -> impl Command {
+        move |worlds: &mut Worlds| match self.apply(worlds.as_unsafe_cell()) {
             Ok(_) => {}
             Err(err) => (error_handler)(
                 err.into(),
@@ -43,17 +42,16 @@ where
     }
 }
 
-impl<C, W> HandleError<W> for C
+impl<C> HandleError for C
 where
-    C: Command<W>,
-    W: ComponentWorld,
+    C: Command,
 {
     #[inline]
-    fn handle_error_with(self, _error_handler: fn(BevyError, ErrorContext)) -> impl Command<W> {
+    fn handle_error_with(self, _error_handler: fn(BevyError, ErrorContext)) -> impl Command {
         self
     }
     #[inline]
-    fn handle_error(self) -> impl Command<W>
+    fn handle_error(self) -> impl Command
     where
         Self: Sized,
     {
@@ -71,21 +69,21 @@ where
 pub trait CommandWithEntity<W: ComponentWorld, Out> {
     /// Passes in a specific entity to an [`EntityCommand`], resulting in a [`Command`] that
     /// internally runs the [`EntityCommand`] on that entity.
-    fn with_entity(self, entity: Entity) -> impl Command<W, Out> + HandleError<W, Out>;
+    fn with_entity(self, entity: Entity) -> impl Command<Out> + HandleError<Out>;
 }
 
 impl<C, W> CommandWithEntity<W, Result<(), EntityMutableFetchError>> for C
 where
-    C: EntityCommand,
+    C: EntityCommand<W>,
     W: ComponentWorld,
 {
     fn with_entity(
         self,
         entity: Entity,
-    ) -> impl Command<W, Result<(), EntityMutableFetchError>>
-           + HandleError<W, Result<(), EntityMutableFetchError>> {
-        move |world: &mut World<W>| -> Result<(), EntityMutableFetchError> {
-            let entity = world.get_entity_mut(entity)?;
+    ) -> impl Command<Result<(), EntityMutableFetchError>>
+           + HandleError<Result<(), EntityMutableFetchError>> {
+        move |worlds: &mut Worlds| -> Result<(), EntityMutableFetchError> {
+            let entity = worlds.get_entity_mut::<W>(entity)?;
             self.apply(entity);
             Ok(())
         }
@@ -94,17 +92,17 @@ where
 
 impl<C, T, Err, W> CommandWithEntity<W, Result<T, EntityCommandError<Err>>> for C
 where
-    C: EntityCommand<Result<T, Err>>,
+    C: EntityCommand<W, Result<T, Err>>,
     Err: fmt::Debug + fmt::Display + Send + Sync + 'static,
     W: ComponentWorld,
 {
     fn with_entity(
         self,
         entity: Entity,
-    ) -> impl Command<W, Result<T, EntityCommandError<Err>>>
-           + HandleError<W, Result<T, EntityCommandError<Err>>> {
-        move |world: &mut World<W>| {
-            let entity = world.get_entity_mut(entity)?;
+    ) -> impl Command<Result<T, EntityCommandError<Err>>> + HandleError<Result<T, EntityCommandError<Err>>>
+    {
+        move |worlds: &mut Worlds| {
+            let entity = worlds.get_entity_mut::<W>(entity)?;
             self.apply(entity)
                 .map_err(EntityCommandError::CommandFailed)
         }

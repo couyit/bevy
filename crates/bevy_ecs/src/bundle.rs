@@ -1126,47 +1126,13 @@ impl<'w, W: ComponentWorld> BundleInserter<'w, W> {
         }
     }
 
-    pub fn insert<T: DynamicBundle>(
-        &mut self,
-        entity: Entity,
-        location: EntityLocation,
-        bundle: T,
-        insert_mode: InsertMode,
-        caller: MaybeLocation,
-    ) -> (EntityLocation, T::Effect) {
-        unsafe { self.insert_internal(None, entity, location, bundle, insert_mode, caller, None) }
-    }
-
-    pub fn insert_and_trigger<T: DynamicBundle>(
-        &mut self,
-        worlds: &'w mut Worlds,
-        entity: Entity,
-        location: EntityLocation,
-        bundle: T,
-        insert_mode: InsertMode,
-        caller: MaybeLocation,
-        relationship_hook_mode: RelationshipHookMode,
-    ) -> (EntityLocation, T::Effect) {
-        unsafe {
-            self.insert_internal(
-                Some(worlds.as_unsafe_cell()),
-                entity,
-                location,
-                bundle,
-                insert_mode,
-                caller,
-                Some(relationship_hook_mode),
-            )
-        }
-    }
-
     /// # Safety
     /// `entity` must currently exist in the source archetype for this inserter. `location`
     /// must be `entity`'s location in the archetype. `T` must match this [`BundleInfo`]'s type
     #[inline]
-    pub unsafe fn insert_internal<T: DynamicBundle>(
+    pub unsafe fn insert<T: DynamicBundle>(
         &mut self,
-        worlds: Option<UnsafeWorldsCell<'w>>,
+        world: UnsafeWorldCell,
         entity: Entity,
         location: EntityLocation,
         bundle: T,
@@ -1180,9 +1146,9 @@ impl<'w, W: ComponentWorld> BundleInserter<'w, W> {
 
         // SAFETY: All components in the bundle are guaranteed to exist in the World
         // as they must be initialized before creating the BundleInfo.
-        worlds.map(|worlds| unsafe {
+        unsafe {
             // SAFETY: Mutable references do not alias and will be dropped after this block
-            let mut deferred_world = worlds.into_deferred::<W>();
+            let mut deferred_world = world.into_deferred::<W>();
 
             if insert_mode == InsertMode::Replace {
                 if archetype.has_replace_observer() {
@@ -1201,7 +1167,7 @@ impl<'w, W: ComponentWorld> BundleInserter<'w, W> {
                     relationship_hook_mode.unwrap(),
                 );
             }
-        });
+        }
 
         let table = self.table.as_mut();
 
@@ -1383,8 +1349,8 @@ impl<'w, W: ComponentWorld> BundleInserter<'w, W> {
 
         // SAFETY: All components in the bundle are guaranteed to exist in the World
         // as they must be initialized before creating the BundleInfo.
-        worlds.map(|worlds| unsafe {
-            let mut deferred_world = worlds.into_deferred::<W>();
+        unsafe {
+            let mut deferred_world = world.into_deferred::<W>();
             deferred_world.trigger_on_add(
                 new_archetype,
                 entity,
@@ -1438,7 +1404,7 @@ impl<'w, W: ComponentWorld> BundleInserter<'w, W> {
                     }
                 }
             }
-        });
+        }
 
         (new_location, after_effect)
     }

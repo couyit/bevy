@@ -420,8 +420,8 @@ impl Observers {
     }
 
     /// This will run the observers of the given `event_type`, targeting the given `entity` and `components`.
-    pub(crate) fn invoke<T>(
-        mut world: DeferredWorld,
+    pub(crate) fn invoke<W: WorldLabel, T>(
+        mut world: DeferredWorld<W>,
         event_type: ComponentId,
         target: Entity,
         components: impl Iterator<Item = ComponentId> + Clone,
@@ -429,59 +429,57 @@ impl Observers {
         propagate: &mut bool,
         caller: MaybeLocation,
     ) {
-        // SAFETY: You cannot get a mutable reference to `observers` from `DeferredWorld`
-        let (mut world, observers) = unsafe {
-            let world = world.as_unsafe_world_cell();
+        let trigger_for_components = components.clone();
+
+        world.commands().queue(|worlds| {
+            let world = worlds.get_unsafe_world_cell::<W>();
             // SAFETY: There are no outstanding world references
             world.increment_trigger_id();
             let observers = world.observers();
             let Some(observers) = observers.try_get_observers(event_type) else {
                 return;
             };
-            // SAFETY: The only outstanding reference to world is `observers`
-            (world.into_deferred(), observers)
-        };
 
-        let trigger_for_components = components.clone();
+            let mut trigger_observer = |(&observer, runner): (&Entity, &ObserverRunner)| {
+                (runner)(
+                    worlds.as_unsafe_cell(),
+                    ObserverTrigger {
+                        observer,
+                        event_type,
+                        components: components.clone().collect(),
+                        target,
+                        caller,
+                    },
+                    data.into(),
+                    propagate,
+                );
+            };
 
-        let mut trigger_observer = |(&observer, runner): (&Entity, &ObserverRunner)| {
-            (runner)(
-                world.reborrow(),
-                ObserverTrigger {
-                    observer,
-                    event_type,
-                    components: components.clone().collect(),
-                    target,
-                    caller,
-                },
-                data.into(),
-                propagate,
-            );
-        };
-        // Trigger observers listening for any kind of this trigger
-        observers.map.iter().for_each(&mut trigger_observer);
+            // Trigger observers listening for any kind of this trigger
+            observers.map.iter().for_each(&mut trigger_observer);
 
-        // Trigger entity observers listening for this kind of trigger
-        if target != Entity::PLACEHOLDER {
-            if let Some(map) = observers.entity_observers.get(&target) {
-                map.iter().for_each(&mut trigger_observer);
-            }
-        }
-
-        // Trigger observers listening to this trigger targeting a specific component
-        trigger_for_components.for_each(|id| {
-            if let Some(component_observers) = observers.component_observers.get(&id) {
-                component_observers
-                    .map
-                    .iter()
-                    .for_each(&mut trigger_observer);
-
-                if target != Entity::PLACEHOLDER {
-                    if let Some(map) = component_observers.entity_map.get(&target) {
-                        map.iter().for_each(&mut trigger_observer);
-                    }
+            // Trigger entity observers listening for this kind of trigger
+            if target != Entity::PLACEHOLDER {
+                if let Some(map) = observers.entity_observers.get(&target) {
+                    map.iter().for_each(&mut trigger_observer);
                 }
             }
+
+            // Trigger observers listening to this trigger targeting a specific component
+            trigger_for_components.for_each(|id| {
+                if let Some(component_observers) = observers.component_observers.get(&id) {
+                    component_observers
+                        .map
+                        .iter()
+                        .for_each(&mut trigger_observer);
+
+                    if target != Entity::PLACEHOLDER {
+                        if let Some(map) = component_observers.entity_map.get(&target) {
+                            map.iter().for_each(&mut trigger_observer);
+                        }
+                    }
+                }
+            });
         });
     }
 
@@ -1681,9 +1679,11 @@ mod tests {
 
         let mut world = World::new();
         // This fails because `ResA` is not present in the world
-        world.add_observer(|_: Trigger<EventA>, _: Res<ResA>, mut commands: ComponentCommands| {
-            commands.insert_resource(ResB);
-        });
+        world.add_observer(
+            |_: Trigger<EventA>, _: Res<ResA>, mut commands: ComponentCommands| {
+                commands.insert_resource(ResB);
+            },
+        );
         world.trigger(EventA);
     }
 
