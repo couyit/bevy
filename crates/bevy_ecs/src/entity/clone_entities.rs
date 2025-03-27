@@ -483,7 +483,10 @@ impl<W: ComponentWorld> EntityCloner<W> {
             bundle_scratch = BundleScratch::with_capacity(archetype.component_count());
             // SAFETY: no other references to command queue exist
             let mut commands = unsafe {
-                ComponentCommands::new_raw_from_entities(world.get_raw_command_queue(), world.entities())
+                ComponentCommands::new_raw_from_entities(
+                    world.get_raw_command_queue(),
+                    world.entities(),
+                )
             };
 
             for component in archetype.components() {
@@ -534,7 +537,12 @@ impl<W: ComponentWorld> EntityCloner<W> {
                     )
                 };
 
-                (handler)(&mut commands, &source_component, &mut ctx);
+                (handler)(
+                    &mut commands,
+                    TypeId::of::<W>(),
+                    &source_component,
+                    &mut ctx,
+                );
             }
         }
 
@@ -852,7 +860,6 @@ mod tests {
         entity::{hash_map::EntityHashMap, Entity, EntityCloner, SourceComponent},
         prelude::{ChildOf, Children, Resource},
         reflect::{AppTypeRegistry, ReflectComponent, ReflectFromWorld},
-        system::TypeErasedCommands,
         world::{FromWorld, ResourceWorld, World, Worlds},
     };
     use alloc::vec::Vec;
@@ -868,7 +875,6 @@ mod tests {
             component::ComponentCloneBehavior,
             entity::{EntityCloner, SourceComponent},
             reflect::AppTypeRegistry,
-            system::TypeErasedCommands,
             world::Worlds,
         };
         use alloc::vec;

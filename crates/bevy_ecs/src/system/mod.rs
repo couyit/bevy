@@ -127,6 +127,7 @@ mod exclusive_function_system;
 mod exclusive_system_param;
 mod function_system;
 mod input;
+mod local_system;
 mod observer_system;
 mod query;
 mod schedule_system;
@@ -145,6 +146,7 @@ pub use exclusive_function_system::*;
 pub use exclusive_system_param::*;
 pub use function_system::*;
 pub use input::*;
+pub use local_system::*;
 pub use observer_system::*;
 pub use query::*;
 pub use schedule_system::*;
@@ -153,7 +155,7 @@ pub use system_name::*;
 pub use system_param::*;
 pub use system_registry::*;
 
-use crate::world::{World, Worlds};
+use crate::world::Worlds;
 
 /// Conversion trait to turn something into a [`System`].
 ///
@@ -346,8 +348,8 @@ mod tests {
             Schedule,
         },
         system::{
-            ComponentCommands, In, IntoSystem, Local, NonSend, NonSendMut, ParamSet, Query, Res, ResMut,
-            Single, StaticSystemParam, System, SystemState,
+            ComponentCommands, In, IntoSystem, Local, NonSend, NonSendMut, ParamSet, Query, Res,
+            ResMut, Single, StaticSystemParam, System, SystemState,
         },
         world::{DeferredWorld, EntityMut, FromWorld, World},
     };

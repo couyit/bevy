@@ -25,7 +25,7 @@ pub use crate::{
     world::command_queue::CommandQueue,
 };
 pub use bevy_ecs_macros::FromWorld;
-use bevy_ecs_macros::{impl_many_world_tuple, ComponentWorld};
+use bevy_ecs_macros::{impl_many_same_world_tuple, impl_many_world_tuple, ComponentWorld};
 use bevy_utils::TypeIdMap;
 pub use component_constants::*;
 pub use deferred_world::DeferredWorld;
@@ -77,7 +77,7 @@ use crate::{
 use alloc::{boxed::Box, vec::Vec};
 use bevy_platform_support::sync::atomic::{AtomicU32, Ordering};
 use bevy_ptr::{OwningPtr, Ptr, UnsafeCellDeref};
-use core::{any::TypeId, fmt, mem::transmute, ptr};
+use core::{any::TypeId, fmt, marker::PhantomData, mem::transmute, ptr};
 use log::warn;
 use unsafe_world_cell::{UnsafeEntityCell, UnsafeWorldCell, UnsafeWorldsCell};
 
@@ -89,6 +89,8 @@ pub struct Worlds {
     pub(crate) indices: TypeIdMap<WorldId>,
     pub(crate) worlds: Vec<World<InvalidWorld>>,
     pub(crate) systems: Systems,
+    pub(crate) change_tick: AtomicU32,
+    pub(crate) last_check_tick: Tick,
 }
 
 impl Default for Worlds {
@@ -98,6 +100,8 @@ impl Default for Worlds {
             indices: TypeIdMap::default(),
             worlds: Vec::with_capacity(2),
             systems: Default::default(),
+            change_tick: AtomicU32::new(1),
+            last_check_tick: Tick::new(0),
         };
 
         world.create_world::<MainWorld>();
@@ -147,14 +151,22 @@ impl Worlds {
         &mut self.worlds
     }
 
-    pub fn get_world<T: WorldLabel>(&self) -> &World<T> {
-        let id = self.indices.get(&TypeId::of::<T>()).unwrap();
-        self.worlds[id.0].as_world()
+    pub fn get_world<W: WorldLabel>(&self) -> &World<W> {
+        self.get_world_with_id(TypeId::of::<W>()).as_world()
     }
 
-    pub fn get_world_mut<T: WorldLabel>(&mut self) -> &mut World<T> {
-        let id = self.indices.get(&TypeId::of::<T>()).unwrap();
-        self.worlds[id.0].as_world_mut()
+    pub fn get_world_mut<W: WorldLabel>(&mut self) -> &mut World<W> {
+        self.get_world_with_id_mut(TypeId::of::<W>()).as_world_mut()
+    }
+
+    pub fn get_world_with_id(&self, id: TypeId) -> &World<InvalidWorld> {
+        let id = self.indices.get(&id).unwrap();
+        &self.worlds[id.0]
+    }
+
+    pub fn get_world_with_id_mut(&mut self, id: TypeId) -> &mut World<InvalidWorld> {
+        let id = self.indices.get(&id).unwrap();
+        &mut self.worlds[id.0]
     }
 
     pub fn get_main_world(&self) -> &World<MainWorld> {
@@ -187,142 +199,35 @@ impl Worlds {
         }
     }
 
-    /// Spawns a new [`Entity`] with a given [`Bundle`] of [components](`Component`) and returns
-    /// a corresponding [`EntityWorldMut`], which can be used to add components to the entity or
-    /// retrieve its id. In case large batches of entities need to be spawned, consider using
-    /// [`World::spawn_batch`] instead.
+    /// Reads the current change tick of this world.
     ///
-    /// ```
-    /// use bevy_ecs::{bundle::Bundle, component::Component, world::World};
-    ///
-    /// #[derive(Component)]
-    /// struct Position {
-    ///   x: f32,
-    ///   y: f32,
-    /// }
-    ///
-    /// #[derive(Component)]
-    /// struct Velocity {
-    ///     x: f32,
-    ///     y: f32,
-    /// };
-    ///
-    /// #[derive(Component)]
-    /// struct Name(&'static str);
-    ///
-    /// #[derive(Bundle)]
-    /// struct PhysicsBundle {
-    ///     position: Position,
-    ///     velocity: Velocity,
-    /// }
-    ///
-    /// let mut world = World::new();
-    ///
-    /// // `spawn` can accept a single component:
-    /// world.spawn(Position { x: 0.0, y: 0.0 });
-    ///
-    /// // It can also accept a tuple of components:
-    /// world.spawn((
-    ///     Position { x: 0.0, y: 0.0 },
-    ///     Velocity { x: 1.0, y: 1.0 },
-    /// ));
-    ///
-    /// // Or it can accept a pre-defined Bundle of components:
-    /// world.spawn(PhysicsBundle {
-    ///     position: Position { x: 2.0, y: 2.0 },
-    ///     velocity: Velocity { x: 0.0, y: 4.0 },
-    /// });
-    ///
-    /// let entity = world
-    ///     // Tuples can also mix Bundles and Components
-    ///     .spawn((
-    ///         PhysicsBundle {
-    ///             position: Position { x: 2.0, y: 2.0 },
-    ///             velocity: Velocity { x: 0.0, y: 4.0 },
-    ///         },
-    ///         Name("Elaina Proctor"),
-    ///     ))
-    ///     // Calling id() will return the unique identifier for the spawned entity
-    ///     .id();
-    /// let position = world.entity(entity).get::<Position>().unwrap();
-    /// assert_eq!(position.x, 2.0);
-    /// ```
-    #[track_caller]
-    pub fn spawn<W: ComponentWorld, B: Bundle>(&mut self, bundle: B) -> EntityWorldMut<W> {
-        self.spawn_with_caller::<W, B>(bundle, MaybeLocation::caller())
+    /// If you have exclusive (`&mut`) access to the world, consider using [`change_tick()`](Self::change_tick),
+    /// which is more efficient since it does not require atomic synchronization.
+    #[inline]
+    pub fn read_change_tick(&self) -> Tick {
+        let tick = self.change_tick.load(Ordering::Acquire);
+        Tick::new(tick)
     }
 
-    pub(crate) fn spawn_with_caller<W: ComponentWorld, B: Bundle>(
-        &mut self,
-        bundle: B,
-        caller: MaybeLocation,
-    ) -> EntityWorldMut<W> {
-        let world = self.get_world_mut::<W>();
-        world.flush();
-        let change_tick = world.change_tick();
-        let entity = world.entities_mut().alloc();
-        let mut bundle_spawner = BundleSpawner::new::<B>(world, change_tick);
-        // SAFETY: bundle's type matches `bundle_info`, entity is allocated but non-existent
-        let (mut entity_location, after_effect) =
-            unsafe { bundle_spawner.spawn_non_existent(entity, bundle, caller) };
-
-        // SAFETY: command_queue is not referenced anywhere else
-        if !unsafe { self.command_queue.is_empty() } {
-            self.flush_commands();
-            entity_location = world
-                .entities()
-                .get(entity)
-                .unwrap_or(EntityLocation::INVALID);
-        }
-
-        world
-            .entities_mut()
-            .set_spawned_or_despawned_by(entity.index(), caller);
-
-        // SAFETY: entity and location are valid, as they were just created above
-        let mut entity = unsafe { EntityWorldMut::new(self, entity, entity_location) };
-        after_effect.apply(&mut entity);
-        entity
+    /// Reads the current change tick of this world.
+    ///
+    /// This does the same thing as [`read_change_tick()`](Self::read_change_tick), only this method
+    /// is more efficient since it does not require atomic synchronization.
+    #[inline]
+    pub fn change_tick(&mut self) -> Tick {
+        let tick = *self.change_tick.get_mut();
+        Tick::new(tick)
     }
 
-    /// Spawns a batch of entities with the same component [`Bundle`] type. Takes a given
-    /// [`Bundle`] iterator and returns a corresponding [`Entity`] iterator.
-    /// This is more efficient than spawning entities and adding components to them individually
-    /// using [`World::spawn`], but it is limited to spawning entities with the same [`Bundle`]
-    /// type, whereas spawning individually is more flexible.
+    /// When called from within an exclusive system (a [`System`] that takes `&mut World` as its first
+    /// parameter), this method returns the [`Tick`] indicating the last time the exclusive system was run.
     ///
-    /// ```
-    /// use bevy_ecs::{component::Component, entity::Entity, world::World};
+    /// Otherwise, this returns the `Tick` indicating the last time that [`World::clear_trackers`] was called.
     ///
-    /// #[derive(Component)]
-    /// struct Str(&'static str);
-    /// #[derive(Component)]
-    /// struct Num(u32);
-    ///
-    /// let mut world = World::new();
-    /// let entities = world.spawn_batch(vec![
-    ///   (Str("a"), Num(0)), // the first entity
-    ///   (Str("b"), Num(1)), // the second entity
-    /// ]).collect::<Vec<Entity>>();
-    ///
-    /// assert_eq!(entities.len(), 2);
-    /// ```
-    #[track_caller]
-    pub fn spawn_batch<I>(&mut self, iter: I) -> SpawnBatchIter<'_, I::IntoIter>
-    where
-        I: IntoIterator,
-        I::Item: Bundle<Effect: NoBundleEffect>,
-    {
-        SpawnBatchIter::new(self, iter.into_iter(), MaybeLocation::caller())
-    }
-
-    pub fn flush<W>(&mut self)
-    where
-        W: WorldLabel,
-        World<W>: Flushable,
-    {
-        self.get_world_mut::<W>().flush();
-        self.flush_commands();
+    /// [`System`]: crate::system::System
+    #[inline]
+    pub fn last_change_tick(&self) -> Tick {
+        self.last_change_tick
     }
 
     /// Applies any commands in the world's internal [`CommandQueue`].
@@ -331,658 +236,26 @@ impl Worlds {
     /// # Panics
     /// This will panic if any of the queued commands are [`spawn`](Commands::spawn).
     /// If this is possible, you should instead use [`flush`](Self::flush).
-    pub(crate) fn flush_commands(&mut self) {
+    pub(crate) fn flush_commands<W: WorldLabel>(&mut self) {
         // SAFETY: `self.command_queue` is only de-allocated in `World`'s `Drop`
-        if !unsafe { self.command_queue.is_empty() } {
+        if !unsafe { self.get_world::<W>().command_queue.is_empty() } {
             // SAFETY: `self.command_queue` is only de-allocated in `World`'s `Drop`
             unsafe {
-                self.command_queue
+                self.get_world::<W>()
+                    .command_queue
                     .clone()
                     .apply_or_drop_queued(Some(self.into()));
             };
         }
     }
 
-    /// Temporarily removes a [`Component`] `T` from the provided [`Entity`] and
-    /// runs the provided closure on it, returning the result if `T` was available.
-    /// This will trigger the `OnRemove` and `OnReplace` component hooks without
-    /// causing an archetype move.
-    ///
-    /// This is most useful with immutable components, where removal and reinsertion
-    /// is the only way to modify a value.
-    ///
-    /// If you do not need to ensure the above hooks are triggered, and your component
-    /// is mutable, prefer using [`get_mut`](World::get_mut).
-    ///
-    /// # Examples
-    ///
-    /// ```rust
-    /// # use bevy_ecs::prelude::*;
-    /// #
-    /// #[derive(Component, PartialEq, Eq, Debug)]
-    /// #[component(immutable)]
-    /// struct Foo(bool);
-    ///
-    /// # let mut world = World::default();
-    /// # world.register_component::<Foo>();
-    /// #
-    /// # let entity = world.spawn(Foo(false)).id();
-    /// #
-    /// world.modify_component(entity, |foo: &mut Foo| {
-    ///     foo.0 = true;
-    /// });
-    /// #
-    /// # assert_eq!(world.get::<Foo>(entity), Some(&Foo(true)));
-    /// ```
-    #[inline]
-    pub fn modify_component<W: ComponentWorld, T: Component, R>(
-        &mut self,
-        entity: Entity,
-        f: impl FnOnce(&mut T) -> R,
-    ) -> Result<Option<R>, EntityMutableFetchError> {
-        let result = DeferredWorld::<W>::from(self).modify_component(entity, f)?;
+    pub fn flush<W>(&mut self)
+    where
+        W: WorldLabel,
+        World<W>: Flushable,
+    {
         self.get_world_mut::<W>().flush();
-        Ok(result)
-    }
-
-    /// Despawns the given [`Entity`], if it exists. This will also remove all of the entity's
-    /// [`Components`](Component).
-    ///
-    /// Returns `true` if the entity is successfully despawned and `false` if
-    /// the entity does not exist.
-    ///
-    /// # Note
-    ///
-    /// This will also despawn the entities in any [`RelationshipTarget`](crate::relationship::RelationshipTarget) that is configured
-    /// to despawn descendants. For example, this will recursively despawn [`Children`](crate::hierarchy::Children).
-    ///
-    /// ```
-    /// use bevy_ecs::{component::Component, world::World};
-    ///
-    /// #[derive(Component)]
-    /// struct Position {
-    ///   x: f32,
-    ///   y: f32,
-    /// }
-    ///
-    /// let mut world = World::new();
-    /// let entity = world.spawn(Position { x: 0.0, y: 0.0 }).id();
-    /// assert!(world.despawn(entity));
-    /// assert!(world.get_entity(entity).is_err());
-    /// assert!(world.get::<Position>(entity).is_none());
-    /// ```
-    #[track_caller]
-    #[inline]
-    pub fn despawn<W: ComponentWorld>(&mut self, entity: Entity) -> bool {
-        if let Err(error) = self.despawn_with_caller::<W>(entity, MaybeLocation::caller()) {
-            warn!("{error}");
-            false
-        } else {
-            true
-        }
-    }
-
-    /// Despawns the given `entity`, if it exists. This will also remove all of the entity's
-    /// [`Components`](Component).
-    ///
-    /// Returns an [`EntityDespawnError`] if the entity does not exist.
-    ///
-    /// # Note
-    ///
-    /// This will also despawn the entities in any [`RelationshipTarget`](crate::relationship::RelationshipTarget) that is configured
-    /// to despawn descendants. For example, this will recursively despawn [`Children`](crate::hierarchy::Children).
-    #[track_caller]
-    #[inline]
-    pub fn try_despawn<W: ComponentWorld>(
-        &mut self,
-        entity: Entity,
-    ) -> Result<(), EntityDespawnError> {
-        self.despawn_with_caller::<W>(entity, MaybeLocation::caller())
-    }
-
-    #[inline]
-    pub(crate) fn despawn_with_caller<W: ComponentWorld>(
-        &mut self,
-        entity: Entity,
-        caller: MaybeLocation,
-    ) -> Result<(), EntityDespawnError> {
-        let world = self.get_world_mut::<W>();
-        world.flush();
-        let entity = world.get_entity_mut(entity)?;
-        entity.despawn_with_caller(caller);
-        Ok(())
-    }
-
-    /// For a given batch of ([`Entity`], [`Bundle`]) pairs, either spawns each [`Entity`] with the given
-    /// bundle (if the entity does not exist), or inserts the [`Bundle`] (if the entity already exists).
-    /// This is faster than doing equivalent operations one-by-one.
-    /// Returns `Ok` if all entities were successfully inserted into or spawned. Otherwise it returns an `Err`
-    /// with a list of entities that could not be spawned or inserted into. A "spawn or insert" operation can
-    /// only fail if an [`Entity`] is passed in with an "invalid generation" that conflicts with an existing [`Entity`].
-    ///
-    /// # Note
-    /// Spawning a specific `entity` value is rarely the right choice. Most apps should use [`World::spawn_batch`].
-    /// This method should generally only be used for sharing entities across apps, and only when they have a scheme
-    /// worked out to share an ID space (which doesn't happen by default).
-    ///
-    /// ```
-    /// use bevy_ecs::{entity::Entity, world::World, component::Component};
-    /// #[derive(Component)]
-    /// struct A(&'static str);
-    /// #[derive(Component, PartialEq, Debug)]
-    /// struct B(f32);
-    ///
-    /// let mut world = World::new();
-    /// let e0 = world.spawn_empty().id();
-    /// let e1 = world.spawn_empty().id();
-    /// world.insert_or_spawn_batch(vec![
-    ///   (e0, (A("a"), B(0.0))), // the first entity
-    ///   (e1, (A("b"), B(1.0))), // the second entity
-    /// ]);
-    ///
-    /// assert_eq!(world.get::<B>(e0), Some(&B(0.0)));
-    /// ```
-    #[track_caller]
-    #[deprecated(
-        note = "This can cause extreme performance problems when used with lots of arbitrary free entities. See #18054 on GitHub."
-    )]
-    pub fn insert_or_spawn_batch<W, I, B>(&mut self, iter: I) -> Result<(), Vec<Entity>>
-    where
-        W: ComponentWorld,
-        I: IntoIterator,
-        I::IntoIter: Iterator<Item = (Entity, B)>,
-        B: Bundle<Effect: NoBundleEffect>,
-    {
-        #[expect(
-            deprecated,
-            reason = "This needs to be supported for now, and the outer function is deprecated too."
-        )]
-        self.insert_or_spawn_batch_with_caller::<W, I, B>(iter, MaybeLocation::caller())
-    }
-
-    /// Split into a new function so we can pass the calling location into the function when using
-    /// as a command.
-    #[inline]
-    #[deprecated(
-        note = "This can cause extreme performance problems when used with lots of arbitrary free entities. See #18054 on GitHub."
-    )]
-    pub(crate) fn insert_or_spawn_batch_with_caller<W, I, B>(
-        &mut self,
-        iter: I,
-        caller: MaybeLocation,
-    ) -> Result<(), Vec<Entity>>
-    where
-        W: ComponentWorld,
-        I: IntoIterator,
-        I::IntoIter: Iterator<Item = (Entity, B)>,
-        B: Bundle<Effect: NoBundleEffect>,
-    {
-        let worlds_cell = self.as_unsafe_cell();
-        let world = unsafe { worlds_cell.get_mut() }.get_world_mut::<W>();
-        world.flush();
-        let change_tick = world.change_tick();
-
-        // SAFETY: These come from the same world. `Self.components_registrator` can't be used since we borrow other fields too.
-        let mut registrator =
-            unsafe { ComponentsRegistrator::new(&mut world.components, &mut world.component_ids) };
-
-        let bundle_id = match world.storage {
-            Storage::Components {
-                ref mut bundles,
-                ref mut sparse_sets,
-                ..
-            } => bundles.register_info::<B>(&mut registrator, sparse_sets),
-            Storage::Resources { .. } => panic!("Storage is not for Components."),
-        };
-
-        enum SpawnOrInsert<'w, W: ComponentWorld> {
-            Spawn(BundleSpawner<'w, W>),
-            Insert(BundleInserter<'w, W>, ArchetypeId),
-        }
-
-        impl<'w, W: ComponentWorld> SpawnOrInsert<'w, W> {
-            fn entities(&mut self) -> &mut Entities<W> {
-                match self {
-                    SpawnOrInsert::Spawn(spawner) => spawner.entities(),
-                    SpawnOrInsert::Insert(inserter, _) => inserter.entities(),
-                }
-            }
-        }
-        // SAFETY: we initialized this bundle_id in `init_info`
-        let mut spawn_or_insert = SpawnOrInsert::<W>::Spawn(unsafe {
-            BundleSpawner::new_with_id(world.as_unsafe_world_cell(), bundle_id, change_tick)
-        });
-
-        let mut invalid_entities = Vec::new();
-        for (entity, bundle) in iter {
-            #[expect(
-                deprecated,
-                reason = "This needs to be supported for now, and the outer function is deprecated too."
-            )]
-            match spawn_or_insert
-                .entities()
-                .alloc_at_without_replacement(entity)
-            {
-                AllocAtWithoutReplacement::Exists(location) => {
-                    match spawn_or_insert {
-                        SpawnOrInsert::Insert(ref mut inserter, archetype)
-                            if location.archetype_id == archetype =>
-                        {
-                            // SAFETY: `entity` is valid, `location` matches entity, bundle matches inserter
-                            inserter.insert_and_trigger(
-                                unsafe { worlds_cell.get_mut() },
-                                entity,
-                                location,
-                                bundle,
-                                InsertMode::Replace,
-                                caller,
-                                RelationshipHookMode::Run,
-                            );
-                        }
-                        _ => {
-                            // SAFETY: we initialized this bundle_id in `init_info`
-                            let mut inserter = unsafe {
-                                BundleInserter::new_with_id(
-                                    world.as_unsafe_world_cell(),
-                                    location.archetype_id,
-                                    bundle_id,
-                                    change_tick,
-                                )
-                            };
-                            // SAFETY: `entity` is valid, `location` matches entity, bundle matches inserter
-                            inserter.insert_and_trigger(
-                                unsafe { worlds_cell.get_mut() },
-                                entity,
-                                location,
-                                bundle,
-                                InsertMode::Replace,
-                                caller,
-                                RelationshipHookMode::Run,
-                            );
-                            spawn_or_insert =
-                                SpawnOrInsert::Insert(inserter, location.archetype_id);
-                        }
-                    };
-                }
-                AllocAtWithoutReplacement::DidNotExist => {
-                    if let SpawnOrInsert::Spawn(ref mut spawner) = spawn_or_insert {
-                        // SAFETY: `entity` is allocated (but non existent), bundle matches inserter
-                        unsafe { spawner.spawn_non_existent(entity, bundle, caller) };
-                    } else {
-                        // SAFETY: we initialized this bundle_id in `init_info`
-                        let mut spawner = unsafe {
-                            BundleSpawner::new_with_id(
-                                world.as_unsafe_world_cell(),
-                                bundle_id,
-                                change_tick,
-                            )
-                        };
-                        // SAFETY: `entity` is valid, `location` matches entity, bundle matches inserter
-                        unsafe { spawner.spawn_non_existent(entity, bundle, caller) };
-                        spawn_or_insert = SpawnOrInsert::Spawn(spawner);
-                    }
-                }
-                AllocAtWithoutReplacement::ExistsWithWrongGeneration => {
-                    invalid_entities.push(entity);
-                }
-            }
-        }
-
-        if invalid_entities.is_empty() {
-            Ok(())
-        } else {
-            Err(invalid_entities)
-        }
-    }
-
-    /// For a given batch of ([`Entity`], [`Bundle`]) pairs,
-    /// adds the `Bundle` of components to each `Entity`.
-    /// This is faster than doing equivalent operations one-by-one.
-    ///
-    /// A batch can be any type that implements [`IntoIterator`] containing `(Entity, Bundle)` tuples,
-    /// such as a [`Vec<(Entity, Bundle)>`] or an array `[(Entity, Bundle); N]`.
-    ///
-    /// This will overwrite any previous values of components shared by the `Bundle`.
-    /// See [`World::insert_batch_if_new`] to keep the old values instead.
-    ///
-    /// # Panics
-    ///
-    /// This function will panic if any of the associated entities do not exist.
-    ///
-    /// For the fallible version, see [`World::try_insert_batch`].
-    #[track_caller]
-    pub fn insert_batch<W, I, B>(&mut self, batch: I)
-    where
-        W: ComponentWorld,
-        I: IntoIterator,
-        I::IntoIter: Iterator<Item = (Entity, B)>,
-        B: Bundle<Effect: NoBundleEffect>,
-    {
-        self.insert_batch_with_caller::<W, I, B>(
-            batch,
-            InsertMode::Replace,
-            MaybeLocation::caller(),
-        );
-    }
-
-    /// For a given batch of ([`Entity`], [`Bundle`]) pairs,
-    /// adds the `Bundle` of components to each `Entity` without overwriting.
-    /// This is faster than doing equivalent operations one-by-one.
-    ///
-    /// A batch can be any type that implements [`IntoIterator`] containing `(Entity, Bundle)` tuples,
-    /// such as a [`Vec<(Entity, Bundle)>`] or an array `[(Entity, Bundle); N]`.
-    ///
-    /// This is the same as [`World::insert_batch`], but in case of duplicate
-    /// components it will leave the old values instead of replacing them with new ones.
-    ///
-    /// # Panics
-    ///
-    /// This function will panic if any of the associated entities do not exist.
-    ///
-    /// For the fallible version, see [`World::try_insert_batch_if_new`].
-    #[track_caller]
-    pub fn insert_batch_if_new<W, I, B>(&mut self, batch: I)
-    where
-        W: ComponentWorld,
-        I: IntoIterator,
-        I::IntoIter: Iterator<Item = (Entity, B)>,
-        B: Bundle<Effect: NoBundleEffect>,
-    {
-        self.insert_batch_with_caller::<W, I, B>(batch, InsertMode::Keep, MaybeLocation::caller());
-    }
-
-    /// Split into a new function so we can differentiate the calling location.
-    ///
-    /// This can be called by:
-    /// - [`World::insert_batch`]
-    /// - [`World::insert_batch_if_new`]
-    #[inline]
-    pub(crate) fn insert_batch_with_caller<W, I, B>(
-        &mut self,
-        batch: I,
-        insert_mode: InsertMode,
-        caller: MaybeLocation,
-    ) where
-        W: ComponentWorld,
-        I: IntoIterator,
-        I::IntoIter: Iterator<Item = (Entity, B)>,
-        B: Bundle<Effect: NoBundleEffect>,
-    {
-        struct InserterArchetypeCache<'w, W: ComponentWorld> {
-            inserter: BundleInserter<'w, W>,
-            archetype_id: ArchetypeId,
-        }
-
-        let worlds_cell = self.as_unsafe_cell();
-        let cell = unsafe { worlds_cell.get_unsafe_world_cell_mut::<W>() };
-        let world = unsafe { cell.world_mut() }.as_world_mut::<W>();
-        world.flush();
-        let change_tick = world.change_tick();
-        // SAFETY: These come from the same world. `Self.components_registrator` can't be used since we borrow other fields too.
-        let mut registrator =
-            unsafe { ComponentsRegistrator::new(&mut world.components, &mut world.component_ids) };
-
-        let (entities, bundle_id) = match world.storage {
-            Storage::Components {
-                ref mut entities,
-                ref mut bundles,
-                ref mut sparse_sets,
-                ..
-            } => (
-                entities,
-                bundles.register_info::<B>(&mut registrator, sparse_sets),
-            ),
-            Storage::Resources { .. } => unreachable!(),
-        };
-
-        let mut batch_iter = batch.into_iter();
-
-        if let Some((first_entity, first_bundle)) = batch_iter.next() {
-            if let Some(first_location) = entities.get(first_entity) {
-                let mut cache = InserterArchetypeCache {
-                    // SAFETY: we initialized this bundle_id in `register_info`
-                    inserter: unsafe {
-                        BundleInserter::<W>::new_with_id(
-                            cell,
-                            first_location.archetype_id,
-                            bundle_id,
-                            change_tick,
-                        )
-                    },
-                    archetype_id: first_location.archetype_id,
-                };
-                // SAFETY: `entity` is valid, `location` matches entity, bundle matches inserter
-                cache.inserter.insert_and_trigger(
-                    unsafe { worlds_cell.get_mut() },
-                    first_entity,
-                    first_location,
-                    first_bundle,
-                    insert_mode,
-                    caller,
-                    RelationshipHookMode::Run,
-                );
-
-                for (entity, bundle) in batch_iter {
-                    if let Some(location) = cache.inserter.entities().get(entity) {
-                        if location.archetype_id != cache.archetype_id {
-                            cache = InserterArchetypeCache {
-                                // SAFETY: we initialized this bundle_id in `register_info`
-                                inserter: unsafe {
-                                    BundleInserter::new_with_id(
-                                        cell,
-                                        location.archetype_id,
-                                        bundle_id,
-                                        change_tick,
-                                    )
-                                },
-                                archetype_id: location.archetype_id,
-                            }
-                        }
-                        // SAFETY: `entity` is valid, `location` matches entity, bundle matches inserter
-                        cache.inserter.insert_and_trigger(
-                            unsafe { worlds_cell.get_mut() },
-                            entity,
-                            location,
-                            bundle,
-                            insert_mode,
-                            caller,
-                            RelationshipHookMode::Run,
-                        );
-                    } else {
-                        panic!("error[B0003]: Could not insert a bundle (of type `{}`) for entity {entity}, which {}. See: https://bevyengine.org/learn/errors/b0003", core::any::type_name::<B>(), entities.entity_does_not_exist_error_details(entity));
-                    }
-                }
-            } else {
-                panic!("error[B0003]: Could not insert a bundle (of type `{}`) for entity {first_entity}, which {}. See: https://bevyengine.org/learn/errors/b0003", core::any::type_name::<B>(), entities.entity_does_not_exist_error_details(first_entity));
-            }
-        }
-    }
-
-    /// For a given batch of ([`Entity`], [`Bundle`]) pairs,
-    /// adds the `Bundle` of components to each `Entity`.
-    /// This is faster than doing equivalent operations one-by-one.
-    ///
-    /// A batch can be any type that implements [`IntoIterator`] containing `(Entity, Bundle)` tuples,
-    /// such as a [`Vec<(Entity, Bundle)>`] or an array `[(Entity, Bundle); N]`.
-    ///
-    /// This will overwrite any previous values of components shared by the `Bundle`.
-    /// See [`World::try_insert_batch_if_new`] to keep the old values instead.
-    ///
-    /// Returns a [`TryInsertBatchError`] if any of the provided entities do not exist.
-    ///
-    /// For the panicking version, see [`World::insert_batch`].
-    #[track_caller]
-    pub fn try_insert_batch<W, I, B>(&mut self, batch: I) -> Result<(), TryInsertBatchError>
-    where
-        W: ComponentWorld,
-        I: IntoIterator,
-        I::IntoIter: Iterator<Item = (Entity, B)>,
-        B: Bundle<Effect: NoBundleEffect>,
-    {
-        self.try_insert_batch_with_caller::<W, I, B>(
-            batch,
-            InsertMode::Replace,
-            MaybeLocation::caller(),
-        )
-    }
-    /// For a given batch of ([`Entity`], [`Bundle`]) pairs,
-    /// adds the `Bundle` of components to each `Entity` without overwriting.
-    /// This is faster than doing equivalent operations one-by-one.
-    ///
-    /// A batch can be any type that implements [`IntoIterator`] containing `(Entity, Bundle)` tuples,
-    /// such as a [`Vec<(Entity, Bundle)>`] or an array `[(Entity, Bundle); N]`.
-    ///
-    /// This is the same as [`World::try_insert_batch`], but in case of duplicate
-    /// components it will leave the old values instead of replacing them with new ones.
-    ///
-    /// Returns a [`TryInsertBatchError`] if any of the provided entities do not exist.
-    ///
-    /// For the panicking version, see [`World::insert_batch_if_new`].
-    #[track_caller]
-    pub fn try_insert_batch_if_new<W, I, B>(&mut self, batch: I) -> Result<(), TryInsertBatchError>
-    where
-        W: ComponentWorld,
-        I: IntoIterator,
-        I::IntoIter: Iterator<Item = (Entity, B)>,
-        B: Bundle<Effect: NoBundleEffect>,
-    {
-        self.try_insert_batch_with_caller::<W, I, B>(
-            batch,
-            InsertMode::Keep,
-            MaybeLocation::caller(),
-        )
-    }
-
-    /// Split into a new function so we can differentiate the calling location.
-    ///
-    /// This can be called by:
-    /// - [`World::try_insert_batch`]
-    /// - [`World::try_insert_batch_if_new`]
-    /// - [`Commands::insert_batch`]
-    /// - [`Commands::insert_batch_if_new`]
-    /// - [`Commands::try_insert_batch`]
-    /// - [`Commands::try_insert_batch_if_new`]
-    #[inline]
-    pub(crate) fn try_insert_batch_with_caller<W, I, B>(
-        &mut self,
-        batch: I,
-        insert_mode: InsertMode,
-        caller: MaybeLocation,
-    ) -> Result<(), TryInsertBatchError>
-    where
-        W: ComponentWorld,
-        I: IntoIterator,
-        I::IntoIter: Iterator<Item = (Entity, B)>,
-        B: Bundle<Effect: NoBundleEffect>,
-    {
-        struct InserterArchetypeCache<'w, W: ComponentWorld> {
-            inserter: BundleInserter<'w, W>,
-            archetype_id: ArchetypeId,
-        }
-
-        let worlds_cell = self.as_unsafe_cell();
-        let cell = unsafe { worlds_cell.get_unsafe_world_cell_mut::<W>() };
-        let world = unsafe { cell.world_mut() }.as_world_mut::<W>();
-        world.flush();
-        let change_tick = world.change_tick();
-        // SAFETY: These come from the same world. `Self.components_registrator` can't be used since we borrow other fields too.
-        let mut registrator =
-            unsafe { ComponentsRegistrator::new(&mut world.components, &mut world.component_ids) };
-
-        let (entities, bundle_id) = match world.storage {
-            Storage::Components {
-                ref mut entities,
-                ref mut bundles,
-                ref mut sparse_sets,
-                ..
-            } => (
-                entities,
-                bundles.register_info::<B>(&mut registrator, sparse_sets),
-            ),
-            Storage::Resources { .. } => panic!("Storage is not for Components."),
-        };
-
-        let mut invalid_entities = Vec::<Entity>::new();
-        let mut batch_iter = batch.into_iter();
-
-        // We need to find the first valid entity so we can initialize the bundle inserter.
-        // This differs from `insert_batch_with_caller` because that method can just panic
-        // if the first entity is invalid, whereas this method needs to keep going.
-        let cache = loop {
-            if let Some((first_entity, first_bundle)) = batch_iter.next() {
-                if let Some(first_location) = entities.get(first_entity) {
-                    let mut cache = InserterArchetypeCache {
-                        // SAFETY: we initialized this bundle_id in `register_info`
-                        inserter: unsafe {
-                            BundleInserter::<W>::new_with_id(
-                                cell,
-                                first_location.archetype_id,
-                                bundle_id,
-                                change_tick,
-                            )
-                        },
-                        archetype_id: first_location.archetype_id,
-                    };
-                    // SAFETY: `entity` is valid, `location` matches entity, bundle matches inserter
-                    cache.inserter.insert_and_trigger(
-                        unsafe { worlds_cell.get_mut() },
-                        first_entity,
-                        first_location,
-                        first_bundle,
-                        insert_mode,
-                        caller,
-                        RelationshipHookMode::Run,
-                    );
-                    break Some(cache);
-                }
-                invalid_entities.push(first_entity);
-            } else {
-                // We reached the end of the entities the caller provided and none were valid.
-                break None;
-            }
-        };
-
-        if let Some(mut cache) = cache {
-            for (entity, bundle) in batch_iter {
-                if let Some(location) = cache.inserter.entities().get(entity) {
-                    if location.archetype_id != cache.archetype_id {
-                        cache = InserterArchetypeCache {
-                            // SAFETY: we initialized this bundle_id in `register_info`
-                            inserter: unsafe {
-                                BundleInserter::new_with_id(
-                                    cell,
-                                    location.archetype_id,
-                                    bundle_id,
-                                    change_tick,
-                                )
-                            },
-                            archetype_id: location.archetype_id,
-                        }
-                    }
-                    // SAFETY: `entity` is valid, `location` matches entity, bundle matches inserter
-                    cache.inserter.insert_and_trigger(
-                        unsafe { worlds_cell.get_mut() },
-                        entity,
-                        location,
-                        bundle,
-                        insert_mode,
-                        caller,
-                        RelationshipHookMode::Run,
-                    );
-                } else {
-                    invalid_entities.push(entity);
-                }
-            }
-        }
-
-        if invalid_entities.is_empty() {
-            Ok(())
-        } else {
-            Err(TryInsertBatchError {
-                bundle_type: core::any::type_name::<B>(),
-                entities: invalid_entities,
-            })
-        }
+        self.flush_commands::<W>();
     }
 }
 
@@ -1021,6 +294,22 @@ impl<W: WorldLabel> ManyWorldLabel for W {
 }
 
 all_tuples!(impl_many_world_tuple, 1, 16, W);
+
+pub trait ManySameWorldLabel<W: WorldLabel>: ManyWorldLabel {
+    fn get_local_mut<'w>(world: UnsafeWorldCell<'w>) -> Self::World<'w>;
+}
+
+impl<W: WorldLabel> ManySameWorldLabel<W> for () {
+    fn get_local_mut<'w>(_world: UnsafeWorldCell<'w>) -> Self::World<'w> {}
+}
+
+impl<W: WorldLabel> ManySameWorldLabel<W> for W {
+    fn get_local_mut<'w>(world: UnsafeWorldCell<'w>) -> Self::World<'w> {
+        world
+    }
+}
+
+all_tuples!(impl_many_same_world_tuple, 1, 16, W);
 
 pub struct AllWorlds;
 
@@ -1073,11 +362,12 @@ pub struct World<W: WorldLabel> {
     pub(crate) storage: Storage,
     pub(crate) observers: Observers,
     pub(crate) removed_components: RemovedComponentEvents,
-    pub(crate) change_tick: AtomicU32,
+    pub(crate) local_change_tick: AtomicU32,
     pub(crate) last_change_tick: Tick,
     pub(crate) last_check_tick: Tick,
     pub(crate) last_trigger_id: u32,
     pub(crate) command_queue: RawCommandQueue,
+    marker: PhantomData<W>,
 }
 
 impl<W: WorldLabel> Drop for World<W> {
@@ -1113,12 +403,13 @@ impl<W: WorldLabel> World<W> {
             removed_components: Default::default(),
             // Default value is `1`, and `last_change_tick`s default to `0`, such that changes
             // are detected on first system runs and for direct world queries.
-            change_tick: AtomicU32::new(1),
+            local_change_tick: AtomicU32::new(1),
             last_change_tick: Tick::new(0),
             last_check_tick: Tick::new(0),
             last_trigger_id: 0,
             component_ids: ComponentIds::default(),
             command_queue: RawCommandQueue::new(),
+            marker: PhantomData,
         };
         world.bootstrap();
         world
@@ -1485,8 +776,8 @@ impl<W: WorldLabel> World<W> {
     /// to obtain an [`UnsafeWorldCell`] and calling [`increment_change_tick`](UnsafeWorldCell::increment_change_tick) on that.
     /// Note that this *can* be done in safe code, despite the name of the type.
     #[inline]
-    pub fn increment_change_tick(&mut self) -> Tick {
-        let change_tick = self.change_tick.get_mut();
+    pub fn increment_local_change_tick(&mut self) -> Tick {
+        let change_tick = self.local_change_tick.get_mut();
         let prev_tick = *change_tick;
         *change_tick = change_tick.wrapping_add(1);
         Tick::new(prev_tick)
@@ -1498,7 +789,7 @@ impl<W: WorldLabel> World<W> {
     /// which is more efficient since it does not require atomic synchronization.
     #[inline]
     pub fn read_change_tick(&self) -> Tick {
-        let tick = self.change_tick.load(Ordering::Acquire);
+        let tick = self.local_change_tick.load(Ordering::Acquire);
         Tick::new(tick)
     }
 
@@ -1507,8 +798,8 @@ impl<W: WorldLabel> World<W> {
     /// This does the same thing as [`read_change_tick()`](Self::read_change_tick), only this method
     /// is more efficient since it does not require atomic synchronization.
     #[inline]
-    pub fn change_tick(&mut self) -> Tick {
-        let tick = *self.change_tick.get_mut();
+    pub fn local_change_tick(&mut self) -> Tick {
+        let tick = *self.local_change_tick.get_mut();
         Tick::new(tick)
     }
 
@@ -2675,8 +1966,8 @@ impl<W: ComponentWorld> World<W> {
     /// times since the previous pass.
     // TODO: benchmark and optimize
     pub fn check_change_ticks(&mut self) {
-        let change_tick = self.change_tick();
-        if change_tick.relative_to(self.last_check_tick).get() < CHECK_TICK_THRESHOLD {
+        let local_change_tick = self.local_change_tick();
+        if local_change_tick.relative_to(self.last_check_tick).get() < CHECK_TICK_THRESHOLD {
             return;
         }
 
@@ -2746,6 +2037,759 @@ impl<W: ComponentWorld> World<W> {
             .ok()?
             .into_mut_by_id(component_id)
             .ok()
+    }
+
+    /// Spawns a new [`Entity`] with a given [`Bundle`] of [components](`Component`) and returns
+    /// a corresponding [`EntityWorldMut`], which can be used to add components to the entity or
+    /// retrieve its id. In case large batches of entities need to be spawned, consider using
+    /// [`World::spawn_batch`] instead.
+    ///
+    /// ```
+    /// use bevy_ecs::{bundle::Bundle, component::Component, world::World};
+    ///
+    /// #[derive(Component)]
+    /// struct Position {
+    ///   x: f32,
+    ///   y: f32,
+    /// }
+    ///
+    /// #[derive(Component)]
+    /// struct Velocity {
+    ///     x: f32,
+    ///     y: f32,
+    /// };
+    ///
+    /// #[derive(Component)]
+    /// struct Name(&'static str);
+    ///
+    /// #[derive(Bundle)]
+    /// struct PhysicsBundle {
+    ///     position: Position,
+    ///     velocity: Velocity,
+    /// }
+    ///
+    /// let mut world = World::new();
+    ///
+    /// // `spawn` can accept a single component:
+    /// world.spawn(Position { x: 0.0, y: 0.0 });
+    ///
+    /// // It can also accept a tuple of components:
+    /// world.spawn((
+    ///     Position { x: 0.0, y: 0.0 },
+    ///     Velocity { x: 1.0, y: 1.0 },
+    /// ));
+    ///
+    /// // Or it can accept a pre-defined Bundle of components:
+    /// world.spawn(PhysicsBundle {
+    ///     position: Position { x: 2.0, y: 2.0 },
+    ///     velocity: Velocity { x: 0.0, y: 4.0 },
+    /// });
+    ///
+    /// let entity = world
+    ///     // Tuples can also mix Bundles and Components
+    ///     .spawn((
+    ///         PhysicsBundle {
+    ///             position: Position { x: 2.0, y: 2.0 },
+    ///             velocity: Velocity { x: 0.0, y: 4.0 },
+    ///         },
+    ///         Name("Elaina Proctor"),
+    ///     ))
+    ///     // Calling id() will return the unique identifier for the spawned entity
+    ///     .id();
+    /// let position = world.entity(entity).get::<Position>().unwrap();
+    /// assert_eq!(position.x, 2.0);
+    /// ```
+    #[track_caller]
+    pub fn spawn<B: Bundle>(&mut self, bundle: B) -> EntityWorldMut<W> {
+        self.spawn_with_caller::<B>(bundle, MaybeLocation::caller())
+    }
+
+    pub(crate) fn spawn_with_caller<B: Bundle>(
+        &mut self,
+        bundle: B,
+        caller: MaybeLocation,
+    ) -> EntityWorldMut<W> {
+        self.flush();
+        let change_tick = self.change_tick();
+        let entity = self.entities_mut().alloc();
+        let mut bundle_spawner = BundleSpawner::new::<B>(self, change_tick);
+        // SAFETY: bundle's type matches `bundle_info`, entity is allocated but non-existent
+        let (mut entity_location, after_effect) =
+            unsafe { bundle_spawner.spawn_non_existent(entity, bundle, caller) };
+
+        // SAFETY: command_queue is not referenced anywhere else
+        if !unsafe { self.command_queue.is_empty() } {
+            self.flush_commands();
+            entity_location = self
+                .entities()
+                .get(entity)
+                .unwrap_or(EntityLocation::INVALID);
+        }
+
+        self.entities_mut()
+            .set_spawned_or_despawned_by(entity.index(), caller);
+
+        // SAFETY: entity and location are valid, as they were just created above
+        let mut entity = unsafe { EntityWorldMut::new(self, entity, entity_location) };
+        after_effect.apply(&mut entity);
+        entity
+    }
+
+    /// Spawns a batch of entities with the same component [`Bundle`] type. Takes a given
+    /// [`Bundle`] iterator and returns a corresponding [`Entity`] iterator.
+    /// This is more efficient than spawning entities and adding components to them individually
+    /// using [`World::spawn`], but it is limited to spawning entities with the same [`Bundle`]
+    /// type, whereas spawning individually is more flexible.
+    ///
+    /// ```
+    /// use bevy_ecs::{component::Component, entity::Entity, world::World};
+    ///
+    /// #[derive(Component)]
+    /// struct Str(&'static str);
+    /// #[derive(Component)]
+    /// struct Num(u32);
+    ///
+    /// let mut world = World::new();
+    /// let entities = world.spawn_batch(vec![
+    ///   (Str("a"), Num(0)), // the first entity
+    ///   (Str("b"), Num(1)), // the second entity
+    /// ]).collect::<Vec<Entity>>();
+    ///
+    /// assert_eq!(entities.len(), 2);
+    /// ```
+    #[track_caller]
+    pub fn spawn_batch<I>(&mut self, iter: I) -> SpawnBatchIter<'_, I::IntoIter>
+    where
+        I: IntoIterator,
+        I::Item: Bundle<Effect: NoBundleEffect>,
+    {
+        SpawnBatchIter::new(self, iter.into_iter(), MaybeLocation::caller())
+    }
+
+    /// Temporarily removes a [`Component`] `T` from the provided [`Entity`] and
+    /// runs the provided closure on it, returning the result if `T` was available.
+    /// This will trigger the `OnRemove` and `OnReplace` component hooks without
+    /// causing an archetype move.
+    ///
+    /// This is most useful with immutable components, where removal and reinsertion
+    /// is the only way to modify a value.
+    ///
+    /// If you do not need to ensure the above hooks are triggered, and your component
+    /// is mutable, prefer using [`get_mut`](World::get_mut).
+    ///
+    /// # Examples
+    ///
+    /// ```rust
+    /// # use bevy_ecs::prelude::*;
+    /// #
+    /// #[derive(Component, PartialEq, Eq, Debug)]
+    /// #[component(immutable)]
+    /// struct Foo(bool);
+    ///
+    /// # let mut world = World::default();
+    /// # world.register_component::<Foo>();
+    /// #
+    /// # let entity = world.spawn(Foo(false)).id();
+    /// #
+    /// world.modify_component(entity, |foo: &mut Foo| {
+    ///     foo.0 = true;
+    /// });
+    /// #
+    /// # assert_eq!(world.get::<Foo>(entity), Some(&Foo(true)));
+    /// ```
+    #[inline]
+    pub fn modify_component<T: Component, R>(
+        &mut self,
+        entity: Entity,
+        f: impl FnOnce(&mut T) -> R,
+    ) -> Result<Option<R>, EntityMutableFetchError> {
+        let result = DeferredWorld::<W>::from(self).modify_component(entity, f)?;
+        self.flush();
+        Ok(result)
+    }
+
+    /// Despawns the given [`Entity`], if it exists. This will also remove all of the entity's
+    /// [`Components`](Component).
+    ///
+    /// Returns `true` if the entity is successfully despawned and `false` if
+    /// the entity does not exist.
+    ///
+    /// # Note
+    ///
+    /// This will also despawn the entities in any [`RelationshipTarget`](crate::relationship::RelationshipTarget) that is configured
+    /// to despawn descendants. For example, this will recursively despawn [`Children`](crate::hierarchy::Children).
+    ///
+    /// ```
+    /// use bevy_ecs::{component::Component, world::World};
+    ///
+    /// #[derive(Component)]
+    /// struct Position {
+    ///   x: f32,
+    ///   y: f32,
+    /// }
+    ///
+    /// let mut world = World::new();
+    /// let entity = world.spawn(Position { x: 0.0, y: 0.0 }).id();
+    /// assert!(world.despawn(entity));
+    /// assert!(world.get_entity(entity).is_err());
+    /// assert!(world.get::<Position>(entity).is_none());
+    /// ```
+    #[track_caller]
+    #[inline]
+    pub fn despawn(&mut self, entity: Entity) -> bool {
+        if let Err(error) = self.despawn_with_caller(entity, MaybeLocation::caller()) {
+            warn!("{error}");
+            false
+        } else {
+            true
+        }
+    }
+
+    /// Despawns the given `entity`, if it exists. This will also remove all of the entity's
+    /// [`Components`](Component).
+    ///
+    /// Returns an [`EntityDespawnError`] if the entity does not exist.
+    ///
+    /// # Note
+    ///
+    /// This will also despawn the entities in any [`RelationshipTarget`](crate::relationship::RelationshipTarget) that is configured
+    /// to despawn descendants. For example, this will recursively despawn [`Children`](crate::hierarchy::Children).
+    #[track_caller]
+    #[inline]
+    pub fn try_despawn(&mut self, entity: Entity) -> Result<(), EntityDespawnError> {
+        self.despawn_with_caller(entity, MaybeLocation::caller())
+    }
+
+    #[inline]
+    pub(crate) fn despawn_with_caller(
+        &mut self,
+        entity: Entity,
+        caller: MaybeLocation,
+    ) -> Result<(), EntityDespawnError> {
+        world.flush();
+        let entity = world.get_entity_mut(entity)?;
+        entity.despawn_with_caller(caller);
+        Ok(())
+    }
+
+    /// For a given batch of ([`Entity`], [`Bundle`]) pairs, either spawns each [`Entity`] with the given
+    /// bundle (if the entity does not exist), or inserts the [`Bundle`] (if the entity already exists).
+    /// This is faster than doing equivalent operations one-by-one.
+    /// Returns `Ok` if all entities were successfully inserted into or spawned. Otherwise it returns an `Err`
+    /// with a list of entities that could not be spawned or inserted into. A "spawn or insert" operation can
+    /// only fail if an [`Entity`] is passed in with an "invalid generation" that conflicts with an existing [`Entity`].
+    ///
+    /// # Note
+    /// Spawning a specific `entity` value is rarely the right choice. Most apps should use [`World::spawn_batch`].
+    /// This method should generally only be used for sharing entities across apps, and only when they have a scheme
+    /// worked out to share an ID space (which doesn't happen by default).
+    ///
+    /// ```
+    /// use bevy_ecs::{entity::Entity, world::World, component::Component};
+    /// #[derive(Component)]
+    /// struct A(&'static str);
+    /// #[derive(Component, PartialEq, Debug)]
+    /// struct B(f32);
+    ///
+    /// let mut world = World::new();
+    /// let e0 = world.spawn_empty().id();
+    /// let e1 = world.spawn_empty().id();
+    /// world.insert_or_spawn_batch(vec![
+    ///   (e0, (A("a"), B(0.0))), // the first entity
+    ///   (e1, (A("b"), B(1.0))), // the second entity
+    /// ]);
+    ///
+    /// assert_eq!(world.get::<B>(e0), Some(&B(0.0)));
+    /// ```
+    #[track_caller]
+    #[deprecated(
+        note = "This can cause extreme performance problems when used with lots of arbitrary free entities. See #18054 on GitHub."
+    )]
+    pub fn insert_or_spawn_batch<I, B>(&mut self, iter: I) -> Result<(), Vec<Entity>>
+    where
+        I: IntoIterator,
+        I::IntoIter: Iterator<Item = (Entity, B)>,
+        B: Bundle<Effect: NoBundleEffect>,
+    {
+        #[expect(
+            deprecated,
+            reason = "This needs to be supported for now, and the outer function is deprecated too."
+        )]
+        self.insert_or_spawn_batch_with_caller::<I, B>(iter, MaybeLocation::caller())
+    }
+
+    /// Split into a new function so we can pass the calling location into the function when using
+    /// as a command.
+    #[inline]
+    #[deprecated(
+        note = "This can cause extreme performance problems when used with lots of arbitrary free entities. See #18054 on GitHub."
+    )]
+    pub(crate) fn insert_or_spawn_batch_with_caller<I, B>(
+        &mut self,
+        iter: I,
+        caller: MaybeLocation,
+    ) -> Result<(), Vec<Entity>>
+    where
+        I: IntoIterator,
+        I::IntoIter: Iterator<Item = (Entity, B)>,
+        B: Bundle<Effect: NoBundleEffect>,
+    {
+        let worlds_cell = self.as_unsafe_cell();
+        let world = unsafe { worlds_cell.get_mut() }.get_world_mut::<W>();
+        world.flush();
+        let change_tick = world.change_tick();
+
+        // SAFETY: These come from the same world. `Self.components_registrator` can't be used since we borrow other fields too.
+        let mut registrator =
+            unsafe { ComponentsRegistrator::new(&mut world.components, &mut world.component_ids) };
+
+        let bundle_id = match world.storage {
+            Storage::Components {
+                ref mut bundles,
+                ref mut sparse_sets,
+                ..
+            } => bundles.register_info::<B>(&mut registrator, sparse_sets),
+            Storage::Resources { .. } => panic!("Storage is not for Components."),
+        };
+
+        enum SpawnOrInsert<'w, W: ComponentWorld> {
+            Spawn(BundleSpawner<'w, W>),
+            Insert(BundleInserter<'w, W>, ArchetypeId),
+        }
+
+        impl<'w, W: ComponentWorld> SpawnOrInsert<'w, W> {
+            fn entities(&mut self) -> &mut Entities<W> {
+                match self {
+                    SpawnOrInsert::Spawn(spawner) => spawner.entities(),
+                    SpawnOrInsert::Insert(inserter, _) => inserter.entities(),
+                }
+            }
+        }
+        // SAFETY: we initialized this bundle_id in `init_info`
+        let mut spawn_or_insert = SpawnOrInsert::<W>::Spawn(unsafe {
+            BundleSpawner::new_with_id(world.as_unsafe_world_cell(), bundle_id, change_tick)
+        });
+
+        let mut invalid_entities = Vec::new();
+        for (entity, bundle) in iter {
+            #[expect(
+                deprecated,
+                reason = "This needs to be supported for now, and the outer function is deprecated too."
+            )]
+            match spawn_or_insert
+                .entities()
+                .alloc_at_without_replacement(entity)
+            {
+                AllocAtWithoutReplacement::Exists(location) => {
+                    match spawn_or_insert {
+                        SpawnOrInsert::Insert(ref mut inserter, archetype)
+                            if location.archetype_id == archetype =>
+                        {
+                            // SAFETY: `entity` is valid, `location` matches entity, bundle matches inserter
+                            inserter.insert_and_trigger(
+                                unsafe { worlds_cell.get_mut() },
+                                entity,
+                                location,
+                                bundle,
+                                InsertMode::Replace,
+                                caller,
+                                RelationshipHookMode::Run,
+                            );
+                        }
+                        _ => {
+                            // SAFETY: we initialized this bundle_id in `init_info`
+                            let mut inserter = unsafe {
+                                BundleInserter::new_with_id(
+                                    world.as_unsafe_world_cell(),
+                                    location.archetype_id,
+                                    bundle_id,
+                                    change_tick,
+                                )
+                            };
+                            // SAFETY: `entity` is valid, `location` matches entity, bundle matches inserter
+                            inserter.insert_and_trigger(
+                                unsafe { worlds_cell.get_mut() },
+                                entity,
+                                location,
+                                bundle,
+                                InsertMode::Replace,
+                                caller,
+                                RelationshipHookMode::Run,
+                            );
+                            spawn_or_insert =
+                                SpawnOrInsert::Insert(inserter, location.archetype_id);
+                        }
+                    };
+                }
+                AllocAtWithoutReplacement::DidNotExist => {
+                    if let SpawnOrInsert::Spawn(ref mut spawner) = spawn_or_insert {
+                        // SAFETY: `entity` is allocated (but non existent), bundle matches inserter
+                        unsafe { spawner.spawn_non_existent(entity, bundle, caller) };
+                    } else {
+                        // SAFETY: we initialized this bundle_id in `init_info`
+                        let mut spawner = unsafe {
+                            BundleSpawner::new_with_id(
+                                world.as_unsafe_world_cell(),
+                                bundle_id,
+                                change_tick,
+                            )
+                        };
+                        // SAFETY: `entity` is valid, `location` matches entity, bundle matches inserter
+                        unsafe { spawner.spawn_non_existent(entity, bundle, caller) };
+                        spawn_or_insert = SpawnOrInsert::Spawn(spawner);
+                    }
+                }
+                AllocAtWithoutReplacement::ExistsWithWrongGeneration => {
+                    invalid_entities.push(entity);
+                }
+            }
+        }
+
+        if invalid_entities.is_empty() {
+            Ok(())
+        } else {
+            Err(invalid_entities)
+        }
+    }
+
+    /// For a given batch of ([`Entity`], [`Bundle`]) pairs,
+    /// adds the `Bundle` of components to each `Entity`.
+    /// This is faster than doing equivalent operations one-by-one.
+    ///
+    /// A batch can be any type that implements [`IntoIterator`] containing `(Entity, Bundle)` tuples,
+    /// such as a [`Vec<(Entity, Bundle)>`] or an array `[(Entity, Bundle); N]`.
+    ///
+    /// This will overwrite any previous values of components shared by the `Bundle`.
+    /// See [`World::insert_batch_if_new`] to keep the old values instead.
+    ///
+    /// # Panics
+    ///
+    /// This function will panic if any of the associated entities do not exist.
+    ///
+    /// For the fallible version, see [`World::try_insert_batch`].
+    #[track_caller]
+    pub fn insert_batch<I, B>(&mut self, batch: I)
+    where
+        I: IntoIterator,
+        I::IntoIter: Iterator<Item = (Entity, B)>,
+        B: Bundle<Effect: NoBundleEffect>,
+    {
+        self.insert_batch_with_caller::<I, B>(batch, InsertMode::Replace, MaybeLocation::caller());
+    }
+
+    /// For a given batch of ([`Entity`], [`Bundle`]) pairs,
+    /// adds the `Bundle` of components to each `Entity` without overwriting.
+    /// This is faster than doing equivalent operations one-by-one.
+    ///
+    /// A batch can be any type that implements [`IntoIterator`] containing `(Entity, Bundle)` tuples,
+    /// such as a [`Vec<(Entity, Bundle)>`] or an array `[(Entity, Bundle); N]`.
+    ///
+    /// This is the same as [`World::insert_batch`], but in case of duplicate
+    /// components it will leave the old values instead of replacing them with new ones.
+    ///
+    /// # Panics
+    ///
+    /// This function will panic if any of the associated entities do not exist.
+    ///
+    /// For the fallible version, see [`World::try_insert_batch_if_new`].
+    #[track_caller]
+    pub fn insert_batch_if_new<I, B>(&mut self, batch: I)
+    where
+        I: IntoIterator,
+        I::IntoIter: Iterator<Item = (Entity, B)>,
+        B: Bundle<Effect: NoBundleEffect>,
+    {
+        self.insert_batch_with_caller::<I, B>(batch, InsertMode::Keep, MaybeLocation::caller());
+    }
+
+    /// Split into a new function so we can differentiate the calling location.
+    ///
+    /// This can be called by:
+    /// - [`World::insert_batch`]
+    /// - [`World::insert_batch_if_new`]
+    #[inline]
+    pub(crate) fn insert_batch_with_caller<I, B>(
+        &mut self,
+        batch: I,
+        insert_mode: InsertMode,
+        caller: MaybeLocation,
+    ) where
+        I: IntoIterator,
+        I::IntoIter: Iterator<Item = (Entity, B)>,
+        B: Bundle<Effect: NoBundleEffect>,
+    {
+        struct InserterArchetypeCache<'w, W: ComponentWorld> {
+            inserter: BundleInserter<'w, W>,
+            archetype_id: ArchetypeId,
+        }
+
+        let worlds_cell = self.as_unsafe_cell();
+        let cell = unsafe { worlds_cell.get_unsafe_world_cell_mut::<W>() };
+        let world = unsafe { cell.world_mut() }.as_world_mut::<W>();
+        world.flush();
+        let change_tick = world.change_tick();
+        // SAFETY: These come from the same world. `Self.components_registrator` can't be used since we borrow other fields too.
+        let mut registrator =
+            unsafe { ComponentsRegistrator::new(&mut world.components, &mut world.component_ids) };
+
+        let (entities, bundle_id) = match world.storage {
+            Storage::Components {
+                ref mut entities,
+                ref mut bundles,
+                ref mut sparse_sets,
+                ..
+            } => (
+                entities,
+                bundles.register_info::<B>(&mut registrator, sparse_sets),
+            ),
+            Storage::Resources { .. } => unreachable!(),
+        };
+
+        let mut batch_iter = batch.into_iter();
+
+        if let Some((first_entity, first_bundle)) = batch_iter.next() {
+            if let Some(first_location) = entities.get(first_entity) {
+                let mut cache = InserterArchetypeCache {
+                    // SAFETY: we initialized this bundle_id in `register_info`
+                    inserter: unsafe {
+                        BundleInserter::<W>::new_with_id(
+                            cell,
+                            first_location.archetype_id,
+                            bundle_id,
+                            change_tick,
+                        )
+                    },
+                    archetype_id: first_location.archetype_id,
+                };
+                // SAFETY: `entity` is valid, `location` matches entity, bundle matches inserter
+                cache.inserter.insert_and_trigger(
+                    unsafe { worlds_cell.get_mut() },
+                    first_entity,
+                    first_location,
+                    first_bundle,
+                    insert_mode,
+                    caller,
+                    RelationshipHookMode::Run,
+                );
+
+                for (entity, bundle) in batch_iter {
+                    if let Some(location) = cache.inserter.entities().get(entity) {
+                        if location.archetype_id != cache.archetype_id {
+                            cache = InserterArchetypeCache {
+                                // SAFETY: we initialized this bundle_id in `register_info`
+                                inserter: unsafe {
+                                    BundleInserter::new_with_id(
+                                        cell,
+                                        location.archetype_id,
+                                        bundle_id,
+                                        change_tick,
+                                    )
+                                },
+                                archetype_id: location.archetype_id,
+                            }
+                        }
+                        // SAFETY: `entity` is valid, `location` matches entity, bundle matches inserter
+                        cache.inserter.insert_and_trigger(
+                            unsafe { worlds_cell.get_mut() },
+                            entity,
+                            location,
+                            bundle,
+                            insert_mode,
+                            caller,
+                            RelationshipHookMode::Run,
+                        );
+                    } else {
+                        panic!("error[B0003]: Could not insert a bundle (of type `{}`) for entity {entity}, which {}. See: https://bevyengine.org/learn/errors/b0003", core::any::type_name::<B>(), entities.entity_does_not_exist_error_details(entity));
+                    }
+                }
+            } else {
+                panic!("error[B0003]: Could not insert a bundle (of type `{}`) for entity {first_entity}, which {}. See: https://bevyengine.org/learn/errors/b0003", core::any::type_name::<B>(), entities.entity_does_not_exist_error_details(first_entity));
+            }
+        }
+    }
+
+    /// For a given batch of ([`Entity`], [`Bundle`]) pairs,
+    /// adds the `Bundle` of components to each `Entity`.
+    /// This is faster than doing equivalent operations one-by-one.
+    ///
+    /// A batch can be any type that implements [`IntoIterator`] containing `(Entity, Bundle)` tuples,
+    /// such as a [`Vec<(Entity, Bundle)>`] or an array `[(Entity, Bundle); N]`.
+    ///
+    /// This will overwrite any previous values of components shared by the `Bundle`.
+    /// See [`World::try_insert_batch_if_new`] to keep the old values instead.
+    ///
+    /// Returns a [`TryInsertBatchError`] if any of the provided entities do not exist.
+    ///
+    /// For the panicking version, see [`World::insert_batch`].
+    #[track_caller]
+    pub fn try_insert_batch<I, B>(&mut self, batch: I) -> Result<(), TryInsertBatchError>
+    where
+        I: IntoIterator,
+        I::IntoIter: Iterator<Item = (Entity, B)>,
+        B: Bundle<Effect: NoBundleEffect>,
+    {
+        self.try_insert_batch_with_caller::<I, B>(
+            batch,
+            InsertMode::Replace,
+            MaybeLocation::caller(),
+        )
+    }
+    /// For a given batch of ([`Entity`], [`Bundle`]) pairs,
+    /// adds the `Bundle` of components to each `Entity` without overwriting.
+    /// This is faster than doing equivalent operations one-by-one.
+    ///
+    /// A batch can be any type that implements [`IntoIterator`] containing `(Entity, Bundle)` tuples,
+    /// such as a [`Vec<(Entity, Bundle)>`] or an array `[(Entity, Bundle); N]`.
+    ///
+    /// This is the same as [`World::try_insert_batch`], but in case of duplicate
+    /// components it will leave the old values instead of replacing them with new ones.
+    ///
+    /// Returns a [`TryInsertBatchError`] if any of the provided entities do not exist.
+    ///
+    /// For the panicking version, see [`World::insert_batch_if_new`].
+    #[track_caller]
+    pub fn try_insert_batch_if_new<I, B>(&mut self, batch: I) -> Result<(), TryInsertBatchError>
+    where
+        I: IntoIterator,
+        I::IntoIter: Iterator<Item = (Entity, B)>,
+        B: Bundle<Effect: NoBundleEffect>,
+    {
+        self.try_insert_batch_with_caller::<W, I, B>(
+            batch,
+            InsertMode::Keep,
+            MaybeLocation::caller(),
+        )
+    }
+
+    /// Split into a new function so we can differentiate the calling location.
+    ///
+    /// This can be called by:
+    /// - [`World::try_insert_batch`]
+    /// - [`World::try_insert_batch_if_new`]
+    /// - [`Commands::insert_batch`]
+    /// - [`Commands::insert_batch_if_new`]
+    /// - [`Commands::try_insert_batch`]
+    /// - [`Commands::try_insert_batch_if_new`]
+    #[inline]
+    pub(crate) fn try_insert_batch_with_caller<I, B>(
+        &mut self,
+        batch: I,
+        insert_mode: InsertMode,
+        caller: MaybeLocation,
+    ) -> Result<(), TryInsertBatchError>
+    where
+        I: IntoIterator,
+        I::IntoIter: Iterator<Item = (Entity, B)>,
+        B: Bundle<Effect: NoBundleEffect>,
+    {
+        struct InserterArchetypeCache<'w, W: ComponentWorld> {
+            inserter: BundleInserter<'w, W>,
+            archetype_id: ArchetypeId,
+        }
+
+        let worlds_cell = self.as_unsafe_cell();
+        let cell = unsafe { worlds_cell.get_unsafe_world_cell_mut::<W>() };
+        let world = unsafe { cell.world_mut() }.as_world_mut::<W>();
+        world.flush();
+        let change_tick = world.change_tick();
+        // SAFETY: These come from the same world. `Self.components_registrator` can't be used since we borrow other fields too.
+        let mut registrator =
+            unsafe { ComponentsRegistrator::new(&mut world.components, &mut world.component_ids) };
+
+        let (entities, bundle_id) = match world.storage {
+            Storage::Components {
+                ref mut entities,
+                ref mut bundles,
+                ref mut sparse_sets,
+                ..
+            } => (
+                entities,
+                bundles.register_info::<B>(&mut registrator, sparse_sets),
+            ),
+            Storage::Resources { .. } => panic!("Storage is not for Components."),
+        };
+
+        let mut invalid_entities = Vec::<Entity>::new();
+        let mut batch_iter = batch.into_iter();
+
+        // We need to find the first valid entity so we can initialize the bundle inserter.
+        // This differs from `insert_batch_with_caller` because that method can just panic
+        // if the first entity is invalid, whereas this method needs to keep going.
+        let cache = loop {
+            if let Some((first_entity, first_bundle)) = batch_iter.next() {
+                if let Some(first_location) = entities.get(first_entity) {
+                    let mut cache = InserterArchetypeCache {
+                        // SAFETY: we initialized this bundle_id in `register_info`
+                        inserter: unsafe {
+                            BundleInserter::<W>::new_with_id(
+                                cell,
+                                first_location.archetype_id,
+                                bundle_id,
+                                change_tick,
+                            )
+                        },
+                        archetype_id: first_location.archetype_id,
+                    };
+                    // SAFETY: `entity` is valid, `location` matches entity, bundle matches inserter
+                    cache.inserter.insert_and_trigger(
+                        unsafe { worlds_cell.get_mut() },
+                        first_entity,
+                        first_location,
+                        first_bundle,
+                        insert_mode,
+                        caller,
+                        RelationshipHookMode::Run,
+                    );
+                    break Some(cache);
+                }
+                invalid_entities.push(first_entity);
+            } else {
+                // We reached the end of the entities the caller provided and none were valid.
+                break None;
+            }
+        };
+
+        if let Some(mut cache) = cache {
+            for (entity, bundle) in batch_iter {
+                if let Some(location) = cache.inserter.entities().get(entity) {
+                    if location.archetype_id != cache.archetype_id {
+                        cache = InserterArchetypeCache {
+                            // SAFETY: we initialized this bundle_id in `register_info`
+                            inserter: unsafe {
+                                BundleInserter::new_with_id(
+                                    cell,
+                                    location.archetype_id,
+                                    bundle_id,
+                                    change_tick,
+                                )
+                            },
+                            archetype_id: location.archetype_id,
+                        }
+                    }
+                    // SAFETY: `entity` is valid, `location` matches entity, bundle matches inserter
+                    cache.inserter.insert_and_trigger(
+                        unsafe { worlds_cell.get_mut() },
+                        entity,
+                        location,
+                        bundle,
+                        insert_mode,
+                        caller,
+                        RelationshipHookMode::Run,
+                    );
+                } else {
+                    invalid_entities.push(entity);
+                }
+            }
+        }
+
+        if invalid_entities.is_empty() {
+            Ok(())
+        } else {
+            Err(TryInsertBatchError {
+                bundle_type: core::any::type_name::<B>(),
+                entities: invalid_entities,
+            })
+        }
     }
 }
 
@@ -4093,6 +4137,7 @@ impl<W: ComponentWorld> Flushable for World<W> {
     fn flush(&mut self) {
         self.flush_entities();
         self.flush_components();
+        self.flush_commands();
     }
 }
 
@@ -4100,6 +4145,7 @@ impl Flushable for World<ResourceWorld> {
     #[inline]
     fn flush(&mut self) {
         self.flush_components();
+        self.flush_commands();
     }
 }
 

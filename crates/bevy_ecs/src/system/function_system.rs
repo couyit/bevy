@@ -8,7 +8,10 @@ use crate::{
         check_system_change_tick, ReadOnlySystemParam, System, SystemIn, SystemInput, SystemParam,
         SystemParamItem,
     },
-    world::{unsafe_world_cell::UnsafeWorldCell, DeferredWorld, World, WorldId},
+    world::{
+        unsafe_world_cell::UnsafeWorldCell, DeferredWorld, ManySameWorldLabel, World, WorldId,
+        WorldLabel,
+    },
 };
 
 use alloc::{borrow::Cow, vec, vec::Vec};
@@ -18,7 +21,7 @@ use variadics_please::all_tuples;
 #[cfg(feature = "trace")]
 use tracing::{info_span, Span};
 
-use super::{IntoSystem, ReadOnlySystem, SystemParamBuilder};
+use super::{IntoSystem, LocalSystem, ReadOnlySystem, SystemParamBuilder};
 
 /// The metadata of a [`System`].
 #[derive(Clone)]
@@ -922,6 +925,47 @@ where
     F: SystemParamFunction<Marker>,
     F::Param: ReadOnlySystemParam,
 {
+}
+
+impl<Marker, W, F> LocalSystem<W> for FunctionSystem<Marker, F>
+where
+    Marker: 'static,
+    W: WorldLabel,
+    F: SystemParamFunction<Marker>,
+    <F::Param as SystemParam>::World: ManySameWorldLabel<W>,
+{
+    fn run_local(&mut self, world: &mut World<W>) {
+        let change_tick = world.increment_change_tick();
+
+        let param_state = &mut self.state.as_mut().expect(Self::ERROR_UNINITIALIZED).param;
+        // SAFETY:
+        // - The caller has invoked `update_archetype_component_access`, which will panic
+        //   if the world does not match.
+        // - All world accesses used by `F::Param` have been registered, so the caller
+        //   will ensure that there are no data access conflicts.
+        let params = unsafe {
+            F::Param::get_param(
+                param_state,
+                &self.system_meta,
+                <F::Param as SystemParam>::World::get_local_mut(world.as_unsafe_world_cell()),
+                change_tick,
+            )
+        };
+        let out = self.func.run(input, params);
+        self.system_meta.last_run = change_tick;
+    }
+
+    fn initialize_local(&mut self, world: &mut World<W>) {
+        todo!()
+    }
+
+    unsafe fn validate_param_unsafe_local(&mut self, world: UnsafeWorldCell) -> bool {
+        todo!()
+    }
+
+    fn update_archetype_component_access_local(&mut self, world: UnsafeWorldCell) {
+        todo!()
+    }
 }
 
 /// A trait implemented for all functions that can be used as [`System`]s.

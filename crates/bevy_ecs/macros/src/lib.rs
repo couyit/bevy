@@ -684,9 +684,9 @@ pub fn derive_component_world(input: TokenStream) -> TokenStream {
     })
 }
 
-struct ManyWorldTupleInput(Punctuated<Ident, Token![,]>);
+struct TupleInput(Punctuated<Ident, Token![,]>);
 
-impl Parse for ManyWorldTupleInput {
+impl Parse for TupleInput {
     fn parse(input: syn::parse::ParseStream) -> syn::Result<Self> {
         Ok(Self(Punctuated::parse_separated_nonempty(input)?))
     }
@@ -696,7 +696,7 @@ impl Parse for ManyWorldTupleInput {
 pub fn impl_many_world_tuple(input: TokenStream) -> TokenStream {
     let bevy_ecs_path = bevy_ecs_path();
 
-    let idents = parse_macro_input!(input as ManyWorldTupleInput);
+    let idents = parse_macro_input!(input as TupleInput);
     let idents = idents.0.into_iter();
 
     let type_params = idents.clone();
@@ -715,6 +715,30 @@ pub fn impl_many_world_tuple(input: TokenStream) -> TokenStream {
             type World<'w> = ( #( #cells )* );
 
             fn get_mut<'w>(worlds: #bevy_ecs_path::world::unsafe_world_cell::UnsafeWorldsCell<'w>) -> Self::World<'w> {
+                ( #( #get_mut_calls )* )
+            }
+        }
+    };
+
+    TokenStream::from(expanded)
+}
+
+#[proc_macro]
+pub fn impl_many_same_world_tuple(input: TokenStream) -> TokenStream {
+    let bevy_ecs_path = bevy_ecs_path();
+
+    let idents = parse_macro_input!(input as TupleInput);
+    let idents = idents.0.into_iter();
+
+    let type_params = idents.clone();
+    let tuple_types = idents.clone();
+    let get_mut_calls = idents.clone().map(|ident| {
+        quote! { #ident::get_local_mut(world), }
+    });
+
+    let expanded = quote! {
+        impl<W: WorldLabel, #( #type_params: #bevy_ecs_path::world::ManySameWorldLabel<W> ),*> #bevy_ecs_path::world::ManySameWorldLabel<W> for ( #( #tuple_types, )* ) {
+            fn get_local_mut<'w>(world: #bevy_ecs_path::world::unsafe_world_cell::UnsafeWorldCell<'w>) -> <Self as #bevy_ecs_path::world::ManyWorldLabel>::World<'w> {
                 ( #( #get_mut_calls )* )
             }
         }

@@ -440,7 +440,7 @@ impl Observers {
                 return;
             };
 
-            let mut trigger_observer = |(&observer, runner): (&Entity, &ObserverRunner)| {
+            let mut trigger_observer = |(&observer, runner): (&Entity, &Ob serverRunner)| {
                 (runner)(
                     worlds.as_unsafe_cell(),
                     ObserverTrigger {

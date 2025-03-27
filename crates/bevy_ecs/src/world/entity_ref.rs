@@ -991,20 +991,12 @@ unsafe impl TrustedEntityBorrow for EntityMut<'_> {}
 /// entities at once.  Unlike `EntityMut`, this type allows adding and
 /// removing components, and despawning the entity.
 pub struct EntityWorldMut<'w, W: ComponentWorld> {
-    worlds: &'w mut Worlds,
+    world: &'w mut World<W>,
     entity: Entity,
     location: EntityLocation,
 }
 
 impl<'w, W: ComponentWorld> EntityWorldMut<'w, W> {
-    fn world(&self) -> &World<W> {
-        self.worlds.get_world::<W>()
-    }
-
-    fn world_mut(&mut self) -> &mut World<W> {
-        self.worlds.get_world_mut::<W>()
-    }
-
     #[track_caller]
     #[inline(never)]
     #[cold]
@@ -1012,7 +1004,7 @@ impl<'w, W: ComponentWorld> EntityWorldMut<'w, W> {
         panic!(
             "Entity {} {}",
             self.entity,
-            self.world()
+            self.world
                 .entities()
                 .entity_does_not_exist_error_details(self.entity)
         );
@@ -1029,7 +1021,7 @@ impl<'w, W: ComponentWorld> EntityWorldMut<'w, W> {
     fn as_unsafe_entity_cell_readonly(&self) -> UnsafeEntityCell<'_> {
         self.assert_not_despawned();
         UnsafeEntityCell::new(
-            self.world().as_unsafe_world_cell_readonly(),
+            self.world.as_unsafe_world_cell_readonly(),
             self.entity,
             self.location,
         )
@@ -1037,7 +1029,7 @@ impl<'w, W: ComponentWorld> EntityWorldMut<'w, W> {
     fn as_unsafe_entity_cell(&mut self) -> UnsafeEntityCell<'_> {
         self.assert_not_despawned();
         UnsafeEntityCell::new(
-            self.world_mut().as_unsafe_world_cell(),
+            self.world.as_unsafe_world_cell(),
             self.entity,
             self.location,
         )
@@ -1045,7 +1037,7 @@ impl<'w, W: ComponentWorld> EntityWorldMut<'w, W> {
     fn into_unsafe_entity_cell(self) -> UnsafeEntityCell<'w> {
         self.assert_not_despawned();
         UnsafeEntityCell::new(
-            self.worlds.get_world_mut::<W>().as_unsafe_world_cell(),
+            self.world.as_unsafe_world_cell(),
             self.entity,
             self.location,
         )
@@ -1059,18 +1051,15 @@ impl<'w, W: ComponentWorld> EntityWorldMut<'w, W> {
     ///  The above is trivially satisfied if `location` was sourced from `world.entities().get(entity)`.
     #[inline]
     pub(crate) unsafe fn new(
-        worlds: &'w mut Worlds,
+        world: &'w mut World<W>,
         entity: Entity,
         location: EntityLocation,
     ) -> Self {
-        debug_assert!(worlds.get_world::<W>().entities().contains(entity));
-        debug_assert_eq!(
-            worlds.get_world::<W>().entities().get(entity),
-            Some(location)
-        );
+        debug_assert!(world.entities().contains(entity));
+        debug_assert_eq!(world.entities().get(entity), Some(location));
 
         EntityWorldMut {
-            worlds,
+            world,
             entity,
             location,
         }
@@ -1124,7 +1113,7 @@ impl<'w, W: ComponentWorld> EntityWorldMut<'w, W> {
     #[inline]
     pub fn archetype(&self) -> &Archetype {
         self.assert_not_despawned();
-        &self.world().archetypes[self.location.archetype_id]
+        &self.world.archetypes[self.location.archetype_id]
     }
 
     /// Returns `true` if the current entity has a component of type `T`.
@@ -1303,12 +1292,12 @@ impl<'w, W: ComponentWorld> EntityWorldMut<'w, W> {
     #[inline]
     pub fn modify_component<T: Component, R>(
         &mut self,
-        worlds: &'w mut Worlds,
+        world: &'w mut World<W>,
         f: impl FnOnce(&mut T) -> R,
     ) -> Option<R> {
         self.assert_not_despawned();
 
-        let result = worlds
+        let result = world
             .modify_component(self.entity, f)
             .expect("entity access must be valid")?;
 
