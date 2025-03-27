@@ -89,8 +89,6 @@ pub struct Worlds {
     pub(crate) indices: TypeIdMap<WorldId>,
     pub(crate) worlds: Vec<World<InvalidWorld>>,
     pub(crate) systems: Systems,
-    pub(crate) change_tick: AtomicU32,
-    pub(crate) last_check_tick: Tick,
 }
 
 impl Default for Worlds {
@@ -100,8 +98,6 @@ impl Default for Worlds {
             indices: TypeIdMap::default(),
             worlds: Vec::with_capacity(2),
             systems: Default::default(),
-            change_tick: AtomicU32::new(1),
-            last_check_tick: Tick::new(0),
         };
 
         world.create_world::<MainWorld>();
@@ -197,37 +193,6 @@ impl Worlds {
         } else {
             panic!()
         }
-    }
-
-    /// Reads the current change tick of this world.
-    ///
-    /// If you have exclusive (`&mut`) access to the world, consider using [`change_tick()`](Self::change_tick),
-    /// which is more efficient since it does not require atomic synchronization.
-    #[inline]
-    pub fn read_change_tick(&self) -> Tick {
-        let tick = self.change_tick.load(Ordering::Acquire);
-        Tick::new(tick)
-    }
-
-    /// Reads the current change tick of this world.
-    ///
-    /// This does the same thing as [`read_change_tick()`](Self::read_change_tick), only this method
-    /// is more efficient since it does not require atomic synchronization.
-    #[inline]
-    pub fn change_tick(&mut self) -> Tick {
-        let tick = *self.change_tick.get_mut();
-        Tick::new(tick)
-    }
-
-    /// When called from within an exclusive system (a [`System`] that takes `&mut World` as its first
-    /// parameter), this method returns the [`Tick`] indicating the last time the exclusive system was run.
-    ///
-    /// Otherwise, this returns the `Tick` indicating the last time that [`World::clear_trackers`] was called.
-    ///
-    /// [`System`]: crate::system::System
-    #[inline]
-    pub fn last_change_tick(&self) -> Tick {
-        self.last_change_tick
     }
 
     /// Applies any commands in the world's internal [`CommandQueue`].
@@ -362,7 +327,7 @@ pub struct World<W: WorldLabel> {
     pub(crate) storage: Storage,
     pub(crate) observers: Observers,
     pub(crate) removed_components: RemovedComponentEvents,
-    pub(crate) local_change_tick: AtomicU32,
+    pub(crate) change_tick: AtomicU32,
     pub(crate) last_change_tick: Tick,
     pub(crate) last_check_tick: Tick,
     pub(crate) last_trigger_id: u32,
@@ -776,8 +741,8 @@ impl<W: WorldLabel> World<W> {
     /// to obtain an [`UnsafeWorldCell`] and calling [`increment_change_tick`](UnsafeWorldCell::increment_change_tick) on that.
     /// Note that this *can* be done in safe code, despite the name of the type.
     #[inline]
-    pub fn increment_local_change_tick(&mut self) -> Tick {
-        let change_tick = self.local_change_tick.get_mut();
+    pub fn increment_change_tick(&mut self) -> Tick {
+        let change_tick = self.change_tick.get_mut();
         let prev_tick = *change_tick;
         *change_tick = change_tick.wrapping_add(1);
         Tick::new(prev_tick)
@@ -789,7 +754,7 @@ impl<W: WorldLabel> World<W> {
     /// which is more efficient since it does not require atomic synchronization.
     #[inline]
     pub fn read_change_tick(&self) -> Tick {
-        let tick = self.local_change_tick.load(Ordering::Acquire);
+        let tick = self.change_tick.load(Ordering::Acquire);
         Tick::new(tick)
     }
 
@@ -798,8 +763,8 @@ impl<W: WorldLabel> World<W> {
     /// This does the same thing as [`read_change_tick()`](Self::read_change_tick), only this method
     /// is more efficient since it does not require atomic synchronization.
     #[inline]
-    pub fn local_change_tick(&mut self) -> Tick {
-        let tick = *self.local_change_tick.get_mut();
+    pub fn change_tick(&mut self) -> Tick {
+        let tick = *self.change_tick.get_mut();
         Tick::new(tick)
     }
 
@@ -1966,8 +1931,8 @@ impl<W: ComponentWorld> World<W> {
     /// times since the previous pass.
     // TODO: benchmark and optimize
     pub fn check_change_ticks(&mut self) {
-        let local_change_tick = self.local_change_tick();
-        if local_change_tick.relative_to(self.last_check_tick).get() < CHECK_TICK_THRESHOLD {
+        let change_tick = self.change_tick();
+        if change_tick.relative_to(self.last_check_tick).get() < CHECK_TICK_THRESHOLD {
             return;
         }
 
