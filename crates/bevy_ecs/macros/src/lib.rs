@@ -487,15 +487,19 @@ pub fn derive_system_param(input: TokenStream) -> TokenStream {
                 type Item<'w, 's> = #struct_name #ty_generics;
                 type World = <#fields_alias::<'static, 'static, #punctuated_generic_idents> as #path::system::SystemParam>::World;
 
+                fn init_world_access<'w>(world: <Self::World as #path::world::ManyWorldLabel>::World<'w>, system_meta: & mut #path::system::SystemMeta) {
+                    #fields_alias::<'_, '_, #punctuated_generic_idents>::init_world_access(world, system_meta);
+                }
+
                 fn init_state<'w>(world: <Self::World as #path::world::ManyWorldLabel>::World<'w>, system_meta: & mut #path::system::SystemMeta) -> Self::State {
                     #state_struct_name {
                         state: #fields_alias::<'_, '_, #punctuated_generic_idents>::init_state(world, system_meta),
                     }
                 }
 
-                unsafe fn new_archetype(state: &mut Self::State, archetype: &#path::archetype::Archetype, system_meta: &mut #path::system::SystemMeta) {
+                unsafe fn new_archetype(state: &mut Self::State, archetype: &#path::archetype::Archetype, archetype_component_access: &mut #path::query::Access<#path::archetype::ArchetypeComponentId>) {
                     // SAFETY: The caller ensures that `archetype` is from the World the state was initialized from in `init_state`.
-                    unsafe { #fields_alias::<'_, '_, #punctuated_generic_idents>::new_archetype(&mut state.state, archetype, system_meta) }
+                    unsafe { #fields_alias::<'_, '_, #punctuated_generic_idents>::new_archetype(&mut state.state, archetype, archetype_component_access) }
                 }
 
                 fn apply<'w, 's>(state: &'s mut Self::State, system_meta: &#path::system::SystemMeta, world: <Self::World as #path::world::ManyWorldLabel>::World<'w>) {

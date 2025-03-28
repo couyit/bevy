@@ -37,7 +37,9 @@ use core::{
 };
 use thiserror::Error;
 
-use super::{ComponentWorld, InvalidComponentWorld, Storage, Worlds};
+use super::{
+    unsafe_world_cell::UnsafeWorldCell, ComponentWorld, InvalidComponentWorld, Storage, Worlds,
+};
 
 /// A read-only reference to a particular [`Entity`] and all of its components.
 ///
@@ -475,6 +477,17 @@ impl<'w> EntityMut<'w> {
     /// Gets read-only access to all of the entity's components.
     pub fn as_readonly(&self) -> EntityRef<'_> {
         EntityRef::from(self)
+    }
+
+    pub fn into_world_mut<W: ComponentWorld>(
+        self,
+        world: &'w mut World<W>,
+    ) -> EntityWorldMut<'w, W> {
+        EntityWorldMut {
+            world,
+            entity: self.entity(),
+            location: self.location(),
+        }
     }
 
     /// Returns the [ID](Entity) of the current entity.

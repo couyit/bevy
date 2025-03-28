@@ -20,8 +20,8 @@ use crate::{
 };
 
 use super::{
-    unsafe_world_cell::{UnsafeWorldCell, UnsafeWorldsCell},
-    ComponentWorld, Mut, ResourceWorld, World, WorldLabel, Worlds, ON_INSERT, ON_REPLACE,
+    unsafe_world_cell::UnsafeWorldCell, ComponentWorld, Mut, ResourceWorld, World, WorldLabel,
+    ON_INSERT, ON_REPLACE,
 };
 
 /// A [`World`] reference that disallows structural ECS changes.
@@ -66,7 +66,7 @@ impl<'w> UnsafeWorldCell<'w> {
 }
 
 impl<'w, W: WorldLabel> From<&'w mut World<W>> for DeferredWorld<'w, W> {
-    fn from(value: &'w mut Worlds) -> Self {
+    fn from(value: &'w mut World<W>) -> Self {
         DeferredWorld {
             world: value.as_unsafe_world_cell(),
             marker: PhantomData,

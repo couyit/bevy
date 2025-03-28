@@ -1072,30 +1072,30 @@ impl<T: SparseSetIndex> FilteredAccessSet<T> {
     }
 
     /// Adds a read access to a resource to the set.
-    pub fn add_unfiltered_resource_read(&mut self, index: T) {
+    pub fn add_unfiltered_read(&mut self, index: T) {
         let mut filter = FilteredAccess::default();
         filter.add_resource_read(index);
         self.add(filter);
     }
 
     /// Adds a write access to a resource to the set.
-    pub fn add_unfiltered_resource_write(&mut self, index: T) {
+    pub fn add_unfiltered_write(&mut self, index: T) {
         let mut filter = FilteredAccess::default();
         filter.add_resource_write(index);
         self.add(filter);
     }
 
     /// Adds read access to all resources to the set.
-    pub fn add_unfiltered_read_all_resources(&mut self) {
+    pub fn add_unfiltered_read_all(&mut self) {
         let mut filter = FilteredAccess::default();
-        filter.access.read_all_resources();
+        filter.access.read_all();
         self.add(filter);
     }
 
     /// Adds write access to all resources to the set.
-    pub fn add_unfiltered_write_all_resources(&mut self) {
+    pub fn add_unfiltered_write_all(&mut self) {
         let mut filter = FilteredAccess::default();
-        filter.access.write_all_resources();
+        filter.access.write_all();
         self.add(filter);
     }
 
@@ -1182,8 +1182,8 @@ mod tests {
     fn create_sample_filtered_access_set() -> FilteredAccessSet<usize> {
         let mut filtered_access_set = FilteredAccessSet::<usize>::default();
 
-        filtered_access_set.add_unfiltered_resource_read(2);
-        filtered_access_set.add_unfiltered_resource_write(4);
+        filtered_access_set.add_unfiltered_read(2);
+        filtered_access_set.add_unfiltered_write(4);
         filtered_access_set.read_all();
 
         filtered_access_set
@@ -1268,8 +1268,8 @@ mod tests {
         let original: FilteredAccessSet<usize> = create_sample_filtered_access_set();
         let mut cloned = FilteredAccessSet::<usize>::default();
 
-        cloned.add_unfiltered_resource_read(7);
-        cloned.add_unfiltered_resource_write(9);
+        cloned.add_unfiltered_read(7);
+        cloned.add_unfiltered_write(9);
         cloned.write_all();
 
         cloned.clone_from(&original);
@@ -1334,7 +1334,7 @@ mod tests {
     #[test]
     fn filtered_combined_access() {
         let mut access_a = FilteredAccessSet::<usize>::default();
-        access_a.add_unfiltered_resource_read(1);
+        access_a.add_unfiltered_read(1);
 
         let mut filter_b = FilteredAccess::<usize>::default();
         filter_b.add_resource_write(1);

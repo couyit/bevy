@@ -199,9 +199,9 @@ pub unsafe trait BundleFromComponents {
 }
 
 /// The parts from [`Bundle`] that don't require statically knowing the components of the bundle.
-pub trait DynamicBundle {
+pub trait DynamicBundle<W: ComponentWorld> {
     /// An operation on the entity that happens _after_ inserting this bundle.
-    type Effect: BundleEffect;
+    type Effect: BundleEffect<W>;
     // SAFETY:
     // The `StorageType` argument passed into [`Bundle::get_components`] must be correct for the
     // component being fetched.
@@ -220,9 +220,9 @@ pub trait DynamicBundle {
 /// 3. The [`BundleEffect`] is run.
 ///
 /// See [`DynamicBundle::Effect`].
-pub trait BundleEffect {
+pub trait BundleEffect<W: ComponentWorld> {
     /// Applies this effect to the given `entity`.
-    fn apply(self, entity: &mut EntityWorldMut);
+    fn apply(self, entity: &mut EntityWorldMut<W>);
 }
 
 // SAFETY:
@@ -1036,7 +1036,7 @@ impl<'w, W: ComponentWorld> BundleInserter<'w, W> {
         bundle_id: BundleId,
         change_tick: Tick,
     ) -> Self {
-        let (archetypes, bundles, tables) = match unsafe { world.world_mut() }.storage {
+        let (archetypes, bundles, tables) = match unsafe { world.world_mut::<W>() }.storage {
             Storage::Components {
                 ref mut archetypes,
                 ref mut bundles,
@@ -1047,7 +1047,7 @@ impl<'w, W: ComponentWorld> BundleInserter<'w, W> {
         };
 
         let (components, observers) = unsafe {
-            let world = world.world();
+            let world = world.world::<W>();
             (&world.components, &world.observers)
         };
 
@@ -1130,9 +1130,8 @@ impl<'w, W: ComponentWorld> BundleInserter<'w, W> {
     /// `entity` must currently exist in the source archetype for this inserter. `location`
     /// must be `entity`'s location in the archetype. `T` must match this [`BundleInfo`]'s type
     #[inline]
-    pub unsafe fn insert<T: DynamicBundle>(
+    pub unsafe fn insert<T: DynamicBundle<W>>(
         &mut self,
-        world: UnsafeWorldCell,
         entity: Entity,
         location: EntityLocation,
         bundle: T,
@@ -1148,7 +1147,7 @@ impl<'w, W: ComponentWorld> BundleInserter<'w, W> {
         // as they must be initialized before creating the BundleInfo.
         unsafe {
             // SAFETY: Mutable references do not alias and will be dropped after this block
-            let mut deferred_world = world.into_deferred::<W>();
+            let mut deferred_world = self.world.into_deferred::<W>();
 
             if insert_mode == InsertMode::Replace {
                 if archetype.has_replace_observer() {
@@ -1350,7 +1349,7 @@ impl<'w, W: ComponentWorld> BundleInserter<'w, W> {
         // SAFETY: All components in the bundle are guaranteed to exist in the World
         // as they must be initialized before creating the BundleInfo.
         unsafe {
-            let mut deferred_world = world.into_deferred::<W>();
+            let mut deferred_world = self.world.into_deferred::<W>();
             deferred_world.trigger_on_add(
                 new_archetype,
                 entity,
@@ -1455,7 +1454,7 @@ impl<'w, W: ComponentWorld> BundleSpawner<'w, W> {
         bundle_id: BundleId,
         change_tick: Tick,
     ) -> Self {
-        let (archetypes, bundles, tables) = match unsafe { world.world_mut() }.storage {
+        let (archetypes, bundles, tables) = match unsafe { world.world_mut::<W>() }.storage {
             Storage::Components {
                 ref mut archetypes,
                 ref mut bundles,
@@ -1466,7 +1465,7 @@ impl<'w, W: ComponentWorld> BundleSpawner<'w, W> {
         };
 
         let (components, observers) = {
-            let world = unsafe { world.world() };
+            let world = unsafe { world.world::<W>() };
             (&world.components, &world.observers)
         };
         let bundle_info = bundles.get_unchecked(bundle_id);
@@ -1497,9 +1496,11 @@ impl<'w, W: ComponentWorld> BundleSpawner<'w, W> {
         table.reserve(additional);
     }
 
+    /// # Safety
+    /// `entity` must be allocated (but non-existent), `T` must match this [`BundleInfo`]'s type
     #[inline]
     #[track_caller]
-    pub unsafe fn spawn_non_existent<T: DynamicBundle>(
+    pub unsafe fn spawn_non_existent<T: DynamicBundle<W>>(
         &mut self,
         entity: Entity,
         bundle: T,
@@ -1511,7 +1512,7 @@ impl<'w, W: ComponentWorld> BundleSpawner<'w, W> {
                 ref mut sparse_sets,
                 ..
             } => (entities, sparse_sets),
-            Storage::Resources { .. } => panic!("Storage is not for Components"),
+            Storage::Resources { .. } => unreachable!(),
         };
 
         // SAFETY: We do not make any structural changes to the archetype graph through self.world so these pointers always remain valid
@@ -1537,23 +1538,8 @@ impl<'w, W: ComponentWorld> BundleSpawner<'w, W> {
             (location, after_effect)
         };
 
-        (location, after_effect)
-    }
-
-    /// # Safety
-    /// `entity` must be allocated (but non-existent), `T` must match this [`BundleInfo`]'s type
-    #[inline]
-    pub unsafe fn spawn_non_existent_and_trigger<T: DynamicBundle>(
-        &mut self,
-        worlds: UnsafeWorldsCell<'w>,
-        entity: Entity,
-        bundle: T,
-        caller: MaybeLocation,
-    ) -> (EntityLocation, T::Effect) {
-        let (location, after_effect) = self.spawn_non_existent(entity, bundle, caller);
-
         // SAFETY: We have no outstanding mutable references to world as they were dropped
-        let mut deferred_world = unsafe { worlds.into_deferred::<W>() };
+        let mut deferred_world = unsafe { self.world.into_deferred() };
         // SAFETY: `DeferredWorld` cannot provide mutable access to `Archetypes`.
         let archetype = self.archetype.as_ref();
         let bundle_info = self.bundle_info.as_ref();
@@ -1605,22 +1591,6 @@ impl<'w, W: ComponentWorld> BundleSpawner<'w, W> {
         let entity = self.entities().alloc();
         // SAFETY: entity is allocated (but non-existent), `T` matches this BundleInfo's type
         let (_, after_effect) = unsafe { self.spawn_non_existent(entity, bundle, caller) };
-        (entity, after_effect)
-    }
-
-    /// # Safety
-    /// `T` must match this [`BundleInfo`]'s type
-    #[inline]
-    pub unsafe fn spawn_and_trigger<T: Bundle>(
-        &mut self,
-        worlds: UnsafeWorldsCell<'w>,
-        bundle: T,
-        caller: MaybeLocation,
-    ) -> (Entity, T::Effect) {
-        let entity = self.entities().alloc();
-        // SAFETY: entity is allocated (but non-existent), `T` matches this BundleInfo's type
-        let (_, after_effect) =
-            unsafe { self.spawn_non_existent_and_trigger(worlds, entity, bundle, caller) };
         (entity, after_effect)
     }
 
@@ -1781,7 +1751,7 @@ impl<W: ComponentWorld> Bundles<W> {
     pub(crate) fn init_dynamic_info(
         &mut self,
         sparse_sets: &mut SparseSets,
-        components: &Components<W>,
+        components: &Components<InvalidWorld>,
         component_ids: &[ComponentId],
     ) -> BundleId {
         let bundle_infos = &mut self.bundle_infos;
@@ -1816,7 +1786,7 @@ impl<W: ComponentWorld> Bundles<W> {
     pub(crate) fn init_component_info(
         &mut self,
         sparse_sets: &mut SparseSets,
-        components: &Components<W>,
+        components: &Components<InvalidWorld>,
         component_id: ComponentId,
     ) -> BundleId {
         let bundle_infos = &mut self.bundle_infos;
@@ -1936,22 +1906,17 @@ mod tests {
     #[test]
     fn component_hook_order_spawn_despawn() {
         let mut worlds = Worlds::new();
-
-        let on_add = worlds.register_system(a_on_add);
-        let on_insert = worlds.register_system(a_on_insert);
-        let on_replace = worlds.register_system(a_on_replace);
-        let on_remove = worlds.register_system(a_on_remove);
-
         let (world, resource_world) = worlds.get_2_mut::<MainWorld, ResourceWorld>();
         resource_world.init_resource::<R>();
+
         world
             .register_component_hooks::<A>()
-            .on_add(on_add)
-            .on_insert(on_insert)
-            .on_replace(on_replace)
-            .on_remove(on_remove);
+            .on_add(|mut world, _| world.resource_mut::<R>().assert_order(0))
+            .on_insert(|mut world, _| world.resource_mut::<R>().assert_order(1))
+            .on_replace(|mut world, _| world.resource_mut::<R>().assert_order(2))
+            .on_remove(|mut world, _| world.resource_mut::<R>().assert_order(3));
 
-        let entity = worlds.spawn::<MainWorld, _>(A).id();
+        let entity = world.spawn(A).id();
         worlds.despawn::<MainWorld>(entity);
         assert_eq!(4, resource_world.resource::<R>().0);
     }
@@ -1974,17 +1939,12 @@ mod tests {
         let (world, resource_world) = worlds.get_2_mut::<MainWorld, ResourceWorld>();
         resource_world.init_resource::<R>();
 
-        let on_add = worlds.register_system(a_on_add);
-        let on_insert = worlds.register_system(a_on_insert);
-        let on_replace = worlds.register_system(a_on_replace);
-        let on_remove = worlds.register_system(a_on_remove);
-
         world
             .register_component_hooks::<A>()
-            .on_add(on_add)
-            .on_insert(on_insert)
-            .on_replace(on_replace)
-            .on_remove(on_remove);
+            .on_add(|mut world, _| world.resource_mut::<R>().assert_order(0))
+            .on_insert(|mut world, _| world.resource_mut::<R>().assert_order(1))
+            .on_replace(|mut world, _| world.resource_mut::<R>().assert_order(2))
+            .on_remove(|mut world, _| world.resource_mut::<R>().assert_order(3));
 
         let mut entity = world.spawn_empty();
         entity.insert(A);

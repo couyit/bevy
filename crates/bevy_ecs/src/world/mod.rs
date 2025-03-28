@@ -158,21 +158,21 @@ impl Worlds {
     }
 
     pub fn get_world<W: WorldLabel>(&self) -> &World<W> {
-        self.get_world_with_id(TypeId::of::<W>()).as_world()
+        self.get_world_with_id(TypeId::of::<W>())
     }
 
     pub fn get_world_mut<W: WorldLabel>(&mut self) -> &mut World<W> {
-        self.get_world_with_id_mut(TypeId::of::<W>()).as_world_mut()
+        self.get_world_with_id_mut(TypeId::of::<W>())
     }
 
-    pub fn get_world_with_id(&self, id: TypeId) -> &World<InvalidWorld> {
+    pub fn get_world_with_id<W: WorldLabel>(&self, id: TypeId) -> &World<W> {
         let id = self.indices.get(&id).unwrap();
-        &self.worlds[id.0]
+        &self.worlds[id.0].as_world()
     }
 
-    pub fn get_world_with_id_mut(&mut self, id: TypeId) -> &mut World<InvalidWorld> {
+    pub fn get_world_with_id_mut<W: WorldLabel>(&mut self, id: TypeId) -> &mut World<W> {
         let id = self.indices.get(&id).unwrap();
-        &mut self.worlds[id.0]
+        &mut self.worlds[id.0].as_world_mut()
     }
 
     pub fn get_main_world(&self) -> &World<MainWorld> {

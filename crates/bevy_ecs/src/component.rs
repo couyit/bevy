@@ -11,8 +11,8 @@ use crate::{
     storage::{SparseSetIndex, SparseSets, Table, TableRow},
     system::{ComponentCommands, Local},
     world::{
-        unsafe_world_cell::UnsafeWorldCell, FromWorld, FromWorlds, InvalidComponentWorld,
-        InvalidWorld, World, WorldLabel, Worlds,
+        unsafe_world_cell::UnsafeWorldCell, FromWorlds, InvalidComponentWorld, InvalidWorld,
+        WorldLabel, Worlds,
     },
 };
 use alloc::boxed::Box;
@@ -2907,6 +2907,7 @@ pub fn enforce_no_required_components_recursion(
 ///
 pub fn component_clone_via_clone<C: Clone + Component>(
     _commands: &mut ComponentCommands<InvalidComponentWorld>,
+    _world_type: TypeId,
     source: &SourceComponent,
     ctx: &mut ComponentCloneCtx,
 ) {
@@ -3017,6 +3018,7 @@ pub fn component_clone_via_reflect(
         }
         drop(registry);
         commands.queue(move |worlds: &mut Worlds| {
+            let world = worlds.get_world_with_id_mut::<InvalidComponentWorld>(world_type);
             let mut component = reflect_from_world.from_world(world);
             assert_eq!(type_id, (*component).type_id());
             component.apply(source_component_cloned.as_partial_reflect());
@@ -3038,6 +3040,7 @@ pub fn component_clone_via_reflect(
                     core::ptr::NonNull::new_unchecked(Box::into_raw(component).cast::<u8>());
                 world
                     .entity_mut(target)
+                    .into_world_mut(world)
                     .insert_by_id(component_id, OwningPtr::new(raw_component_ptr));
 
                 if component_layout.size() > 0 {
@@ -3053,7 +3056,8 @@ pub fn component_clone_via_reflect(
 ///
 /// See [`EntityClonerBuilder`](crate::entity::EntityClonerBuilder) for details.
 pub fn component_clone_ignore(
-    _commands: &mut TypeErasedCommands,
+    _commands: &mut ComponentCommands<InvalidComponentWorld>,
+    _world_type: TypeId,
     _source: &SourceComponent,
     _ctx: &mut ComponentCloneCtx,
 ) {
