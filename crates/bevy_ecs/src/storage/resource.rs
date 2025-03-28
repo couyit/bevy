@@ -3,6 +3,7 @@ use crate::{
     change_detection::{MaybeLocation, MutUntyped, TicksMut},
     component::{ComponentId, ComponentTicks, Components, Tick, TickCells},
     storage::{blob_vec::BlobVec, SparseSet},
+    world::InvalidWorld,
 };
 use alloc::string::String;
 use bevy_ptr::{OwningPtr, Ptr, UnsafeCellDeref};
@@ -361,7 +362,7 @@ impl<const SEND: bool> Resources<SEND> {
     pub(crate) fn initialize_with(
         &mut self,
         component_id: ComponentId,
-        components: &Components,
+        components: &Components<InvalidWorld>,
     ) -> &mut ResourceData<SEND> {
         self.resources.get_or_insert_with(component_id, || {
             let component_info = components.get_info(component_id).unwrap();

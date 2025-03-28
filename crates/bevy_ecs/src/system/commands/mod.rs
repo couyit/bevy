@@ -1,5 +1,6 @@
 pub mod command;
 pub mod entity_command;
+pub mod local_command;
 
 #[cfg(feature = "std")]
 mod parallel_scope;

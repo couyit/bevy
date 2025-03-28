@@ -14,10 +14,7 @@ use crate::{
     resource::Resource,
     schedule::ScheduleLabel,
     system::{IntoSystem, SystemId, SystemInput},
-    world::{
-        unsafe_world_cell::UnsafeWorldsCell, ComponentWorld, FromWorld, ResourceWorld,
-        SpawnBatchIter, WorldLabel, Worlds,
-    },
+    world::{FromWorld, ResourceWorld, SpawnBatchIter, WorldLabel, Worlds},
 };
 
 /// A [`World`] mutation.
@@ -54,15 +51,15 @@ pub trait Command<Out = ()>: Send + 'static {
     /// This method is used to define what a command "does" when it is ultimately applied.
     /// Because this method takes `self`, you can store data or settings on the type that implements this trait.
     /// This data is set by the system or other source of the command, and then ultimately read in this method.
-    fn apply(self, world: UnsafeWorldsCell) -> Out;
+    fn apply(self, worlds: &mut Worlds) -> Out;
 }
 
 impl<F, Out> Command<Out> for F
 where
     F: FnOnce(&mut Worlds) -> Out + Send + 'static,
 {
-    fn apply(self, worlds: UnsafeWorldsCell) -> Out {
-        self(unsafe { worlds.get_mut() })
+    fn apply(self, worlds: &mut Worlds) -> Out {
+        self(worlds)
     }
 }
 
@@ -88,15 +85,14 @@ where
 ///
 /// This is more efficient than inserting the bundles individually.
 #[track_caller]
-pub fn insert_batch<W, I, B>(batch: I, insert_mode: InsertMode) -> impl Command<Result>
+pub fn insert_batch<I, B>(batch: I, insert_mode: InsertMode) -> impl Command<Result>
 where
-    W: ComponentWorld,
     I: IntoIterator<Item = (Entity, B)> + Send + Sync + 'static,
     B: Bundle<Effect: NoBundleEffect>,
 {
     let caller = MaybeLocation::caller();
     move |worlds: &mut Worlds| -> Result {
-        worlds.try_insert_batch_with_caller::<W, I, B>(batch, insert_mode, caller)?;
+        worlds.try_insert_batch_with_caller::<I, B>(batch, insert_mode, caller)?;
         Ok(())
     }
 }

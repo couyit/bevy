@@ -441,11 +441,11 @@ impl<D: QueryData, F: QueryFilter> QueryState<D, F> {
         world: UnsafeWorldCell<'w>,
         last_run: Tick,
         this_run: Tick,
-    ) -> Query<'w, 's, W, D, F> {
+    ) -> Query<'w, 's, D, F, W> {
         // SAFETY:
         // - The caller ensured we have the correct access to the world.
         // - The caller ensured that the world matches.
-        unsafe { Query::new(world, self, last_run, this_run) }
+        unsafe { Query::<D, F, W>::new(world, self, last_run, this_run) }
     }
 
     /// Checks if the query is empty for the given [`World`], where the last change and current tick are given.

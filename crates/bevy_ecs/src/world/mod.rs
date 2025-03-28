@@ -17,7 +17,7 @@ pub mod reflect;
 use crate::{
     change_detection::TicksMut,
     component::ComponentTicks,
-    storage::{ResourceData, Resources, SparseSets, Tables},
+    storage::{ResourceData, Resources, SparseSetIndex, SparseSets, Tables},
     system::Systems,
 };
 pub use crate::{
@@ -82,7 +82,17 @@ use log::warn;
 use unsafe_world_cell::{UnsafeEntityCell, UnsafeWorldCell, UnsafeWorldsCell};
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub struct WorldId(usize);
+pub struct WorldId(pub usize);
+
+impl SparseSetIndex for WorldId {
+    fn sparse_set_index(&self) -> usize {
+        self.0
+    }
+
+    fn get_sparse_set_index(value: usize) -> Self {
+        Self(value)
+    }
+}
 
 pub struct Worlds {
     id: WorldsId,
@@ -3528,7 +3538,7 @@ impl World<ResourceWorld> {
         component_id: ComponentId,
     ) -> &mut ResourceData<true> {
         match self.storage {
-            Storage::Components { .. } => panic!("Storage is not for Resources"),
+            Storage::Components { .. } => unreachable!(),
             Storage::Resources {
                 ref mut resources, ..
             } => resources.initialize_with(component_id, &self.components),
@@ -3543,7 +3553,7 @@ impl World<ResourceWorld> {
         component_id: ComponentId,
     ) -> &mut ResourceData<false> {
         match self.storage {
-            Storage::Components { .. } => panic!("Storage is not for Resources"),
+            Storage::Components { .. } => unreachable!(),
             Storage::Resources {
                 ref mut non_send_resources,
                 ..

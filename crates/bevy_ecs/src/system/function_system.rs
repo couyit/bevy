@@ -4,33 +4,37 @@ use crate::{
     prelude::FromWorld,
     query::{Access, FilteredAccessSet},
     schedule::{InternedSystemSet, SystemSet},
+    storage::SparseSet,
     system::{
         check_system_change_tick, ReadOnlySystemParam, System, SystemIn, SystemInput, SystemParam,
         SystemParamItem,
     },
     world::{
-        unsafe_world_cell::UnsafeWorldCell, DeferredWorld, ManySameWorldLabel, World, WorldId,
-        WorldLabel,
+        unsafe_world_cell::{UnsafeWorldCell, UnsafeWorldsCell},
+        DeferredWorld, ManySameWorldLabel, World, WorldId, WorldLabel,
     },
 };
 
 use alloc::{borrow::Cow, vec, vec::Vec};
 use core::marker::PhantomData;
+use fixedbitset::FixedBitSet;
+use std::borrow::ToOwned;
 use variadics_please::all_tuples;
 
 #[cfg(feature = "trace")]
 use tracing::{info_span, Span};
 
-use super::{IntoSystem, LocalSystem, ReadOnlySystem, SystemParamBuilder};
+use super::{entity_command::clear, IntoSystem, LocalSystem, ReadOnlySystem, SystemParamBuilder};
 
 /// The metadata of a [`System`].
 #[derive(Clone)]
 pub struct SystemMeta {
     pub(crate) name: Cow<'static, str>,
+    pub(crate) world_access: FixedBitSet,
     /// The set of component accesses for this system. This is used to determine
     /// - soundness issues (e.g. multiple [`SystemParam`]s mutably accessing the same component)
     /// - ambiguities in the schedule (e.g. two systems that have some sort of conflicting access)
-    pub(crate) component_access_set: FilteredAccessSet<ComponentId>,
+
     /// This [`Access`] is used to determine which systems can run in parallel with each other
     /// in the multithreaded executor.
     ///
@@ -40,7 +44,8 @@ pub struct SystemMeta {
     /// both `A`, `B` and `T` then in practice there's no risk of conflict. By using [`ArchetypeComponentId`]
     /// we can be more precise because we can check if the existing archetypes of the [`World`]
     /// cause a conflict
-    pub(crate) archetype_component_access: Access<ArchetypeComponentId>,
+    pub(crate) component_accesses:
+        SparseSet<WorldId, (FilteredAccessSet<ComponentId>, Access<ArchetypeComponentId>)>,
     // NOTE: this must be kept private. making a SystemMeta non-send is irreversible to prevent
     // SystemParams from overriding each other
     is_send: bool,
@@ -58,8 +63,8 @@ impl SystemMeta {
         let name = core::any::type_name::<T>();
         Self {
             name: name.into(),
-            archetype_component_access: Access::default(),
-            component_access_set: FilteredAccessSet::default(),
+            world_access: FixedBitSet::new(),
+            component_accesses: SparseSet::new(),
             is_send: true,
             has_deferred: false,
             last_run: Tick::new(0),
@@ -140,53 +145,41 @@ impl SystemMeta {
         self.param_warn_policy.try_warn::<P>(&self.name);
     }
 
-    /// Archetype component access that is used to determine which systems can run in parallel with each other
-    /// in the multithreaded executor.
-    ///
-    /// We use an [`ArchetypeComponentId`] as it is more precise than just checking [`ComponentId`]:
-    /// for example if you have one system with `Query<&mut A, With<B>`, and one system with `Query<&mut A, Without<B>`,
-    /// they conflict if you just look at the [`ComponentId`];
-    /// but no archetype that matches the first query will match the second and vice versa,
-    /// which means there's no risk of conflict.
-    #[inline]
-    pub fn archetype_component_access(&self) -> &Access<ArchetypeComponentId> {
-        &self.archetype_component_access
+    pub fn world_read_write(&mut self, id: WorldId) {
+        self.world_access.grow_and_insert(id.0);
     }
 
-    /// Returns a mutable reference to the [`Access`] for [`ArchetypeComponentId`].
-    /// This is used to determine which systems can run in parallel with each other
-    /// in the multithreaded executor.
-    ///
-    /// We use an [`ArchetypeComponentId`] as it is more precise than just checking [`ComponentId`]:
-    /// for example if you have one system with `Query<&mut A, With<B>`, and one system with `Query<&mut A, Without<B>`,
-    /// they conflict if you just look at the [`ComponentId`];
-    /// but no archetype that matches the first query will match the second and vice versa,
-    /// which means there's no risk of conflict.
-    ///
-    /// # Safety
-    ///
-    /// No access can be removed from the returned [`Access`].
-    #[inline]
-    pub unsafe fn archetype_component_access_mut(&mut self) -> &mut Access<ArchetypeComponentId> {
-        &mut self.archetype_component_access
+    pub fn get_component_access(
+        &self,
+        id: WorldId,
+    ) -> &(FilteredAccessSet<ComponentId>, Access<ArchetypeComponentId>) {
+        self.component_accesses
+            .get(id)
+            .expect("Component access for this WorldId have to be initialized.")
     }
 
-    /// Returns a reference to the [`FilteredAccessSet`] for [`ComponentId`].
-    /// Used to check if systems and/or system params have conflicting access.
-    #[inline]
-    pub fn component_access_set(&self) -> &FilteredAccessSet<ComponentId> {
-        &self.component_access_set
+    pub fn get_component_access_mut(
+        &mut self,
+        id: WorldId,
+    ) -> &mut (FilteredAccessSet<ComponentId>, Access<ArchetypeComponentId>) {
+        self.component_accesses
+            .get_mut(id)
+            .expect("Component access for this WorldId have to be initialized.")
     }
 
-    /// Returns a mutable reference to the [`FilteredAccessSet`] for [`ComponentId`].
-    /// Used internally to statically check if systems have conflicting access.
-    ///
-    /// # Safety
-    ///
-    /// No access can be removed from the returned [`FilteredAccessSet`].
-    #[inline]
-    pub unsafe fn component_access_set_mut(&mut self) -> &mut FilteredAccessSet<ComponentId> {
-        &mut self.component_access_set
+    pub fn clear_all_component_accesses(&mut self) {
+        self.component_accesses.values_mut().for_each(|v| {
+            v.0.clear();
+            v.1.clear();
+        });
+    }
+
+    pub(crate) fn extend(&mut self, mut other: Self) {
+        self.component_accesses.iter_mut().for_each(|(id, v0)| {
+            let v1 = other.component_accesses.remove(*id).unwrap();
+            v0.0.extend(v1.0);
+            v0.1.extend(&v1.1);
+        });
     }
 }
 
@@ -817,7 +810,7 @@ where
     unsafe fn run_unsafe(
         &mut self,
         input: SystemIn<'_, Self>,
-        world: UnsafeWorldCell,
+        worlds: UnsafeWorldsCell,
     ) -> Self::Out {
         #[cfg(feature = "trace")]
         let _span_guard = self.system_meta.system_span.enter();
@@ -934,7 +927,7 @@ where
     F: SystemParamFunction<Marker>,
     <F::Param as SystemParam>::World: ManySameWorldLabel<W>,
 {
-    fn run_local(&mut self, world: &mut World<W>) {
+    fn run_local(&mut self, input: SystemIn<'_, Self>, world: &mut World<W>) -> Self::Out {
         let change_tick = world.increment_change_tick();
 
         let param_state = &mut self.state.as_mut().expect(Self::ERROR_UNINITIALIZED).param;
@@ -953,6 +946,7 @@ where
         };
         let out = self.func.run(input, params);
         self.system_meta.last_run = change_tick;
+        out
     }
 
     fn initialize_local(&mut self, world: &mut World<W>) {
