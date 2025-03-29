@@ -1,7 +1,4 @@
-use core::{
-    marker::PhantomData,
-    ops::{Deref, DerefMut},
-};
+use core::ops::{Deref, DerefMut};
 
 use crate::{
     archetype::Archetype,
@@ -19,24 +16,20 @@ use crate::{
     world::{error::EntityMutableFetchError, EntityFetcher, WorldEntityFetch},
 };
 
-use super::{
-    unsafe_world_cell::UnsafeWorldCell, ComponentWorld, Mut, ResourceWorld, World, WorldLabel,
-    ON_INSERT, ON_REPLACE,
-};
+use super::{unsafe_world_cell::UnsafeWorldCell, Mut, World, ON_INSERT, ON_REPLACE};
 
 /// A [`World`] reference that disallows structural ECS changes.
 /// This includes initializing resources, registering components or spawning entities.
 ///
 /// This means that in order to add entities, for example, you will need to use commands instead of the world directly.
 #[derive(Clone, Copy)]
-pub struct DeferredWorld<'w, W: WorldLabel> {
+pub struct DeferredWorld<'w> {
     // SAFETY: Implementors must not use this reference to make structural changes
     world: UnsafeWorldCell<'w>,
-    marker: PhantomData<W>,
 }
 
-impl<'w, W: WorldLabel> Deref for DeferredWorld<'w, W> {
-    type Target = World<W>;
+impl<'w> Deref for DeferredWorld<'w> {
+    type Target = World;
 
     fn deref(&self) -> &Self::Target {
         // SAFETY: Structural changes cannot be made through &World
@@ -44,7 +37,7 @@ impl<'w, W: WorldLabel> Deref for DeferredWorld<'w, W> {
     }
 }
 
-impl<'w, W: WorldLabel> DerefMut for DeferredWorld<'w, W> {
+impl<'w> DerefMut for DeferredWorld<'w> {
     fn deref_mut(&mut self) -> &mut Self::Target {
         unsafe { self.world.world_mut() }.as_world_mut()
     }
@@ -57,35 +50,28 @@ impl<'w> UnsafeWorldCell<'w> {
     /// Caller must ensure there are no outstanding mutable references to world and no
     /// outstanding references to the world's command queue, resource or component data
     #[inline]
-    pub unsafe fn into_deferred<W: WorldLabel>(self) -> DeferredWorld<'w, W> {
-        DeferredWorld {
-            world: self,
-            marker: PhantomData,
-        }
+    pub unsafe fn into_deferred(self) -> DeferredWorld<'w> {
+        DeferredWorld { world: self }
     }
 }
 
-impl<'w, W: WorldLabel> From<&'w mut World<W>> for DeferredWorld<'w, W> {
-    fn from(value: &'w mut World<W>) -> Self {
+impl<'w> From<&'w mut World> for DeferredWorld<'w> {
+    fn from(value: &'w mut World) -> Self {
         DeferredWorld {
             world: value.as_unsafe_world_cell(),
-            marker: PhantomData,
         }
     }
 }
 
-impl<'w, W: WorldLabel> DeferredWorld<'w, W> {
+impl<'w> DeferredWorld<'w> {
     /// Reborrow self as a new instance of [`DeferredWorld`]
     #[inline]
-    pub fn reborrow(&mut self) -> DeferredWorld<W> {
-        DeferredWorld {
-            world: self.world,
-            marker: PhantomData,
-        }
+    pub fn reborrow(&mut self) -> DeferredWorld {
+        DeferredWorld { world: self.world }
     }
 }
 
-impl<'w, W: ComponentWorld> DeferredWorld<'w, W> {
+impl<'w> DeferredWorld<'w> {
     /// Returns [`Query`] for the given [`QueryState`], which is used to efficiently
     /// run queries on the [`World`] by storing and reusing the [`QueryState`].
     ///
@@ -95,7 +81,7 @@ impl<'w, W: ComponentWorld> DeferredWorld<'w, W> {
     pub fn query<'s, D: QueryData, F: QueryFilter>(
         &mut self,
         state: &'s mut QueryState<D, F>,
-    ) -> Query<'_, 's, D, F, W> {
+    ) -> Query<'_, 's, D, F> {
         // SAFETY: We have mutable access to the entire world
         unsafe { state.query_unchecked(self.as_unsafe_world_cell()) }
     }
@@ -451,16 +437,9 @@ impl<'w, W: ComponentWorld> DeferredWorld<'w, W> {
     /// # assert_eq!(_world.get::<TargetedBy>(e1).unwrap().0, eid);
     /// # assert_eq!(_world.get::<TargetedBy>(e2).unwrap().0, eid);
     /// ```
-    pub fn entities_and_commands(&mut self) -> (EntityFetcher, ComponentCommands<W>) {
+    pub fn entities_and_commands(&mut self) -> (EntityFetcher, ComponentCommands) {
         // SAFETY: `&mut self` gives mutable access to the entire world, and prevents simultaneous access.
-        let fetcher = unsafe {
-            EntityFetcher::new(
-                self.worlds
-                    .get_mut()
-                    .get_world_mut::<W>()
-                    .as_unsafe_world_cell(),
-            )
-        };
+        let fetcher = unsafe { EntityFetcher::new(self.world.as_unsafe_world_cell()) };
         // SAFETY:
         // - `&mut self` gives mutable access to the entire world, and prevents simultaneous access.
         // - Command queue access does not conflict with entity access.
@@ -490,10 +469,7 @@ impl<'w, W: ComponentWorld> DeferredWorld<'w, W> {
                 let hooks = unsafe { self.components().get_info_unchecked(component_id) }.hooks();
                 if let Some(hook) = hooks.on_add {
                     hook(
-                        DeferredWorld {
-                            world: self.world,
-                            marker: PhantomData::<W>,
-                        },
+                        DeferredWorld { world: self.world },
                         HookContext {
                             entity,
                             component_id,
@@ -525,10 +501,7 @@ impl<'w, W: ComponentWorld> DeferredWorld<'w, W> {
                 let hooks = unsafe { self.components().get_info_unchecked(component_id) }.hooks();
                 if let Some(hook) = hooks.on_insert {
                     hook(
-                        DeferredWorld {
-                            world: self.world,
-                            marker: PhantomData::<W>,
-                        },
+                        DeferredWorld { world: self.world },
                         HookContext {
                             entity,
                             component_id,
@@ -560,10 +533,7 @@ impl<'w, W: ComponentWorld> DeferredWorld<'w, W> {
                 let hooks = unsafe { self.components().get_info_unchecked(component_id) }.hooks();
                 if let Some(hook) = hooks.on_replace {
                     hook(
-                        DeferredWorld {
-                            world: self.world,
-                            marker: PhantomData::<W>,
-                        },
+                        DeferredWorld { world: self.world },
                         HookContext {
                             entity,
                             component_id,
@@ -594,10 +564,7 @@ impl<'w, W: ComponentWorld> DeferredWorld<'w, W> {
                 let hooks = unsafe { self.components().get_info_unchecked(component_id) }.hooks();
                 if let Some(hook) = hooks.on_remove {
                     hook(
-                        DeferredWorld {
-                            world: self.world,
-                            marker: PhantomData::<W>,
-                        },
+                        DeferredWorld { world: self.world },
                         HookContext {
                             entity,
                             component_id,
@@ -628,10 +595,7 @@ impl<'w, W: ComponentWorld> DeferredWorld<'w, W> {
                 let hooks = unsafe { self.components().get_info_unchecked(component_id) }.hooks();
                 if let Some(hook) = hooks.on_despawn {
                     hook(
-                        DeferredWorld {
-                            world: self.world,
-                            marker: PhantomData::<W>,
-                        },
+                        DeferredWorld { world: self.world },
                         HookContext {
                             entity,
                             component_id,
@@ -656,7 +620,7 @@ impl<'w, W: ComponentWorld> DeferredWorld<'w, W> {
         components: impl Iterator<Item = ComponentId> + Clone,
         caller: MaybeLocation,
     ) {
-        Observers::invoke::<W, _>(
+        Observers::invoke::<_>(
             self.reborrow(),
             event,
             target,
@@ -684,7 +648,7 @@ impl<'w, W: ComponentWorld> DeferredWorld<'w, W> {
         T: Traversal<E>,
     {
         loop {
-            Observers::invoke::<W, _>(
+            Observers::invoke::<_>(
                 self.reborrow(),
                 event,
                 target,
@@ -724,7 +688,7 @@ impl<'w, W: ComponentWorld> DeferredWorld<'w, W> {
     }
 }
 
-impl<'w> DeferredWorld<'w, ResourceWorld> {
+impl<'w> DeferredWorld<'w> {
     /// Gets a mutable reference to the resource of the given type
     ///
     /// # Panics
