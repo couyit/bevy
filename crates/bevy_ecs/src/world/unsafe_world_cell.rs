@@ -1,9 +1,6 @@
 //! Contains types that allow disjoint mutable access to a [`World`].
 
-use super::{
-    ComponentWorld, InvalidComponentWorld, InvalidWorld, Mut, Ref, ResourceWorld, World, WorldId,
-    WorldLabel, Worlds,
-};
+use super::{Mut, Ref, World, WorldId, Worlds};
 use crate::{
     archetype::{Archetype, Archetypes},
     bundle::Bundles,
@@ -162,12 +159,10 @@ impl<'w> UnsafeWorldsCell<'w> {
 /// ```
 #[derive(Copy, Clone)]
 pub struct UnsafeWorldCell<'w> {
-    ptr: *mut World<InvalidWorld>,
+    ptr: *mut World,
     #[cfg(debug_assertions)]
     allows_mutable_access: bool,
-    #[cfg(debug_assertions)]
-    world_type: TypeId,
-    _marker: PhantomData<(&'w World<InvalidWorld>, &'w UnsafeCell<World<InvalidWorld>>)>,
+    _marker: PhantomData<(&'w World, &'w UnsafeCell<World>)>,
 }
 
 // SAFETY: `&World` and `&mut World` are both `Send`
@@ -175,14 +170,14 @@ unsafe impl Send for UnsafeWorldCell<'_> {}
 // SAFETY: `&World` and `&mut World` are both `Sync`
 unsafe impl Sync for UnsafeWorldCell<'_> {}
 
-impl<'w, W: WorldLabel> From<&'w mut World<W>> for UnsafeWorldCell<'w> {
-    fn from(value: &'w mut World<W>) -> Self {
+impl<'w> From<&'w mut World> for UnsafeWorldCell<'w> {
+    fn from(value: &'w mut World) -> Self {
         value.as_unsafe_world_cell()
     }
 }
 
-impl<'w, W: WorldLabel> From<&'w World<W>> for UnsafeWorldCell<'w> {
-    fn from(value: &'w World<W>) -> Self {
+impl<'w> From<&'w World> for UnsafeWorldCell<'w> {
+    fn from(value: &'w World) -> Self {
         value.as_unsafe_world_cell_readonly()
     }
 }
@@ -190,26 +185,22 @@ impl<'w, W: WorldLabel> From<&'w World<W>> for UnsafeWorldCell<'w> {
 impl<'w> UnsafeWorldCell<'w> {
     /// Creates a [`UnsafeWorldCell`] that can be used to access everything immutably
     #[inline]
-    pub(crate) fn new_readonly<W: WorldLabel>(world: &'w World<W>) -> Self {
+    pub(crate) fn new_readonly(world: &'w World) -> Self {
         Self {
-            ptr: ptr::from_ref(world).cast_mut() as *mut World<InvalidWorld>,
+            ptr: ptr::from_ref(world).cast_mut() as *mut World,
             #[cfg(debug_assertions)]
             allows_mutable_access: false,
-            #[cfg(debug_assertions)]
-            world_type: TypeId::of::<W>(),
             _marker: PhantomData,
         }
     }
 
     /// Creates [`UnsafeWorldCell`] that can be used to access everything mutably
     #[inline]
-    pub(crate) fn new_mutable<W: WorldLabel>(world: &'w mut World<W>) -> Self {
+    pub(crate) fn new_mutable(world: &'w mut World) -> Self {
         Self {
-            ptr: ptr::from_mut(world) as *mut World<InvalidWorld>,
+            ptr: ptr::from_mut(world) as *mut World,
             #[cfg(debug_assertions)]
             allows_mutable_access: true,
-            #[cfg(debug_assertions)]
-            world_type: TypeId::of::<W>(),
             _marker: PhantomData,
         }
     }
@@ -226,11 +217,6 @@ impl<'w> UnsafeWorldCell<'w> {
             self.allows_mutable_access,
             "mutating world data via `World::as_unsafe_world_cell_readonly` is forbidden"
         );
-    }
-
-    #[cfg(debug_assertions)]
-    pub(crate) fn assert_type<W: WorldLabel>(self) {
-        debug_assert_eq!(self.world_type, TypeId::of::<W>())
     }
 
     /// Gets a mutable reference to the [`World`] this [`UnsafeWorldCell`] belongs to.
@@ -283,10 +269,8 @@ impl<'w> UnsafeWorldCell<'w> {
     /// let archetypes = world_cell.archetypes();
     /// ```
     #[inline]
-    pub unsafe fn world_mut<W: WorldLabel>(self) -> &'w mut World<W> {
+    pub unsafe fn world_mut(self) -> &'w mut World {
         self.assert_allows_mutable_access();
-        #[cfg(debug_assertions)]
-        self.assert_type::<W>();
         // SAFETY:
         // - caller ensures the created `&mut World` is the only borrow of world
         unsafe { &mut *self.ptr }.as_world_mut()
@@ -300,7 +284,7 @@ impl<'w> UnsafeWorldCell<'w> {
     /// - there must be no live exclusive borrows on world data
     /// - there must be no live exclusive borrow of world
     #[inline]
-    pub unsafe fn world<W: WorldLabel>(self) -> &'w World<W> {
+    pub unsafe fn world(self) -> &'w World {
         // SAFETY:
         // - caller ensures there is no `&mut World` this makes it okay to make a `&World`
         // - caller ensures there is no mutable borrows of world data, this means the caller cannot
@@ -317,7 +301,7 @@ impl<'w> UnsafeWorldCell<'w> {
     /// # Safety
     /// - must only be used to access world metadata
     #[inline]
-    pub unsafe fn world_metadata<W: WorldLabel>(self) -> &'w World<W> {
+    pub unsafe fn world_metadata(self) -> &'w World {
         // SAFETY: caller ensures that returned reference is not used to violate aliasing rules
         unsafe { self.unsafe_world() }
     }
@@ -334,9 +318,7 @@ impl<'w> UnsafeWorldCell<'w> {
     /// - must not be used in a way that would conflict with any
     ///   live exclusive borrows on world data
     #[inline]
-    unsafe fn unsafe_world<W: WorldLabel>(self) -> &'w World<W> {
-        #[cfg(debug_assertions)]
-        self.assert_type::<W>();
+    unsafe fn unsafe_world(self) -> &'w World {
         // SAFETY:
         // - caller ensures that the returned `&World` is not used in a way that would conflict
         //   with any existing mutable borrows of world data
@@ -345,58 +327,58 @@ impl<'w> UnsafeWorldCell<'w> {
 
     /// Retrieves this world's unique [ID](WorldId).
     #[inline]
-    pub fn id<W: WorldLabel>(self) -> WorldId {
+    pub fn id(self) -> WorldId {
         // SAFETY:
         // - we only access world metadata
-        unsafe { self.world_metadata::<W>() }.id()
+        unsafe { self.world_metadata() }.id()
     }
 
     /// Retrieves this world's [`Entities`] collection.
     #[inline]
-    pub fn entities<W: ComponentWorld>(self) -> &'w Entities<W> {
+    pub fn entities(self) -> &'w Entities {
         // SAFETY:
         // - we only access world metadata
-        unsafe { self.world_metadata::<W>() }.entities()
+        unsafe { self.world_metadata() }.entities()
     }
 
     /// Retrieves this world's [`Archetypes`] collection.
     #[inline]
-    pub fn archetypes<W: ComponentWorld>(self) -> &'w Archetypes<W> {
+    pub fn archetypes(self) -> &'w Archetypes {
         // SAFETY:
         // - we only access world metadata
-        unsafe { self.world_metadata::<W>() }.archetypes()
+        unsafe { self.world_metadata() }.archetypes()
     }
 
     #[inline]
-    pub fn tables<W: ComponentWorld>(self) -> &'w Tables {
-        unsafe { self.unsafe_world::<W>() }.tables()
+    pub fn tables(self) -> &'w Tables {
+        unsafe { self.unsafe_world() }.tables()
     }
 
     #[inline]
-    pub fn sparse_sets<W: ComponentWorld>(self) -> &'w SparseSets {
-        unsafe { self.unsafe_world::<W>() }.sparse_sets()
+    pub fn sparse_sets(self) -> &'w SparseSets {
+        unsafe { self.unsafe_world() }.sparse_sets()
     }
 
     /// Retrieves this world's [`Components`] collection.
     #[inline]
-    pub fn components<W: WorldLabel>(self) -> &'w Components<InvalidWorld> {
+    pub fn components(self) -> &'w Components {
         // SAFETY:
         // - we only access world metadata
-        &unsafe { self.world_metadata::<W>() }.components
+        &unsafe { self.world_metadata() }.components
     }
 
     /// Retrieves this world's collection of [removed components](RemovedComponentEvents).
-    pub fn removed_components<W: WorldLabel>(self) -> &'w RemovedComponentEvents {
+    pub fn removed_components(self) -> &'w RemovedComponentEvents {
         // SAFETY:
         // - we only access world metadata
-        &unsafe { self.world_metadata::<W>() }.removed_components
+        &unsafe { self.world_metadata() }.removed_components
     }
 
     /// Retrieves this world's [`Observers`] collection.
-    pub(crate) fn observers<W: WorldLabel>(self) -> &'w Observers {
+    pub(crate) fn observers(self) -> &'w Observers {
         // SAFETY:
         // - we only access world metadata
-        &unsafe { self.world_metadata::<W>() }.observers
+        &unsafe { self.world_metadata() }.observers
     }
 
     /// Retrieves this world's [`Bundles`] collection.
@@ -404,9 +386,7 @@ impl<'w> UnsafeWorldCell<'w> {
     pub fn bundles(self) -> &'w Bundles {
         // SAFETY:
         // - we only access world metadata
-        &unsafe { self.world_metadata() }
-            .as_world::<InvalidComponentWorld>()
-            .bundles()
+        &unsafe { self.world_metadata() }.bundles()
     }
 
     /// Gets the current change tick of this world.
@@ -460,9 +440,10 @@ impl<'w> UnsafeWorldCell<'w> {
         self,
         entity: Entity,
     ) -> Result<UnsafeEntityCell<'w>, EntityDoesNotExistError> {
-        let location = self.entities::<InvalidComponentWorld>().get(entity).ok_or(
-            EntityDoesNotExistError::new(entity, self.entities::<InvalidComponentWorld>()),
-        )?;
+        let location = self
+            .entities()
+            .get(entity)
+            .ok_or(EntityDoesNotExistError::new(entity, self.entities()))?;
         Ok(UnsafeEntityCell::new(self, entity, location))
     }
 
@@ -531,7 +512,6 @@ impl<'w> UnsafeWorldCell<'w> {
         // SAFETY: caller ensures that `self` has permission to access `R`
         //  caller ensures that no mutable reference exists to `R`
         unsafe { self.unsafe_world() }
-            .as_world::<ResourceWorld>()
             .resources()
             .get(component_id)?
             .get_data()
@@ -574,7 +554,6 @@ impl<'w> UnsafeWorldCell<'w> {
         // SAFETY: we only access data on world that the caller has ensured is unaliased and we have
         //  permission to access.
         unsafe { self.unsafe_world() }
-            .as_world::<ResourceWorld>()
             .non_send_resources()
             .get(component_id)?
             .get_data()
@@ -620,7 +599,6 @@ impl<'w> UnsafeWorldCell<'w> {
         // SAFETY: we only access data that the caller has ensured is unaliased and `self`
         //  has permission to access.
         let (ptr, ticks, caller) = unsafe { self.unsafe_world() }
-            .as_world::<ResourceWorld>()
             .resources()
             .get(component_id)?
             .get_with_ticks()?;
@@ -689,7 +667,6 @@ impl<'w> UnsafeWorldCell<'w> {
         // SAFETY: we only access data that the caller has ensured is unaliased and `self`
         //  has permission to access.
         let (ptr, ticks, caller) = unsafe { self.unsafe_world() }
-            .as_world::<ResourceWorld>()
             .non_send_resources()
             .get(component_id)?
             .get_with_ticks()?;
@@ -728,7 +705,6 @@ impl<'w> UnsafeWorldCell<'w> {
         // - caller ensures there are no mutable borrows of this resource
         // - caller ensures that we have permission to access this resource
         unsafe { self.unsafe_world() }
-            .as_world::<ResourceWorld>()
             .resources()
             .get(component_id)?
             .get_with_ticks()
@@ -756,7 +732,6 @@ impl<'w> UnsafeWorldCell<'w> {
         // - caller ensures there are no mutable borrows of this resource
         // - caller ensures that we have permission to access this resource
         unsafe { self.unsafe_world() }
-            .as_world::<ResourceWorld>()
             .non_send_resources()
             .get(component_id)?
             .get_with_ticks()
@@ -819,7 +794,7 @@ impl<'w> UnsafeEntityCell<'w> {
     /// Returns the archetype that the current entity belongs to.
     #[inline]
     pub fn archetype(self) -> &'w Archetype {
-        &self.world.archetypes::<InvalidComponentWorld>()[self.location.archetype_id]
+        &self.world.archetypes()[self.location.archetype_id]
     }
 
     /// Gets the world that the current entity belongs to.
@@ -1061,7 +1036,7 @@ impl<'w> UnsafeEntityCell<'w> {
         // SAFETY: Location is guaranteed to exist
         let archetype = unsafe {
             self.world
-                .archetypes::<InvalidComponentWorld>()
+                .archetypes()
                 .get(location.archetype_id)
                 .debug_checked_unwrap()
         };
@@ -1222,7 +1197,7 @@ impl<'w> UnsafeEntityCell<'w> {
     /// Returns the source code location from which this entity has been spawned.
     pub fn spawned_by(self) -> MaybeLocation {
         self.world()
-            .entities::<InvalidComponentWorld>()
+            .entities()
             .entity_get_spawned_or_despawned_by(self.entity)
             .map(|o| o.unwrap())
     }
