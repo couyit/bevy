@@ -11,16 +11,16 @@ use crate::{
     entity::{hash_map::EntityHashMap, Entities, Entity, EntityMapper},
     query::DebugCheckedUnwrap,
     relationship::RelationshipHookMode,
-    world::{ComponentWorld, World, WorldLabel},
+    world::World,
 };
 
 /// Provides read access to the source component (the component being cloned) in a [`ComponentCloneFn`].
-pub struct SourceComponent<'a, W: WorldLabel> {
+pub struct SourceComponent<'a> {
     ptr: Ptr<'a>,
-    info: &'a ComponentInfo<W>,
+    info: &'a ComponentInfo,
 }
 
-impl<'a, W: WorldLabel> SourceComponent<'a, W> {
+impl<'a> SourceComponent<'a> {
     /// Returns a reference to the component on the source entity.
     ///
     /// Will return `None` if `ComponentId` of requested component does not match `ComponentId` of source component
@@ -71,16 +71,16 @@ impl<'a, W: WorldLabel> SourceComponent<'a, W> {
 ///
 /// Provides fast access to useful resources like [`AppTypeRegistry`](crate::reflect::AppTypeRegistry)
 /// and allows component clone handler to get information about component being cloned.
-pub struct ComponentCloneCtx<'a, 'b, W: ComponentWorld> {
+pub struct ComponentCloneCtx<'a, 'b> {
     component_id: ComponentId,
     target_component_written: bool,
     bundle_scratch: &'a mut BundleScratch<'b>,
     bundle_scratch_allocator: &'b Bump,
-    entities: &'a Entities<W>,
+    entities: &'a Entities,
     source: Entity,
     target: Entity,
-    component_info: &'a ComponentInfo<W>,
-    entity_cloner: &'a mut EntityCloner<W>,
+    component_info: &'a ComponentInfo,
+    entity_cloner: &'a mut EntityCloner,
     mapper: &'a mut dyn EntityMapper,
     #[cfg(feature = "bevy_reflect")]
     type_registry: Option<&'a crate::reflect::AppTypeRegistry>,
@@ -89,7 +89,7 @@ pub struct ComponentCloneCtx<'a, 'b, W: ComponentWorld> {
     type_registry: Option<&'a ()>,
 }
 
-impl<'a, 'b, W: ComponentWorld> ComponentCloneCtx<'a, 'b, W> {
+impl<'a, 'b> ComponentCloneCtx<'a, 'b> {
     /// Create a new instance of `ComponentCloneCtx` that can be passed to component clone handlers.
     ///
     /// # Safety
@@ -102,9 +102,9 @@ impl<'a, 'b, W: ComponentWorld> ComponentCloneCtx<'a, 'b, W> {
         target: Entity,
         bundle_scratch_allocator: &'b Bump,
         bundle_scratch: &'a mut BundleScratch<'b>,
-        entities: &'a Entities<W>,
-        component_info: &'a ComponentInfo<W>,
-        entity_cloner: &'a mut EntityCloner<W>,
+        entities: &'a Entities,
+        component_info: &'a ComponentInfo,
+        entity_cloner: &'a mut EntityCloner,
         mapper: &'a mut dyn EntityMapper,
         #[cfg(feature = "bevy_reflect")] type_registry: Option<&'a crate::reflect::AppTypeRegistry>,
         #[cfg(not(feature = "bevy_reflect"))] type_registry: Option<&'a ()>,
@@ -145,7 +145,7 @@ impl<'a, 'b, W: ComponentWorld> ComponentCloneCtx<'a, 'b, W> {
     }
 
     /// Returns the [`ComponentInfo`] of the component being cloned.
-    pub fn component_info(&self) -> &ComponentInfo<W> {
+    pub fn component_info(&self) -> &ComponentInfo {
         self.component_info
     }
 
@@ -277,7 +277,7 @@ impl<'a, 'b, W: ComponentWorld> ComponentCloneCtx<'a, 'b, W> {
     /// This exists, despite its similarity to [`Commands`](crate::system::Commands), to provide access to the entity mapper in the current context.
     pub fn queue_deferred(
         &mut self,
-        deferred: impl FnOnce(&mut World<W>, &mut dyn EntityMapper) + 'static,
+        deferred: impl FnOnce(&mut World, &mut dyn EntityMapper) + 'static,
     ) {
         self.entity_cloner
             .deferred_commands
@@ -344,7 +344,7 @@ impl<'a, 'b, W: ComponentWorld> ComponentCloneCtx<'a, 'b, W> {
 /// 2. component-defined handler using [`Component::clone_behavior`]
 /// 3. default handler override using [`EntityClonerBuilder::with_default_clone_fn`].
 /// 4. reflect-based or noop default clone handler depending on if `bevy_reflect` feature is enabled or not.
-pub struct EntityCloner<W: ComponentWorld> {
+pub struct EntityCloner {
     filter_allows_components: bool,
     filter: HashSet<ComponentId>,
     clone_behavior_overrides: HashMap<ComponentId, ComponentCloneBehavior>,
@@ -352,11 +352,11 @@ pub struct EntityCloner<W: ComponentWorld> {
     linked_cloning: bool,
     default_clone_fn: ComponentCloneFn,
     clone_queue: VecDeque<Entity>,
-    deferred_commands: VecDeque<Box<dyn FnOnce(&mut World<W>, &mut dyn EntityMapper)>>,
-    marker: PhantomData<W>,
+    deferred_commands: VecDeque<Box<dyn FnOnce(&mut World, &mut dyn EntityMapper)>>,
+    marker: PhantomData,
 }
 
-impl<W: ComponentWorld> Default for EntityCloner<W> {
+impl Default for EntityCloner {
     fn default() -> Self {
         Self {
             filter_allows_components: false,
@@ -417,9 +417,9 @@ impl<'a> BundleScratch<'a> {
     ///
     /// # Safety
     /// All [`ComponentId`] values in this instance must come from `world`.
-    pub(crate) unsafe fn write<W: ComponentWorld>(
+    pub(crate) unsafe fn write(
         self,
-        world: &mut World<W>,
+        world: &mut World,
         entity: Entity,
         relationship_hook_insert_mode: RelationshipHookMode,
     ) {
@@ -436,9 +436,9 @@ impl<'a> BundleScratch<'a> {
     }
 }
 
-impl<W: ComponentWorld> EntityCloner<W> {
+impl EntityCloner {
     /// Returns a new [`EntityClonerBuilder`] using the given `world`.
-    pub fn build(world: &mut World<W>) -> EntityClonerBuilder<W> {
+    pub fn build(world: &mut World) -> EntityClonerBuilder {
         EntityClonerBuilder {
             world,
             attach_required_components: true,
@@ -456,7 +456,7 @@ impl<W: ComponentWorld> EntityCloner<W> {
     /// Clones and inserts components from the `source` entity into the entity mapped by `mapper` from `source` using the stored configuration.
     fn clone_entity_internal(
         &mut self,
-        world: &mut World<W>,
+        world: &mut World,
         source: Entity,
         mapper: &mut dyn EntityMapper,
         relationship_hook_insert_mode: RelationshipHookMode,
@@ -523,7 +523,7 @@ impl<W: ComponentWorld> EntityCloner<W> {
                         &mut bundle_scratch,
                         world.entities(),
                         info,
-                        unsafe { &mut *(core::ptr::from_mut(self) as *mut EntityCloner<W>) },
+                        unsafe { &mut *(core::ptr::from_mut(self) as *mut EntityCloner) },
                         mapper,
                         app_registry.as_ref(),
                     )
@@ -565,7 +565,7 @@ impl<W: ComponentWorld> EntityCloner<W> {
     /// by [`RelationshipTarget`](crate::relationship::RelationshipTarget) components with
     /// [`RelationshipTarget::LINKED_SPAWN`](crate::relationship::RelationshipTarget::LINKED_SPAWN)
     #[track_caller]
-    pub fn clone_entity(&mut self, world: &mut World<W>, source: Entity, target: Entity) {
+    pub fn clone_entity(&mut self, world: &mut World, source: Entity, target: Entity) {
         let mut map = EntityHashMap::<Entity>::new();
         map.set_mapped(source, target);
         self.clone_entity_mapped(world, source, &mut map);
@@ -576,7 +576,7 @@ impl<W: ComponentWorld> EntityCloner<W> {
     /// by [`RelationshipTarget`](crate::relationship::RelationshipTarget) components with
     /// [`RelationshipTarget::LINKED_SPAWN`](crate::relationship::RelationshipTarget::LINKED_SPAWN)
     #[track_caller]
-    pub fn spawn_clone(&mut self, world: &mut World<W>, source: Entity) -> Entity {
+    pub fn spawn_clone(&mut self, world: &mut World, source: Entity) -> Entity {
         let target = world.spawn_empty().id();
         self.clone_entity(world, source, target);
         target
@@ -586,7 +586,7 @@ impl<W: ComponentWorld> EntityCloner<W> {
     #[track_caller]
     pub fn clone_entity_mapped(
         &mut self,
-        world: &mut World<W>,
+        world: &mut World,
         source: Entity,
         mapper: &mut dyn EntityMapper,
     ) -> Entity {
@@ -620,20 +620,20 @@ impl<W: ComponentWorld> EntityCloner<W> {
 
 /// A builder for configuring [`EntityCloner`]. See [`EntityCloner`] for more information.
 #[derive(Debug)]
-pub struct EntityClonerBuilder<'w, W: ComponentWorld> {
-    world: &'w mut World<W>,
-    entity_cloner: EntityCloner<W>,
+pub struct EntityClonerBuilder<'w> {
+    world: &'w mut World,
+    entity_cloner: EntityCloner,
     attach_required_components: bool,
 }
 
-impl<'w, W: ComponentWorld> EntityClonerBuilder<'w, W> {
+impl<'w> EntityClonerBuilder<'w> {
     /// Internally calls [`EntityCloner::clone_entity`] on the builder's [`World`].
     pub fn clone_entity(&mut self, source: Entity, target: Entity) -> &mut Self {
         self.entity_cloner.clone_entity(self.world, source, target);
         self
     }
     /// Finishes configuring [`EntityCloner`] returns it.
-    pub fn finish(self) -> EntityCloner<W> {
+    pub fn finish(self) -> EntityCloner {
         self.entity_cloner
     }
 
@@ -644,7 +644,7 @@ impl<'w, W: ComponentWorld> EntityClonerBuilder<'w, W> {
     /// will not involve required components.
     pub fn without_required_components(
         &mut self,
-        builder: impl FnOnce(&mut EntityClonerBuilder<W>),
+        builder: impl FnOnce(&mut EntityClonerBuilder),
     ) -> &mut Self {
         self.attach_required_components = false;
         builder(self);
@@ -855,7 +855,7 @@ mod tests {
         entity::{hash_map::EntityHashMap, Entity, EntityCloner, SourceComponent},
         prelude::{ChildOf, Children, Resource},
         reflect::{AppTypeRegistry, ReflectComponent, ReflectFromWorld},
-        world::{FromWorld, ResourceWorld, World, Worlds},
+        world::{FromWorld, World, Worlds},
     };
     use alloc::vec::Vec;
     use bevy_ptr::OwningPtr;
@@ -1408,8 +1408,8 @@ mod tests {
         #[derive(Resource)]
         struct FromWorldCalled(bool);
 
-        impl FromWorld<ResourceWorld> for SomeRef {
-            fn from_world(world: &mut World<ResourceWorld>) -> Self {
+        impl FromWorld for SomeRef {
+            fn from_world(world: &mut World) -> Self {
                 world.insert_resource(FromWorldCalled(true));
                 SomeRef(Entity::PLACEHOLDER, Default::default())
             }
