@@ -20,9 +20,8 @@ use crate::{
     relationship::RelationshipHookMode,
     storage::{SparseSetIndex, SparseSets, Table, TableRow, Tables},
     world::{
-        unsafe_world_cell::{UnsafeWorldCell, UnsafeWorldsCell},
-        ComponentWorld, EntityWorldMut, InvalidComponentWorld, InvalidWorld, Storage, World,
-        Worlds, ON_ADD, ON_INSERT, ON_REPLACE,
+        unsafe_world_cell::UnsafeWorldCell, ComponentWorld, EntityWorldMut, InvalidComponentWorld,
+        InvalidWorld, Storage, World, ON_ADD, ON_INSERT, ON_REPLACE,
     },
 };
 use alloc::{boxed::Box, vec, vec::Vec};
@@ -199,9 +198,9 @@ pub unsafe trait BundleFromComponents {
 }
 
 /// The parts from [`Bundle`] that don't require statically knowing the components of the bundle.
-pub trait DynamicBundle<W: ComponentWorld> {
+pub trait DynamicBundle {
     /// An operation on the entity that happens _after_ inserting this bundle.
-    type Effect: BundleEffect<W>;
+    type Effect: BundleEffect<InvalidComponentWorld>;
     // SAFETY:
     // The `StorageType` argument passed into [`Bundle::get_components`] must be correct for the
     // component being fetched.
@@ -397,12 +396,12 @@ macro_rules! after_effect_impl {
             clippy::allow_attributes,
             reason = "This is a tuple-related macro; as such, the lints below may not always apply."
         )]
-        impl<$($after_effect: BundleEffect),*> BundleEffect for ($($after_effect,)*) {
+        impl<W: ComponentWorld, $($after_effect: BundleEffect<W>),*> BundleEffect<W> for ($($after_effect,)*) {
             #[allow(
                 clippy::unused_unit,
                 reason = "Zero-length tuples will generate a function body equivalent to `()`; however, this macro is meant for all applicable tuples, and as such it makes no sense to rewrite it just for that case.")
             ]
-            fn apply(self, _entity: &mut EntityWorldMut) {
+            fn apply(self, _entity: &mut EntityWorldMut<W>) {
                 #[allow(
                     non_snake_case,
                     reason = "The names of these variables are provided by the caller, not by us."
@@ -1130,7 +1129,7 @@ impl<'w, W: ComponentWorld> BundleInserter<'w, W> {
     /// `entity` must currently exist in the source archetype for this inserter. `location`
     /// must be `entity`'s location in the archetype. `T` must match this [`BundleInfo`]'s type
     #[inline]
-    pub unsafe fn insert<T: DynamicBundle<W>>(
+    pub unsafe fn insert<T: DynamicBundle>(
         &mut self,
         entity: Entity,
         location: EntityLocation,
@@ -1500,7 +1499,7 @@ impl<'w, W: ComponentWorld> BundleSpawner<'w, W> {
     /// `entity` must be allocated (but non-existent), `T` must match this [`BundleInfo`]'s type
     #[inline]
     #[track_caller]
-    pub unsafe fn spawn_non_existent<T: DynamicBundle<W>>(
+    pub unsafe fn spawn_non_existent<T: DynamicBundle>(
         &mut self,
         entity: Entity,
         bundle: T,

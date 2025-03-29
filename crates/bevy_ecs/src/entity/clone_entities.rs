@@ -4,7 +4,6 @@ use bevy_ptr::{Ptr, PtrMut};
 use bumpalo::Bump;
 use core::any::TypeId;
 use core::marker::PhantomData;
-use core::ptr;
 
 use crate::{
     bundle::Bundle,
@@ -12,16 +11,16 @@ use crate::{
     entity::{hash_map::EntityHashMap, Entities, Entity, EntityMapper},
     query::DebugCheckedUnwrap,
     relationship::RelationshipHookMode,
-    world::World,
+    world::{ComponentWorld, World, WorldLabel},
 };
 
 /// Provides read access to the source component (the component being cloned) in a [`ComponentCloneFn`].
-pub struct SourceComponent<'a> {
+pub struct SourceComponent<'a, W: WorldLabel> {
     ptr: Ptr<'a>,
-    info: &'a ComponentInfo,
+    info: &'a ComponentInfo<W>,
 }
 
-impl<'a> SourceComponent<'a> {
+impl<'a, W: WorldLabel> SourceComponent<'a, W> {
     /// Returns a reference to the component on the source entity.
     ///
     /// Will return `None` if `ComponentId` of requested component does not match `ComponentId` of source component
@@ -72,16 +71,16 @@ impl<'a> SourceComponent<'a> {
 ///
 /// Provides fast access to useful resources like [`AppTypeRegistry`](crate::reflect::AppTypeRegistry)
 /// and allows component clone handler to get information about component being cloned.
-pub struct ComponentCloneCtx<'a, 'b> {
+pub struct ComponentCloneCtx<'a, 'b, W: ComponentWorld> {
     component_id: ComponentId,
     target_component_written: bool,
     bundle_scratch: &'a mut BundleScratch<'b>,
     bundle_scratch_allocator: &'b Bump,
-    entities: &'a Entities<InvalidComponentWorld>,
+    entities: &'a Entities<W>,
     source: Entity,
     target: Entity,
-    component_info: &'a ComponentInfo,
-    entity_cloner: &'a mut EntityCloner<InvalidComponentWorld>,
+    component_info: &'a ComponentInfo<W>,
+    entity_cloner: &'a mut EntityCloner<W>,
     mapper: &'a mut dyn EntityMapper,
     #[cfg(feature = "bevy_reflect")]
     type_registry: Option<&'a crate::reflect::AppTypeRegistry>,
@@ -90,7 +89,7 @@ pub struct ComponentCloneCtx<'a, 'b> {
     type_registry: Option<&'a ()>,
 }
 
-impl<'a, 'b> ComponentCloneCtx<'a, 'b> {
+impl<'a, 'b, W: ComponentWorld> ComponentCloneCtx<'a, 'b, W> {
     /// Create a new instance of `ComponentCloneCtx` that can be passed to component clone handlers.
     ///
     /// # Safety
@@ -103,9 +102,9 @@ impl<'a, 'b> ComponentCloneCtx<'a, 'b> {
         target: Entity,
         bundle_scratch_allocator: &'b Bump,
         bundle_scratch: &'a mut BundleScratch<'b>,
-        entities: &'a Entities<InvalidComponentWorld>,
-        component_info: &'a ComponentInfo,
-        entity_cloner: &'a mut EntityCloner<InvalidComponentWorld>,
+        entities: &'a Entities<W>,
+        component_info: &'a ComponentInfo<W>,
+        entity_cloner: &'a mut EntityCloner<W>,
         mapper: &'a mut dyn EntityMapper,
         #[cfg(feature = "bevy_reflect")] type_registry: Option<&'a crate::reflect::AppTypeRegistry>,
         #[cfg(not(feature = "bevy_reflect"))] type_registry: Option<&'a ()>,
@@ -146,7 +145,7 @@ impl<'a, 'b> ComponentCloneCtx<'a, 'b> {
     }
 
     /// Returns the [`ComponentInfo`] of the component being cloned.
-    pub fn component_info(&self) -> &ComponentInfo {
+    pub fn component_info(&self) -> &ComponentInfo<W> {
         self.component_info
     }
 
@@ -278,7 +277,7 @@ impl<'a, 'b> ComponentCloneCtx<'a, 'b> {
     /// This exists, despite its similarity to [`Commands`](crate::system::Commands), to provide access to the entity mapper in the current context.
     pub fn queue_deferred(
         &mut self,
-        deferred: impl FnOnce(&mut World, &mut dyn EntityMapper) + 'static,
+        deferred: impl FnOnce(&mut World<W>, &mut dyn EntityMapper) + 'static,
     ) {
         self.entity_cloner
             .deferred_commands
@@ -353,7 +352,7 @@ pub struct EntityCloner<W: ComponentWorld> {
     linked_cloning: bool,
     default_clone_fn: ComponentCloneFn,
     clone_queue: VecDeque<Entity>,
-    deferred_commands: VecDeque<Box<dyn FnOnce(&mut World, &mut dyn EntityMapper)>>,
+    deferred_commands: VecDeque<Box<dyn FnOnce(&mut World<W>, &mut dyn EntityMapper)>>,
     marker: PhantomData<W>,
 }
 
@@ -524,9 +523,7 @@ impl<W: ComponentWorld> EntityCloner<W> {
                         &mut bundle_scratch,
                         world.entities(),
                         info,
-                        unsafe {
-                            &mut *(ptr::from_mut(self) as *mut EntityCloner<InvalidComponentWorld>)
-                        },
+                        unsafe { &mut *(core::ptr::from_mut(self) as *mut EntityCloner<W>) },
                         mapper,
                         app_registry.as_ref(),
                     )

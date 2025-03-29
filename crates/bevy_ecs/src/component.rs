@@ -9,11 +9,8 @@ use crate::{
     relationship::RelationshipHookMode,
     resource::Resource,
     storage::{SparseSetIndex, SparseSets, Table, TableRow},
-    system::{ComponentCommands, Local, SystemParam},
-    world::{
-        unsafe_world_cell::UnsafeWorldCell, FromWorlds, InvalidComponentWorld, InvalidWorld,
-        WorldLabel, Worlds,
-    },
+    system::Local,
+    world::{ComponentWorld, DeferredWorld, FromWorlds, InvalidWorld, WorldLabel, Worlds},
 };
 use alloc::boxed::Box;
 use alloc::{borrow::Cow, format, vec::Vec};
@@ -499,39 +496,39 @@ pub trait Component: Send + Sync + 'static {
         since = "0.16.0",
         note = "Use the individual hook methods instead (e.g., `Component::on_add`, etc.)"
     )]
-    fn register_component_hooks(hooks: &mut ComponentHooks) {
+    fn register_component_hooks<W: ComponentWorld>(hooks: &mut ComponentHooks<W>) {
         hooks.update_from_component::<Self>();
     }
 
     /// Gets the `on_add` [`ComponentHook`] for this [`Component`] if one is defined.
-    fn on_add() -> Option<ComponentHook> {
+    fn on_add<W: ComponentWorld>() -> Option<ComponentHook<W>> {
         None
     }
 
     /// Gets the `on_insert` [`ComponentHook`] for this [`Component`] if one is defined.
-    fn on_insert() -> Option<ComponentHook> {
+    fn on_insert<W: ComponentWorld>() -> Option<ComponentHook<W>> {
         None
     }
 
     /// Gets the `on_replace` [`ComponentHook`] for this [`Component`] if one is defined.
-    fn on_replace() -> Option<ComponentHook> {
+    fn on_replace<W: ComponentWorld>() -> Option<ComponentHook<W>> {
         None
     }
 
     /// Gets the `on_remove` [`ComponentHook`] for this [`Component`] if one is defined.
-    fn on_remove() -> Option<ComponentHook> {
+    fn on_remove<W: ComponentWorld>() -> Option<ComponentHook<W>> {
         None
     }
 
     /// Gets the `on_despawn` [`ComponentHook`] for this [`Component`] if one is defined.
-    fn on_despawn() -> Option<ComponentHook> {
+    fn on_despawn<W: ComponentWorld>() -> Option<ComponentHook<W>> {
         None
     }
 
     /// Registers required components.
-    fn register_required_components(
+    fn register_required_components<W: ComponentWorld>(
         _component_id: ComponentId,
-        _components: &mut ComponentsRegistrator,
+        _components: &mut ComponentsRegistrator<W>,
         _required_components: &mut RequiredComponents,
         _inheritance_depth: u16,
         _recursion_check_stack: &mut Vec<ComponentId>,
@@ -640,7 +637,7 @@ pub enum StorageType {
 }
 
 /// The type used for [`Component`] lifecycle hooks such as `on_add`, `on_insert` or `on_remove`.
-pub type ComponentHook = for<'w> fn(UnsafeWorldCell<'w>, HookContext);
+pub type ComponentHook<W: ComponentWorld> = for<'w> fn(DeferredWorld<'w, W>, HookContext);
 
 /// Context provided to a [`ComponentHook`].
 #[derive(Clone, Copy, Debug)]
@@ -709,15 +706,15 @@ pub struct HookContext {
 /// assert!(!tracked_entities.0.contains(&entity));
 /// ```
 #[derive(Debug, Clone, Default)]
-pub struct ComponentHooks {
-    pub(crate) on_add: Option<ComponentHook>,
-    pub(crate) on_insert: Option<ComponentHook>,
-    pub(crate) on_replace: Option<ComponentHook>,
-    pub(crate) on_remove: Option<ComponentHook>,
-    pub(crate) on_despawn: Option<ComponentHook>,
+pub struct ComponentHooks<W: WorldLabel> {
+    pub(crate) on_add: Option<ComponentHook<W>>,
+    pub(crate) on_insert: Option<ComponentHook<W>>,
+    pub(crate) on_replace: Option<ComponentHook<W>>,
+    pub(crate) on_remove: Option<ComponentHook<W>>,
+    pub(crate) on_despawn: Option<ComponentHook<W>>,
 }
 
-impl ComponentHooks {
+impl<W: WorldLabel> ComponentHooks<W> {
     pub(crate) fn update_from_component<C: Component + ?Sized>(&mut self) -> &mut Self {
         if let Some(hook) = C::on_add() {
             self.on_add(hook);
@@ -745,7 +742,7 @@ impl ComponentHooks {
     /// # Panics
     ///
     /// Will panic if the component already has an `on_add` hook
-    pub fn on_add(&mut self, hook: ComponentHook) -> &mut Self {
+    pub fn on_add(&mut self, hook: ComponentHook<W>) -> &mut Self {
         self.try_on_add(hook)
             .expect("Component already has an on_add hook")
     }
@@ -763,7 +760,7 @@ impl ComponentHooks {
     /// # Panics
     ///
     /// Will panic if the component already has an `on_insert` hook
-    pub fn on_insert(&mut self, hook: ComponentHook) -> &mut Self {
+    pub fn on_insert(&mut self, hook: ComponentHook<W>) -> &mut Self {
         self.try_on_insert(hook)
             .expect("Component already has an on_insert hook")
     }
@@ -785,7 +782,7 @@ impl ComponentHooks {
     /// # Panics
     ///
     /// Will panic if the component already has an `on_replace` hook
-    pub fn on_replace(&mut self, hook: ComponentHook) -> &mut Self {
+    pub fn on_replace(&mut self, hook: ComponentHook<W>) -> &mut Self {
         self.try_on_replace(hook)
             .expect("Component already has an on_replace hook")
     }
@@ -796,7 +793,7 @@ impl ComponentHooks {
     /// # Panics
     ///
     /// Will panic if the component already has an `on_remove` hook
-    pub fn on_remove(&mut self, hook: ComponentHook) -> &mut Self {
+    pub fn on_remove(&mut self, hook: ComponentHook<W>) -> &mut Self {
         self.try_on_remove(hook)
             .expect("Component already has an on_remove hook")
     }
@@ -806,7 +803,7 @@ impl ComponentHooks {
     /// # Panics
     ///
     /// Will panic if the component already has an `on_despawn` hook
-    pub fn on_despawn(&mut self, hook: ComponentHook) -> &mut Self {
+    pub fn on_despawn(&mut self, hook: ComponentHook<W>) -> &mut Self {
         self.try_on_despawn(hook)
             .expect("Component already has an on_despawn hook")
     }
@@ -816,7 +813,7 @@ impl ComponentHooks {
     /// This is a fallible version of [`Self::on_add`].
     ///
     /// Returns `None` if the component already has an `on_add` hook.
-    pub fn try_on_add(&mut self, hook: ComponentHook) -> Option<&mut Self> {
+    pub fn try_on_add(&mut self, hook: ComponentHook<W>) -> Option<&mut Self> {
         if self.on_add.is_some() {
             return None;
         }
@@ -829,7 +826,7 @@ impl ComponentHooks {
     /// This is a fallible version of [`Self::on_insert`].
     ///
     /// Returns `None` if the component already has an `on_insert` hook.
-    pub fn try_on_insert(&mut self, hook: ComponentHook) -> Option<&mut Self> {
+    pub fn try_on_insert(&mut self, hook: ComponentHook<W>) -> Option<&mut Self> {
         if self.on_insert.is_some() {
             return None;
         }
@@ -842,7 +839,7 @@ impl ComponentHooks {
     /// This is a fallible version of [`Self::on_replace`].
     ///
     /// Returns `None` if the component already has an `on_replace` hook.
-    pub fn try_on_replace(&mut self, hook: ComponentHook) -> Option<&mut Self> {
+    pub fn try_on_replace(&mut self, hook: ComponentHook<W>) -> Option<&mut Self> {
         if self.on_replace.is_some() {
             return None;
         }
@@ -855,7 +852,7 @@ impl ComponentHooks {
     /// This is a fallible version of [`Self::on_remove`].
     ///
     /// Returns `None` if the component already has an `on_remove` hook.
-    pub fn try_on_remove(&mut self, hook: ComponentHook) -> Option<&mut Self> {
+    pub fn try_on_remove(&mut self, hook: ComponentHook<W>) -> Option<&mut Self> {
         if self.on_remove.is_some() {
             return None;
         }
@@ -868,7 +865,7 @@ impl ComponentHooks {
     /// This is a fallible version of [`Self::on_despawn`].
     ///
     /// Returns `None` if the component already has an `on_despawn` hook.
-    pub fn try_on_despawn(&mut self, hook: ComponentHook) -> Option<&mut Self> {
+    pub fn try_on_despawn(&mut self, hook: ComponentHook<W>) -> Option<&mut Self> {
         if self.on_despawn.is_some() {
             return None;
         }
@@ -879,15 +876,15 @@ impl ComponentHooks {
 
 /// Stores metadata for a type of component or resource stored in a specific [`World`].
 #[derive(Debug, Clone)]
-pub struct ComponentInfo {
+pub struct ComponentInfo<W: WorldLabel> {
     id: ComponentId,
-    descriptor: ComponentDescriptor,
-    hooks: ComponentHooks,
+    descriptor: ComponentDescriptor<W>,
+    hooks: ComponentHooks<W>,
     required_components: RequiredComponents,
     required_by: HashSet<ComponentId>,
 }
 
-impl ComponentInfo {
+impl<W: WorldLabel> ComponentInfo<W> {
     /// Returns a value uniquely identifying the current component.
     #[inline]
     pub fn id(&self) -> ComponentId {
@@ -908,7 +905,7 @@ impl ComponentInfo {
 
     /// Returns [`ComponentCloneBehavior`] of the current component.
     #[inline]
-    pub fn clone_behavior(&self) -> &ComponentCloneBehavior {
+    pub fn clone_behavior(&self) -> &ComponentCloneBehavior<W> {
         &self.descriptor.clone_behavior
     }
 
@@ -982,7 +979,7 @@ impl ComponentInfo {
     }
 
     /// Provides a reference to the collection of hooks associated with this [`Component`]
-    pub fn hooks(&self) -> &ComponentHooks {
+    pub fn hooks(&self) -> &ComponentHooks<W> {
         &self.hooks
     }
 
@@ -1053,7 +1050,7 @@ impl SparseSetIndex for ComponentId {
 
 /// A value describing a component or resource, which may or may not correspond to a Rust type.
 #[derive(Clone)]
-pub struct ComponentDescriptor {
+pub struct ComponentDescriptor<W: ComponentWorld> {
     name: Cow<'static, str>,
     // SAFETY: This must remain private. It must match the statically known StorageType of the
     // associated rust component type if one exists.
@@ -1068,11 +1065,11 @@ pub struct ComponentDescriptor {
     // None if the underlying type doesn't need to be dropped
     drop: Option<for<'a> unsafe fn(OwningPtr<'a>)>,
     mutable: bool,
-    clone_behavior: ComponentCloneBehavior,
+    clone_behavior: ComponentCloneBehavior<W>,
 }
 
 // We need to ignore the `drop` field in our `Debug` impl
-impl Debug for ComponentDescriptor {
+impl<W: ComponentWorld> Debug for ComponentDescriptor<W> {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         f.debug_struct("ComponentDescriptor")
             .field("name", &self.name)
@@ -1086,7 +1083,7 @@ impl Debug for ComponentDescriptor {
     }
 }
 
-impl ComponentDescriptor {
+impl<W: ComponentWorld> ComponentDescriptor<W> {
     /// # Safety
     ///
     /// `x` must point to a valid value of type `T`.
@@ -1122,7 +1119,7 @@ impl ComponentDescriptor {
         layout: Layout,
         drop: Option<for<'a> unsafe fn(OwningPtr<'a>)>,
         mutable: bool,
-        clone_behavior: ComponentCloneBehavior,
+        clone_behavior: ComponentCloneBehavior<W>,
     ) -> Self {
         Self {
             name: name.into(),
@@ -1194,21 +1191,21 @@ impl ComponentDescriptor {
 }
 
 /// Function type that can be used to clone an entity.
-pub type ComponentCloneFn = fn(&SourceComponent, &mut ComponentCloneCtx);
+pub type ComponentCloneFn<W: ComponentWorld> = fn(&SourceComponent<W>, &mut ComponentCloneCtx<W>);
 
 /// The clone behavior to use when cloning a [`Component`].
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
-pub enum ComponentCloneBehavior {
+pub enum ComponentCloneBehavior<W: WorldLabel> {
     /// Uses the default behavior (which is passed to [`ComponentCloneBehavior::resolve`])
     #[default]
     Default,
     /// Do not clone this component.
     Ignore,
     /// Uses a custom [`ComponentCloneFn`].
-    Custom(ComponentCloneFn),
+    Custom(ComponentCloneFn<W>),
 }
 
-impl ComponentCloneBehavior {
+impl<W: ComponentWorld> ComponentCloneBehavior<W> {
     /// Set clone handler based on `Clone` trait.
     ///
     /// If set as a handler for a component that is not the same as the one used to create this handler, it will panic.
@@ -1223,7 +1220,7 @@ impl ComponentCloneBehavior {
     }
 
     /// Returns the "global default"
-    pub fn global_default_fn() -> ComponentCloneFn {
+    pub fn global_default_fn() -> ComponentCloneFn<W> {
         #[cfg(feature = "bevy_reflect")]
         return component_clone_via_reflect;
         #[cfg(not(feature = "bevy_reflect"))]
@@ -1232,7 +1229,7 @@ impl ComponentCloneBehavior {
 
     /// Resolves the [`ComponentCloneBehavior`] to a [`ComponentCloneFn`]. If [`ComponentCloneBehavior::Default`] is
     /// specified, the given `default` function will be used.
-    pub fn resolve(&self, default: ComponentCloneFn) -> ComponentCloneFn {
+    pub fn resolve(&self, default: ComponentCloneFn<W>) -> ComponentCloneFn<W> {
         match self {
             ComponentCloneBehavior::Default => default,
             ComponentCloneBehavior::Ignore => component_clone_ignore,
@@ -1242,12 +1239,12 @@ impl ComponentCloneBehavior {
 }
 
 /// A queued component registration.
-struct QueuedRegistration {
-    registrator: Box<dyn FnOnce(&mut ComponentsRegistrator, ComponentId)>,
+struct QueuedRegistration<W: WorldLabel> {
+    registrator: Box<dyn FnOnce(&mut ComponentsRegistrator<W>, ComponentId)>,
     id: ComponentId,
 }
 
-impl QueuedRegistration {
+impl<W: WorldLabel> QueuedRegistration<W> {
     /// Creates the [`QueuedRegistration`].
     ///
     /// # Safety
@@ -1255,7 +1252,7 @@ impl QueuedRegistration {
     /// [`ComponentId`] must be unique.
     unsafe fn new(
         id: ComponentId,
-        func: impl FnOnce(&mut ComponentsRegistrator, ComponentId) + 'static,
+        func: impl FnOnce(&mut ComponentsRegistrator<W>, ComponentId) + 'static,
     ) -> Self {
         Self {
             registrator: Box::new(func),
@@ -1264,7 +1261,7 @@ impl QueuedRegistration {
     }
 
     /// Performs the registration, returning the now valid [`ComponentId`].
-    fn register(self, registrator: &mut ComponentsRegistrator) -> ComponentId {
+    fn register(self, registrator: &mut ComponentsRegistrator<W>) -> ComponentId {
         (self.registrator)(registrator, self.id);
         self.id
     }
@@ -1272,21 +1269,15 @@ impl QueuedRegistration {
 
 /// Allows queuing components to be registered.
 #[derive(Default)]
-pub struct QueuedComponents {
-    components: TypeIdMap<QueuedRegistration>,
-    resources: TypeIdMap<QueuedRegistration>,
-    dynamic_registrations: Vec<QueuedRegistration>,
+pub struct QueuedComponents<W: WorldLabel> {
+    components: TypeIdMap<QueuedRegistration<W>>,
+    dynamic_registrations: Vec<QueuedRegistration<W>>,
 }
 
-impl Debug for QueuedComponents {
+impl<W: WorldLabel> Debug for QueuedComponents<W> {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         let components = self
             .components
-            .iter()
-            .map(|(type_id, queued)| (type_id, queued.id))
-            .collect::<Vec<_>>();
-        let resources = self
-            .resources
             .iter()
             .map(|(type_id, queued)| (type_id, queued.id))
             .collect::<Vec<_>>();
@@ -1295,7 +1286,10 @@ impl Debug for QueuedComponents {
             .iter()
             .map(|queued| queued.id)
             .collect::<Vec<_>>();
-        write!(f, "components: {components:?}, resources: {resources:?}, dynamic_registrations: {dynamic_registrations:?}")
+        write!(
+            f,
+            "components: {components:?}, dynamic_registrations: {dynamic_registrations:?}"
+        )
     }
 }
 
@@ -1362,27 +1356,27 @@ impl ComponentIds {
 ///
 /// As a rule of thumb, if you have mutable access to [`ComponentsRegistrator`], prefer to use that instead.
 /// Use this only if you need to know the id of a component but do not need to modify the contents of the world based on that id.
-pub struct ComponentsQueuedRegistrator<'w> {
-    components: &'w Components<InvalidWorld>,
+pub struct ComponentsQueuedRegistrator<'w, W: WorldLabel> {
+    components: &'w Components<W>,
     ids: &'w ComponentIds,
 }
 
-impl Deref for ComponentsQueuedRegistrator<'_> {
-    type Target = Components<InvalidWorld>;
+impl<W: WorldLabel> Deref for ComponentsQueuedRegistrator<'_, W> {
+    type Target = Components<W>;
 
     fn deref(&self) -> &Self::Target {
         self.components
     }
 }
 
-impl<'w> ComponentsQueuedRegistrator<'w> {
+impl<'w, W: WorldLabel> ComponentsQueuedRegistrator<'w, W> {
     /// Constructs a new [`ComponentsQueuedRegistrator`].
     ///
     /// # Safety
     ///
     /// The [`Components`] and [`ComponentIds`] must match.
     /// For example, they must be from the same world.
-    pub unsafe fn new(components: &'w Components<InvalidWorld>, ids: &'w ComponentIds) -> Self {
+    pub unsafe fn new(components: &'w Components<W>, ids: &'w ComponentIds) -> Self {
         Self { components, ids }
     }
 
@@ -1394,7 +1388,7 @@ impl<'w> ComponentsQueuedRegistrator<'w> {
     unsafe fn force_register_arbitrary_component(
         &self,
         type_id: TypeId,
-        func: impl FnOnce(&mut ComponentsRegistrator, ComponentId) + 'static,
+        func: impl FnOnce(&mut ComponentsRegistrator<W>, ComponentId) + 'static,
     ) -> ComponentId {
         let id = self.ids.next();
         self.components
@@ -1418,7 +1412,7 @@ impl<'w> ComponentsQueuedRegistrator<'w> {
     unsafe fn force_register_arbitrary_resource(
         &self,
         type_id: TypeId,
-        func: impl FnOnce(&mut ComponentsRegistrator, ComponentId) + 'static,
+        func: impl FnOnce(&mut ComponentsRegistrator<W>, ComponentId) + 'static,
     ) -> ComponentId {
         let id = self.ids.next();
         self.components
@@ -1437,7 +1431,7 @@ impl<'w> ComponentsQueuedRegistrator<'w> {
     /// Queues this function to run as a dynamic registrator.
     fn force_register_arbitrary_dynamic(
         &self,
-        func: impl FnOnce(&mut ComponentsRegistrator, ComponentId) + 'static,
+        func: impl FnOnce(&mut ComponentsRegistrator<W>, ComponentId) + 'static,
     ) -> ComponentId {
         let id = self.ids.next();
         self.components
@@ -1576,12 +1570,12 @@ impl<'w> ComponentsQueuedRegistrator<'w> {
 }
 
 /// A [`Components`] wrapper that enables additional features, like registration.
-pub struct ComponentsRegistrator<'w> {
+pub struct ComponentsRegistrator<'w, W: WorldLabel> {
     components: &'w mut Components<InvalidWorld>,
     ids: &'w mut ComponentIds,
 }
 
-impl Deref for ComponentsRegistrator<'_> {
+impl<W: WorldLabel> Deref for ComponentsRegistrator<'_, W> {
     type Target = Components<InvalidWorld>;
 
     fn deref(&self) -> &Self::Target {
@@ -1589,30 +1583,27 @@ impl Deref for ComponentsRegistrator<'_> {
     }
 }
 
-impl DerefMut for ComponentsRegistrator<'_> {
+impl<W: WorldLabel> DerefMut for ComponentsRegistrator<'_, W> {
     fn deref_mut(&mut self) -> &mut Self::Target {
         self.components
     }
 }
 
-impl<'w> ComponentsRegistrator<'w> {
+impl<'w, W: WorldLabel> ComponentsRegistrator<'w, W> {
     /// Constructs a new [`ComponentsRegistrator`].
     ///
     /// # Safety
     ///
     /// The [`Components`] and [`ComponentIds`] must match.
     /// For example, they must be from the same world.
-    pub unsafe fn new(
-        components: &'w mut Components<InvalidWorld>,
-        ids: &'w mut ComponentIds,
-    ) -> Self {
+    pub unsafe fn new(components: &'w mut Components<W>, ids: &'w mut ComponentIds) -> Self {
         Self { components, ids }
     }
 
     /// Converts this [`ComponentsRegistrator`] into a [`ComponentsQueuedRegistrator`].
     /// This is intended for use to pass this value to a function that requires [`ComponentsQueuedRegistrator`].
     /// It is generally not a good idea to queue a registration when you can instead register directly on this type.
-    pub fn as_queued(&self) -> ComponentsQueuedRegistrator<'_> {
+    pub fn as_queued(&self) -> ComponentsQueuedRegistrator<'_, W> {
         // SAFETY: ensured by the caller that created self.
         unsafe { ComponentsQueuedRegistrator::new(self.components, self.ids) }
     }
@@ -1937,12 +1928,11 @@ impl<'w> ComponentsRegistrator<'w> {
 /// Stores metadata associated with each kind of [`Component`] in a given [`World`].
 #[derive(Debug, Default)]
 pub struct Components<W: WorldLabel> {
-    components: Vec<Option<ComponentInfo>>,
+    components: Vec<Option<ComponentInfo<W>>>,
     indices: TypeIdMap<ComponentId>,
     resource_indices: TypeIdMap<ComponentId>,
     // This is kept internal and local to verify that no deadlocks can occor.
-    queued: bevy_platform_support::sync::RwLock<QueuedComponents>,
-    marker: PhantomData<W>,
+    queued: bevy_platform_support::sync::RwLock<QueuedComponents<W>>,
 }
 
 impl<W: WorldLabel> Components<W> {
@@ -2027,7 +2017,7 @@ impl<W: WorldLabel> Components<W> {
     ///
     /// This will return an incorrect result if `id` did not come from the same world as `self`. It may return `None` or a garbage value.
     #[inline]
-    pub fn get_info(&self, id: ComponentId) -> Option<&ComponentInfo> {
+    pub fn get_info(&self, id: ComponentId) -> Option<&ComponentInfo<W>> {
         self.components.get(id.0).and_then(|info| info.as_ref())
     }
 
@@ -2045,7 +2035,7 @@ impl<W: WorldLabel> Components<W> {
     ///
     /// `id` must be a valid and fully registered [`ComponentId`].
     #[inline]
-    pub unsafe fn get_info_unchecked(&self, id: ComponentId) -> &ComponentInfo {
+    pub unsafe fn get_info_unchecked(&self, id: ComponentId) -> &ComponentInfo<W> {
         // SAFETY: The caller ensures `id` is valid.
         unsafe {
             self.components
@@ -2057,7 +2047,7 @@ impl<W: WorldLabel> Components<W> {
     }
 
     #[inline]
-    pub(crate) fn get_hooks_mut(&mut self, id: ComponentId) -> Option<&mut ComponentHooks> {
+    pub(crate) fn get_hooks_mut(&mut self, id: ComponentId) -> Option<&mut ComponentHooks<W>> {
         self.components
             .get_mut(id.0)
             .and_then(|info| info.as_mut().map(|info| &mut info.hooks))
@@ -2475,7 +2465,7 @@ impl<W: WorldLabel> Components<W> {
     }
 
     /// Gets an iterator over all components fully registered with this instance.
-    pub fn iter_registered(&self) -> impl Iterator<Item = &ComponentInfo> + '_ {
+    pub fn iter_registered(&self) -> impl Iterator<Item = &ComponentInfo<W>> + '_ {
         self.components.iter().filter_map(Option::as_ref)
     }
 }
@@ -2805,9 +2795,9 @@ impl RequiredComponents {
     ///
     /// If the component is already registered, it will be overwritten if the given inheritance depth
     /// is smaller than the depth of the existing registration. Otherwise, the new registration will be ignored.
-    pub fn register<C: Component>(
+    pub fn register<W: WorldLabel, C: Component>(
         &mut self,
-        components: &mut ComponentsRegistrator,
+        components: &mut ComponentsRegistrator<W>,
         constructor: fn() -> C,
         inheritance_depth: u16,
     ) {
@@ -2964,9 +2954,9 @@ pub fn enforce_no_required_components_recursion(
 /// Can be [set](Component::clone_behavior) as clone handler for the specific component it is implemented for.
 /// It will panic if set as handler for any other component.
 ///
-pub fn component_clone_via_clone<C: Clone + Component>(
-    source: &SourceComponent,
-    ctx: &mut ComponentCloneCtx,
+pub fn component_clone_via_clone<W: ComponentWorld, C: Clone + Component>(
+    source: &SourceComponent<W>,
+    ctx: &mut ComponentCloneCtx<W>,
 ) {
     if let Some(component) = source.read::<C>() {
         ctx.write_target_component(component.clone());
@@ -2991,7 +2981,12 @@ pub fn component_clone_via_clone<C: Clone + Component>(
 ///
 /// [`PartialReflect::reflect_clone`]: bevy_reflect::PartialReflect::reflect_clone
 #[cfg(feature = "bevy_reflect")]
-pub fn component_clone_via_reflect(source: &SourceComponent, ctx: &mut ComponentCloneCtx) {
+pub fn component_clone_via_reflect<W: ComponentWorld>(
+    source: &SourceComponent<W>,
+    ctx: &mut ComponentCloneCtx<W>,
+) {
+    use crate::world::World;
+
     let Some(app_registry) = ctx.type_registry().cloned() else {
         return;
     };
@@ -3054,7 +3049,7 @@ pub fn component_clone_via_reflect(source: &SourceComponent, ctx: &mut Component
         let target = ctx.target();
         let component_id = ctx.component_id();
         drop(registry);
-        ctx.queue_deferred(move |world: &mut World, mapper: &mut dyn EntityMapper| {
+        ctx.queue_deferred(move |world: &mut World<W>, mapper: &mut dyn EntityMapper| {
             let mut component = reflect_from_world.from_world(world);
             assert_eq!(type_id, (*component).type_id());
             component.apply(source_component_cloned.as_partial_reflect());
@@ -3087,7 +3082,11 @@ pub fn component_clone_via_reflect(source: &SourceComponent, ctx: &mut Component
 /// Noop implementation of component clone handler function.
 ///
 /// See [`EntityClonerBuilder`](crate::entity::EntityClonerBuilder) for details.
-pub fn component_clone_ignore(_source: &SourceComponent, _ctx: &mut ComponentCloneCtx) {}
+pub fn component_clone_ignore<W: ComponentWorld>(
+    _source: &SourceComponent<W>,
+    _ctx: &mut ComponentCloneCtx<W>,
+) {
+}
 
 /// Wrapper for components clone specialization using autoderef.
 #[doc(hidden)]
@@ -3101,22 +3100,24 @@ impl<T> Default for DefaultCloneBehaviorSpecialization<T> {
 
 /// Base trait for components clone specialization using autoderef.
 #[doc(hidden)]
-pub trait DefaultCloneBehaviorBase {
-    fn default_clone_behavior(&self) -> ComponentCloneBehavior;
+pub trait DefaultCloneBehaviorBase<W: ComponentWorld> {
+    fn default_clone_behavior(&self) -> ComponentCloneBehavior<W>;
 }
-impl<C> DefaultCloneBehaviorBase for DefaultCloneBehaviorSpecialization<C> {
-    fn default_clone_behavior(&self) -> ComponentCloneBehavior {
+impl<W: ComponentWorld, C> DefaultCloneBehaviorBase<W> for DefaultCloneBehaviorSpecialization<C> {
+    fn default_clone_behavior(&self) -> ComponentCloneBehavior<W> {
         ComponentCloneBehavior::Default
     }
 }
 
 /// Specialized trait for components clone specialization using autoderef.
 #[doc(hidden)]
-pub trait DefaultCloneBehaviorViaClone {
-    fn default_clone_behavior(&self) -> ComponentCloneBehavior;
+pub trait DefaultCloneBehaviorViaClone<W: ComponentWorld> {
+    fn default_clone_behavior(&self) -> ComponentCloneBehavior<W>;
 }
-impl<C: Clone + Component> DefaultCloneBehaviorViaClone for &DefaultCloneBehaviorSpecialization<C> {
-    fn default_clone_behavior(&self) -> ComponentCloneBehavior {
+impl<W: ComponentWorld, C: Clone + Component> DefaultCloneBehaviorViaClone<W>
+    for &DefaultCloneBehaviorSpecialization<C>
+{
+    fn default_clone_behavior(&self) -> ComponentCloneBehavior<W> {
         ComponentCloneBehavior::clone::<C>()
     }
 }

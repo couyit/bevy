@@ -378,7 +378,7 @@ impl<W: WorldLabel> World<W> {
             removed_components: Default::default(),
             // Default value is `1`, and `last_change_tick`s default to `0`, such that changes
             // are detected on first system runs and for direct world queries.
-            local_change_tick: AtomicU32::new(1),
+            change_tick: AtomicU32::new(1),
             last_change_tick: Tick::new(0),
             last_check_tick: Tick::new(0),
             last_trigger_id: 0,

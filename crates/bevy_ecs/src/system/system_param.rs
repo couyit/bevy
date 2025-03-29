@@ -915,7 +915,7 @@ unsafe impl<'a, T: Resource> SystemParam for Res<'a, T> {
         world: UnsafeWorldCell<'w>,
     ) -> Result<(), SystemParamValidationError> {
         // SAFETY: Read-only access to resource metadata.
-        let is_valid = unsafe { world.world() }
+        if unsafe { world.world() }
             .as_world()
             .resources()
             .get(component_id)
@@ -1041,7 +1041,7 @@ unsafe impl<'a, T: Resource> SystemParam for ResMut<'a, T> {
         world: UnsafeWorldCell,
     ) -> Result<(), SystemParamValidationError> {
         // SAFETY: Read-only access to resource metadata.
-        let is_valid = unsafe { world.world().as_world::<ResourceWorld>() }
+        if unsafe { world.world().as_world::<ResourceWorld>() }
             .resources()
             .get(component_id)
             .is_some_and(ResourceData::is_present)
@@ -1204,12 +1204,12 @@ unsafe impl<'w, W: WorldLabel> SystemParam for DeferredWorld<'w, W> {
             .write_all();
     }
 
-    unsafe fn get_param<'w, 's>(
+    unsafe fn get_param<'world, 's>(
         _state: &'s mut Self::State,
         _system_meta: &SystemMeta,
-        world: UnsafeWorldCell<'w>,
+        world: UnsafeWorldCell<'world>,
         _change_tick: Tick,
-    ) -> Self::Item<'w, 's> {
+    ) -> Self::Item<'world, 's> {
         world.into_deferred()
     }
 }
@@ -1548,9 +1548,12 @@ pub struct NonSendMarker;
 unsafe impl SystemParam for NonSendMarker {
     type State = ();
     type Item<'w, 's> = Self;
+    type World = ();
+
+    fn init_world_access(_world: (), _system_meta: &mut SystemMeta) {}
 
     #[inline]
-    fn init_state(_world: &mut World, system_meta: &mut SystemMeta) -> Self::State {
+    fn init_state(_world: (), system_meta: &mut SystemMeta) -> Self::State {
         system_meta.set_non_send();
     }
 
@@ -1558,7 +1561,7 @@ unsafe impl SystemParam for NonSendMarker {
     unsafe fn get_param<'world, 'state>(
         _state: &'state mut Self::State,
         _system_meta: &SystemMeta,
-        _world: UnsafeWorldCell<'world>,
+        _world: (),
         _change_tick: Tick,
     ) -> Self::Item<'world, 'state> {
         Self
@@ -1682,7 +1685,7 @@ unsafe impl<'a, T: 'static> SystemParam for NonSend<'a, T> {
         world: UnsafeWorldCell<'w>,
     ) -> Result<(), SystemParamValidationError> {
         // SAFETY: Read-only access to resource metadata.
-        let is_valid = unsafe { world.world() }
+        if unsafe { world.world() }
             .as_world()
             .non_send_resources()
             .get(component_id)
@@ -1804,7 +1807,7 @@ unsafe impl<'a, T: 'static> SystemParam for NonSendMut<'a, T> {
         world: UnsafeWorldCell,
     ) -> Result<(), SystemParamValidationError> {
         // SAFETY: Read-only access to resource metadata.
-        let is_valid = unsafe { world.world() }
+        if unsafe { world.world() }
             .as_world()
             .non_send_resources()
             .get(component_id)
@@ -2759,7 +2762,7 @@ trait DynParamState: Sync + Send {
         &self,
         system_meta: &SystemMeta,
         world: <AllWorlds as ManyWorldLabel>::World<'w>,
-     -> Result<(), SystemParamValidationError>;
+    ) -> Result<(), SystemParamValidationError>;
 }
 
 /// A wrapper around a [`SystemParam::State`] that can be used as a trait object in a [`DynSystemParam`].
