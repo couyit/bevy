@@ -21,7 +21,7 @@ use crate::{
 use alloc::{borrow::Cow, boxed::Box, vec::Vec};
 use core::any::TypeId;
 
-use super::IntoSystem;
+use super::{IntoSystem, SystemParamValidationError};
 
 /// An ECS system that can be added to a [`Schedule`](crate::schedule::Schedule)
 ///
@@ -72,6 +72,8 @@ pub trait System: Send + Sync + 'static {
     /// - The caller must ensure that [`world`](UnsafeWorldCell) has permission to access any world data
     ///   registered in `archetype_component_access`. There must be no conflicting
     ///   simultaneous accesses while the system is running.
+    /// - If [`System::is_exclusive`] returns `true`, then it must be valid to call
+    ///   [`UnsafeWorldCell::world_mut`] on `world`.
     /// - The method [`System::update_archetype_component_access`] must be called at some
     ///   point before this one, with the same exact [`World`]. If [`System::update_archetype_component_access`]
     ///   panics (or otherwise does not return for any reason), this method must not be called.
@@ -138,11 +140,14 @@ pub trait System: Send + Sync + 'static {
     /// - The method [`System::update_archetype_component_access`] must be called at some
     ///   point before this one, with the same exact [`World`]. If [`System::update_archetype_component_access`]
     ///   panics (or otherwise does not return for any reason), this method must not be called.
-    unsafe fn validate_param_unsafe(&mut self, world: UnsafeWorldCell) -> bool;
+    unsafe fn validate_param_unsafe(
+        &mut self,
+        world: UnsafeWorldCell,
+    ) -> Result<(), SystemParamValidationError>;
 
     /// Safe version of [`System::validate_param_unsafe`].
     /// that runs on exclusive, single-threaded `world` pointer.
-    fn validate_param(&mut self, worlds: &Worlds) -> bool {
+    fn validate_param(&mut self, worlds: &Worlds) -> Result<(), SystemParamValidationError> {
         let world_cell = worlds.as_unsafe_cell();
         self.update_archetype_component_access(world_cell);
         // SAFETY:
@@ -156,7 +161,7 @@ pub trait System: Send + Sync + 'static {
 
     /// Update the system's archetype component [`Access`].
     ///
-    /// ## Note for implementors
+    /// ## Note for implementers
     /// `world` may only be used to access metadata. This can be done in safe code
     /// via functions such as [`UnsafeWorldCell::archetypes`].
     fn update_archetype_component_access(&mut self, worlds: UnsafeWorldsCell);
@@ -369,10 +374,11 @@ impl RunSystemOnce for &mut Worlds {
     {
         let mut system: T::System = IntoSystem::into_system(system);
         system.initialize(self);
-        if system.validate_param(self) {
-            Ok(system.run(input, self))
-        } else {
-            Err(RunSystemError::InvalidParams(system.name()))
+        match system.validate_param(self) {
+            Ok(()) => Ok(system.run(input, self)),
+            // TODO: should we expse the fact that the system was skipped to the user?
+            // Should we somehow unify this better with system error handling?
+            Err(_) => Err(RunSystemError::InvalidParams(system.name())),
         }
     }
 }
@@ -471,7 +477,7 @@ mod tests {
 
         let mut world = World::default();
         // This fails because `T` has not been added to the world yet.
-        let result = world.run_system_once(system.warn_param_missing());
+        let result = world.run_system_once(system);
 
         assert!(matches!(result, Err(RunSystemError::InvalidParams(_))));
     }

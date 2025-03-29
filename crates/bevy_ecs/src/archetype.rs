@@ -946,7 +946,7 @@ impl<W: ComponentWorld> Archetypes<W> {
         let archetypes = &mut self.archetypes;
         let archetype_component_count = &mut self.archetype_component_count;
         let component_index = &mut self.by_component;
-        let archetype_id = *self
+        *self
             .by_components
             .entry(archetype_identity)
             .or_insert_with_key(move |identity| {
@@ -979,8 +979,7 @@ impl<W: ComponentWorld> Archetypes<W> {
                         .zip(sparse_set_archetype_components),
                 ));
                 id
-            });
-        archetype_id
+            })
     }
 
     /// Returns the number of components that are stored in archetypes.

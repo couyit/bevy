@@ -28,7 +28,7 @@ use crate::{
     schedule::ScheduleLabel,
     system::{
         Deferred, IntoObserverSystem, IntoSystem, RegisteredSystem, SystemId, SystemInput,
-        SystemParam,
+        SystemParamValidationError,
     },
     world::{
         command_queue::RawCommandQueue, CommandQueue, ComponentWorld, EntityWorldMut, FromWorld,
@@ -183,7 +183,7 @@ const _: () = {
             state: &Self::State,
             system_meta: &bevy_ecs::system::SystemMeta,
             world: <Self::World as ManyWorldLabel>::World<'w>,
-        ) -> bool {
+        ) -> Result<(), SystemParamValidationError> {
             <(Deferred<CommandQueue>, &Entities<W>) as SystemParam>::validate_param(
                 &state.state,
                 system_meta,

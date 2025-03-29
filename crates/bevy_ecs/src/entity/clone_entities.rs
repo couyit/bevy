@@ -1,4 +1,4 @@
-use alloc::{borrow::ToOwned, collections::VecDeque, vec::Vec};
+use alloc::{borrow::ToOwned, boxed::Box, collections::VecDeque, vec::Vec};
 use bevy_platform_support::collections::{HashMap, HashSet};
 use bevy_ptr::{Ptr, PtrMut};
 use bumpalo::Bump;
@@ -6,20 +6,12 @@ use core::any::TypeId;
 use core::marker::PhantomData;
 use core::ptr;
 
-#[cfg(feature = "bevy_reflect")]
-use alloc::boxed::Box;
-
-use crate::component::{ComponentCloneBehavior, ComponentCloneFn};
-use crate::entity::hash_map::EntityHashMap;
-use crate::entity::{Entities, EntityMapper};
-use crate::relationship::RelationshipHookMode;
-use crate::system::ComponentCommands;
-use crate::world::{ComponentWorld, InvalidComponentWorld, WorldLabel};
 use crate::{
     bundle::Bundle,
-    component::{Component, ComponentId, ComponentInfo},
-    entity::Entity,
+    component::{Component, ComponentCloneBehavior, ComponentCloneFn, ComponentId, ComponentInfo},
+    entity::{hash_map::EntityHashMap, Entities, Entity, EntityMapper},
     query::DebugCheckedUnwrap,
+    relationship::RelationshipHookMode,
     world::World,
 };
 
@@ -94,7 +86,7 @@ pub struct ComponentCloneCtx<'a, 'b> {
     #[cfg(feature = "bevy_reflect")]
     type_registry: Option<&'a crate::reflect::AppTypeRegistry>,
     #[cfg(not(feature = "bevy_reflect"))]
-    #[expect(dead_code)]
+    #[expect(dead_code, reason = "type_registry is only used with bevy_reflect")]
     type_registry: Option<&'a ()>,
 }
 
@@ -179,9 +171,7 @@ impl<'a, 'b> ComponentCloneCtx<'a, 'b> {
     /// - Component being written is not registered in the world.
     /// - `ComponentId` of component being written does not match expected `ComponentId`.
     pub fn write_target_component<C: Component>(&mut self, mut component: C) {
-        C::visit_entities_mut(&mut component, |entity| {
-            *entity = self.mapper.get_mapped(*entity);
-        });
+        C::map_entities(&mut component, &mut self.mapper);
         let short_name = disqualified::ShortName::of::<C>();
         if self.target_component_written {
             panic!("Trying to write component '{short_name}' multiple times")
@@ -283,6 +273,17 @@ impl<'a, 'b> ComponentCloneCtx<'a, 'b> {
         self.mapper.set_mapped(entity, target);
         self.entity_cloner.clone_queue.push_back(entity);
     }
+
+    /// Queues a deferred clone operation, which will run with exclusive [`World`] access immediately after calling the clone handler for each component on an entity.
+    /// This exists, despite its similarity to [`Commands`](crate::system::Commands), to provide access to the entity mapper in the current context.
+    pub fn queue_deferred(
+        &mut self,
+        deferred: impl FnOnce(&mut World, &mut dyn EntityMapper) + 'static,
+    ) {
+        self.entity_cloner
+            .deferred_commands
+            .push_back(Box::new(deferred));
+    }
 }
 
 /// A configuration determining how to clone entities. This can be built using [`EntityCloner::build`], which
@@ -344,7 +345,6 @@ impl<'a, 'b> ComponentCloneCtx<'a, 'b> {
 /// 2. component-defined handler using [`Component::clone_behavior`]
 /// 3. default handler override using [`EntityClonerBuilder::with_default_clone_fn`].
 /// 4. reflect-based or noop default clone handler depending on if `bevy_reflect` feature is enabled or not.
-#[derive(Debug)]
 pub struct EntityCloner<W: ComponentWorld> {
     filter_allows_components: bool,
     filter: HashSet<ComponentId>,
@@ -353,6 +353,7 @@ pub struct EntityCloner<W: ComponentWorld> {
     linked_cloning: bool,
     default_clone_fn: ComponentCloneFn,
     clone_queue: VecDeque<Entity>,
+    deferred_commands: VecDeque<Box<dyn FnOnce(&mut World, &mut dyn EntityMapper)>>,
     marker: PhantomData<W>,
 }
 
@@ -360,12 +361,13 @@ impl<W: ComponentWorld> Default for EntityCloner<W> {
     fn default() -> Self {
         Self {
             filter_allows_components: false,
-            filter: Default::default(),
-            clone_behavior_overrides: Default::default(),
             move_components: false,
             linked_cloning: false,
             default_clone_fn: ComponentCloneBehavior::global_default_fn(),
+            filter: Default::default(),
+            clone_behavior_overrides: Default::default(),
             clone_queue: Default::default(),
+            deferred_commands: Default::default(),
             marker: PhantomData,
         }
     }
@@ -481,13 +483,6 @@ impl<W: ComponentWorld> EntityCloner<W> {
 
             let archetype = source_entity.archetype();
             bundle_scratch = BundleScratch::with_capacity(archetype.component_count());
-            // SAFETY: no other references to command queue exist
-            let mut commands = unsafe {
-                ComponentCommands::new_raw_from_entities(
-                    world.get_raw_command_queue(),
-                    world.entities(),
-                )
-            };
 
             for component in archetype.components() {
                 if !self.is_cloning_allowed(&component) {
@@ -537,16 +532,19 @@ impl<W: ComponentWorld> EntityCloner<W> {
                     )
                 };
 
-                (handler)(
-                    &mut commands,
-                    TypeId::of::<W>(),
-                    &source_component,
-                    &mut ctx,
-                );
+                (handler)(&source_component, &mut ctx);
             }
         }
 
         world.flush();
+
+        for deferred in self.deferred_commands.drain(..) {
+            (deferred)(world, mapper);
+        }
+
+        for deferred in self.deferred_commands.drain(..) {
+            (deferred)(world, mapper);
+        }
 
         if !world.entities().contains(target) {
             panic!("Target entity does not exist");
@@ -874,8 +872,7 @@ mod tests {
         use crate::{
             component::ComponentCloneBehavior,
             entity::{EntityCloner, SourceComponent},
-            reflect::AppTypeRegistry,
-            world::Worlds,
+            reflect::{AppTypeRegistry, ReflectComponent, ReflectFromWorld},
         };
         use alloc::vec;
         use bevy_reflect::{std_traits::ReflectDefault, FromType, Reflect, ReflectFromPtr};
@@ -1009,11 +1006,7 @@ mod tests {
             #[derive(Component, Reflect)]
             struct B;
 
-            fn test_handler(
-                _commands: &mut TypeErasedCommands,
-                source: &SourceComponent,
-                ctx: &mut ComponentCloneCtx,
-            ) {
+            fn test_handler(source: &SourceComponent, ctx: &mut ComponentCloneCtx) {
                 let registry = ctx.type_registry().unwrap();
                 assert!(source.read_reflect(&registry.read()).is_none());
             }
@@ -1263,7 +1256,7 @@ mod tests {
         struct A;
 
         #[derive(Component, Clone, PartialEq, Debug, Default)]
-        #[require(C(|| C(5)))]
+        #[require(C(5))]
         struct B;
 
         #[derive(Component, Clone, PartialEq, Debug)]
@@ -1292,7 +1285,7 @@ mod tests {
         struct A;
 
         #[derive(Component, Clone, PartialEq, Debug, Default)]
-        #[require(C(|| C(5)))]
+        #[require(C(5))]
         struct B;
 
         #[derive(Component, Clone, PartialEq, Debug)]
@@ -1319,11 +1312,7 @@ mod tests {
     #[test]
     fn clone_entity_with_dynamic_components() {
         const COMPONENT_SIZE: usize = 10;
-        fn test_handler(
-            _commands: &mut TypeErasedCommands,
-            source: &SourceComponent,
-            ctx: &mut ComponentCloneCtx,
-        ) {
+        fn test_handler(source: &SourceComponent, ctx: &mut ComponentCloneCtx) {
             // SAFETY: the passed in ptr corresponds to copy-able data that matches the type of the source / target component
             unsafe {
                 ctx.write_target_component_ptr(source.ptr());

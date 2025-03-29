@@ -24,7 +24,10 @@ use variadics_please::all_tuples;
 #[cfg(feature = "trace")]
 use tracing::{info_span, Span};
 
-use super::{entity_command::clear, IntoSystem, LocalSystem, ReadOnlySystem, SystemParamBuilder};
+use super::{
+    entity_command::clear, IntoSystem, LocalSystem, ReadOnlySystem, SystemParamBuilder,
+    SystemParamValidationError,
+};
 
 /// The metadata of a [`System`].
 #[derive(Clone)]
@@ -51,7 +54,6 @@ pub struct SystemMeta {
     is_send: bool,
     has_deferred: bool,
     pub(crate) last_run: Tick,
-    param_warn_policy: ParamWarnPolicy,
     #[cfg(feature = "trace")]
     pub(crate) system_span: Span,
     #[cfg(feature = "trace")]
@@ -68,7 +70,6 @@ impl SystemMeta {
             is_send: true,
             has_deferred: false,
             last_run: Tick::new(0),
-            param_warn_policy: ParamWarnPolicy::Panic,
             #[cfg(feature = "trace")]
             system_span: info_span!("system", name = name),
             #[cfg(feature = "trace")]
@@ -124,25 +125,8 @@ impl SystemMeta {
         self.has_deferred = true;
     }
 
-    /// Changes the warn policy.
-    #[inline]
-    pub(crate) fn set_param_warn_policy(&mut self, warn_policy: ParamWarnPolicy) {
-        self.param_warn_policy = warn_policy;
-    }
-
-    /// Advances the warn policy after validation failed.
-    #[inline]
-    pub(crate) fn advance_param_warn_policy(&mut self) {
-        self.param_warn_policy.advance();
-    }
-
-    /// Emits a warning about inaccessible system param if policy allows it.
-    #[inline]
-    pub fn try_warn_param<P>(&self)
-    where
-        P: SystemParam,
-    {
-        self.param_warn_policy.try_warn::<P>(&self.name);
+    pub fn world_read_write(&mut self, id: WorldId) {
+        self.world_access.grow_and_insert(id.0);
     }
 
     pub fn world_read_write(&mut self, id: WorldId) {
@@ -513,7 +497,10 @@ impl<Param: SystemParam> SystemState<Param> {
     /// - The passed [`UnsafeWorldCell`] must have read-only access to
     ///   world data in `archetype_component_access`.
     /// - `world` must be the same [`World`] that was used to initialize [`state`](SystemParam::init_state).
-    pub unsafe fn validate_param(state: &Self, world: UnsafeWorldCell) -> bool {
+    pub unsafe fn validate_param(
+        state: &Self,
+        world: UnsafeWorldCell,
+    ) -> Result<(), SystemParamValidationError> {
         // SAFETY: Delegated to existing `SystemParam` implementations.
         unsafe { Param::validate_param(&state.param_state, &state.meta, world) }
     }
@@ -843,18 +830,17 @@ where
     }
 
     #[inline]
-    unsafe fn validate_param_unsafe(&mut self, world: UnsafeWorldCell) -> bool {
+    unsafe fn validate_param_unsafe(
+        &mut self,
+        world: UnsafeWorldCell,
+    ) -> Result<(), SystemParamValidationError> {
         let param_state = &self.state.as_ref().expect(Self::ERROR_UNINITIALIZED).param;
         // SAFETY:
         // - The caller has invoked `update_archetype_component_access`, which will panic
         //   if the world does not match.
         // - All world accesses used by `F::Param` have been registered, so the caller
         //   will ensure that there are no data access conflicts.
-        let is_valid = unsafe { F::Param::validate_param(param_state, &self.system_meta, world) };
-        if !is_valid {
-            self.system_meta.advance_param_warn_policy();
-        }
-        is_valid
+        unsafe { F::Param::validate_param(param_state, &self.system_meta, world) }
     }
 
     #[inline]
