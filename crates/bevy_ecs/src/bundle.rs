@@ -1136,7 +1136,7 @@ impl<'w, W: ComponentWorld> BundleInserter<'w, W> {
         bundle: T,
         insert_mode: InsertMode,
         caller: MaybeLocation,
-        relationship_hook_mode: Option<RelationshipHookMode>,
+        relationship_hook_mode: RelationshipHookMode,
     ) -> (EntityLocation, T::Effect) {
         let bundle_info = self.bundle_info.as_ref();
         let archetype_after_insert = self.archetype_after_insert.as_ref();
@@ -1162,7 +1162,7 @@ impl<'w, W: ComponentWorld> BundleInserter<'w, W> {
                     entity,
                     archetype_after_insert.iter_existing(),
                     caller,
-                    relationship_hook_mode.unwrap(),
+                    relationship_hook_mode,
                 );
             }
         }
@@ -1371,7 +1371,7 @@ impl<'w, W: ComponentWorld> BundleInserter<'w, W> {
                         entity,
                         archetype_after_insert.iter_inserted(),
                         caller,
-                        relationship_hook_mode.unwrap(),
+                        relationship_hook_mode,
                     );
                     if new_archetype.has_insert_observer() {
                         deferred_world.trigger_observers(
@@ -1390,7 +1390,7 @@ impl<'w, W: ComponentWorld> BundleInserter<'w, W> {
                         entity,
                         archetype_after_insert.iter_added(),
                         caller,
-                        relationship_hook_mode.unwrap(),
+                        relationship_hook_mode,
                     );
                     if new_archetype.has_insert_observer() {
                         deferred_world.trigger_observers(
