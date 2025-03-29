@@ -21,7 +21,10 @@ use crate::{
     query::Access,
     schedule::{BoxedCondition, InternedSystemSet, NodeId, SystemTypeSet},
     system::{ScheduleSystem, System, SystemIn, SystemParamValidationError},
-    world::{unsafe_world_cell::UnsafeWorldCell, DeferredWorld, World},
+    world::{
+        unsafe_world_cell::{UnsafeWorldCell, UnsafeWorldsCell},
+        DeferredWorld, World, Worlds,
+    },
 };
 
 /// Types that can run a [`SystemSchedule`] on a [`World`].
@@ -204,20 +207,20 @@ impl System for ApplyDeferred {
     unsafe fn run_unsafe(
         &mut self,
         _input: SystemIn<'_, Self>,
-        _world: UnsafeWorldCell,
+        _worlds: UnsafeWorldsCell,
     ) -> Self::Out {
         // This system does nothing on its own. The executor will apply deferred
         // commands from other systems instead of running this system.
         Ok(())
     }
 
-    fn run(&mut self, _input: SystemIn<'_, Self>, _world: &mut World) -> Self::Out {
+    fn run(&mut self, _input: SystemIn<'_, Self>, _worlds: &mut Worlds) -> Self::Out {
         // This system does nothing on its own. The executor will apply deferred
         // commands from other systems instead of running this system.
         Ok(())
     }
 
-    fn apply_deferred(&mut self, _world: &mut World) {}
+    fn apply_deferred(&mut self, _worlds: &mut Worlds) {}
 
     fn queue_deferred(&mut self, _world: DeferredWorld) {}
 
@@ -230,9 +233,9 @@ impl System for ApplyDeferred {
         Ok(())
     }
 
-    fn initialize(&mut self, _world: &mut World) {}
+    fn initialize(&mut self, _worlds: &mut Worlds) {}
 
-    fn update_archetype_component_access(&mut self, _world: UnsafeWorldCell) {}
+    fn update_archetype_component_access(&mut self, _worlds: UnsafeWorldsCell) {}
 
     fn check_change_tick(&mut self, _change_tick: Tick) {}
 

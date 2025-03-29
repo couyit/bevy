@@ -4,11 +4,13 @@ use core::marker::PhantomData;
 use crate::{
     archetype::ArchetypeComponentId,
     component::{ComponentId, Tick},
-    prelude::World,
     query::Access,
     schedule::InternedSystemSet,
     system::{input::SystemInput, SystemIn, SystemParamValidationError},
-    world::unsafe_world_cell::UnsafeWorldCell,
+    world::{
+        unsafe_world_cell::{UnsafeWorldCell, UnsafeWorldsCell},
+        Worlds,
+    },
 };
 
 use super::{IntoSystem, ReadOnlySystem, System};
@@ -170,7 +172,7 @@ where
     unsafe fn run_unsafe(
         &mut self,
         input: SystemIn<'_, Self>,
-        world: UnsafeWorldCell,
+        worlds: UnsafeWorldsCell,
     ) -> Self::Out {
         Func::combine(
             input,
@@ -181,16 +183,16 @@ where
             // in parallel, so their world accesses will not conflict with each other.
             // Additionally, `update_archetype_component_access` has been called,
             // which forwards to the implementations for `self.a` and `self.b`.
-            |input| unsafe { self.a.run_unsafe(input, world) },
+            |input| unsafe { self.a.run_unsafe(input, worlds) },
             // SAFETY: See the comment above.
-            |input| unsafe { self.b.run_unsafe(input, world) },
+            |input| unsafe { self.b.run_unsafe(input, worlds) },
         )
     }
 
     #[inline]
-    fn apply_deferred(&mut self, world: &mut World) {
-        self.a.apply_deferred(world);
-        self.b.apply_deferred(world);
+    fn apply_deferred(&mut self, worlds: &mut Worlds) {
+        self.a.apply_deferred(worlds);
+        self.b.apply_deferred(worlds);
     }
 
     #[inline]
@@ -208,16 +210,16 @@ where
         unsafe { self.a.validate_param_unsafe(world) }
     }
 
-    fn initialize(&mut self, world: &mut World) {
-        self.a.initialize(world);
-        self.b.initialize(world);
+    fn initialize(&mut self, worlds: &mut Worlds) {
+        self.a.initialize(worlds);
+        self.b.initialize(worlds);
         self.component_access.extend(self.a.component_access());
         self.component_access.extend(self.b.component_access());
     }
 
-    fn update_archetype_component_access(&mut self, world: UnsafeWorldCell) {
-        self.a.update_archetype_component_access(world);
-        self.b.update_archetype_component_access(world);
+    fn update_archetype_component_access(&mut self, worlds: UnsafeWorldsCell) {
+        self.a.update_archetype_component_access(worlds);
+        self.b.update_archetype_component_access(worlds);
 
         self.archetype_component_access
             .extend(self.a.archetype_component_access());
@@ -401,15 +403,15 @@ where
     unsafe fn run_unsafe(
         &mut self,
         input: SystemIn<'_, Self>,
-        world: UnsafeWorldCell,
+        worlds: UnsafeWorldsCell,
     ) -> Self::Out {
-        let value = self.a.run_unsafe(input, world);
-        self.b.run_unsafe(value, world)
+        let value = self.a.run_unsafe(input, worlds);
+        self.b.run_unsafe(value, worlds)
     }
 
-    fn apply_deferred(&mut self, world: &mut World) {
-        self.a.apply_deferred(world);
-        self.b.apply_deferred(world);
+    fn apply_deferred(&mut self, worlds: &mut Worlds) {
+        self.a.apply_deferred(worlds);
+        self.b.apply_deferred(worlds);
     }
 
     fn queue_deferred(&mut self, mut world: crate::world::DeferredWorld) {
@@ -425,22 +427,22 @@ where
         unsafe { self.a.validate_param_unsafe(world) }
     }
 
-    fn validate_param(&mut self, world: &World) -> Result<(), SystemParamValidationError> {
-        self.a.validate_param(world)?;
-        self.b.validate_param(world)?;
+    fn validate_param(&mut self, worlds: &Worlds) -> Result<(), SystemParamValidationError> {
+        self.a.validate_param(worlds)?;
+        self.b.validate_param(worlds)?;
         Ok(())
     }
 
-    fn initialize(&mut self, world: &mut World) {
-        self.a.initialize(world);
-        self.b.initialize(world);
+    fn initialize(&mut self, worlds: &mut Worlds) {
+        self.a.initialize(worlds);
+        self.b.initialize(worlds);
         self.component_access.extend(self.a.component_access());
         self.component_access.extend(self.b.component_access());
     }
 
-    fn update_archetype_component_access(&mut self, world: UnsafeWorldCell) {
-        self.a.update_archetype_component_access(world);
-        self.b.update_archetype_component_access(world);
+    fn update_archetype_component_access(&mut self, worlds: UnsafeWorldsCell) {
+        self.a.update_archetype_component_access(worlds);
+        self.b.update_archetype_component_access(worlds);
 
         self.archetype_component_access
             .extend(self.a.archetype_component_access());

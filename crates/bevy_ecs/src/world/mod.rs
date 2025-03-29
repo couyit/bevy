@@ -34,7 +34,7 @@ pub use entity_ref::{
     Entry, FilteredEntityMut, FilteredEntityRef, OccupiedEntry, TryFromFilteredError, VacantEntry,
 };
 pub use filtered_resource::*;
-use identifier::WorldsId;
+pub use identifier::WorldsId;
 pub use spawn_batch::*;
 
 #[expect(
@@ -93,7 +93,7 @@ impl SparseSetIndex for WorldId {
 }
 
 pub struct Worlds {
-    id: WorldsId,
+    pub(crate) id: WorldsId,
     pub(crate) worlds: Vec<World>,
     pub(crate) systems: Systems,
 }

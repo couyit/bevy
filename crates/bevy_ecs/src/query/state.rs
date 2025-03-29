@@ -445,7 +445,7 @@ impl<D: QueryData, F: QueryFilter> QueryState<D, F> {
         // SAFETY:
         // - The caller ensured we have the correct access to the world.
         // - The caller ensured that the world matches.
-        unsafe { Query::<D, F, W>::new(world, self, last_run, this_run) }
+        unsafe { Query::<D, F>::new(world, self, last_run, this_run) }
     }
 
     /// Checks if the query is empty for the given [`World`], where the last change and current tick are given.
@@ -1879,8 +1879,6 @@ impl<D: QueryData, F: QueryFilter> From<QueryBuilder<'_, D, F>> for QueryState<D
 
 #[cfg(test)]
 mod tests {
-    use bevy_ecs_macros::ComponentWorld;
-
     use crate::{
         component::Component,
         entity_disabling::DefaultQueryFilters,
@@ -1893,8 +1891,8 @@ mod tests {
     #[should_panic]
     fn right_world_get() {
         let mut worlds = Worlds::new();
-        worlds.create_world::<SubWorld>();
-        let (world_1, world_2) = worlds.get_2_mut::<MainWorld, SubWorld>();
+        let world_1 = worlds.get_world_mut(worlds.create_world());
+        let world_2 = worlds.get_world_mut(worlds.create_world());
 
         let mut query_state = world_1.query::<Entity>();
         let _panics = query_state.get(&world_2, Entity::from_raw(0));
@@ -1904,8 +1902,8 @@ mod tests {
     #[should_panic]
     fn right_world_get_many() {
         let mut worlds = Worlds::new();
-        worlds.create_world::<SubWorld>();
-        let (world_1, world_2) = worlds.get_2_mut::<MainWorld, SubWorld>();
+        let world_1 = worlds.get_world_mut(worlds.create_world());
+        let world_2 = worlds.get_world_mut(worlds.create_world());
 
         let mut query_state = world_1.query::<Entity>();
         let _panics = query_state.get_many(&world_2, []);
@@ -1915,8 +1913,8 @@ mod tests {
     #[should_panic]
     fn right_world_get_many_mut() {
         let mut worlds = Worlds::new();
-        worlds.create_world::<SubWorld>();
-        let (world_1, world_2) = worlds.get_2_mut::<MainWorld, SubWorld>();
+        let world_1 = worlds.get_world_mut(worlds.create_world());
+        let world_2 = worlds.get_world_mut(worlds.create_world());
 
         let mut query_state = world_1.query::<Entity>();
         let _panics = query_state.get_many_mut(world_2, []);
@@ -1934,7 +1932,7 @@ mod tests {
     #[test]
     fn can_transmute_to_more_general() {
         let mut worlds = Worlds::new();
-        let world = worlds.get_main_world_mut();
+        let world = worlds.get_world_mut(worlds.create_world());
         world.spawn((A(1), B(0)));
 
         let query_state = world.query::<(&A, &B)>();
@@ -1948,7 +1946,7 @@ mod tests {
     #[test]
     fn cannot_get_data_not_in_original_query() {
         let mut worlds = Worlds::new();
-        let world = worlds.get_main_world_mut();
+        let world = worlds.get_world_mut(worlds.create_world());
         world.spawn((A(0), B(0)));
         world.spawn((A(1), B(0), C(0)));
 
@@ -1963,7 +1961,7 @@ mod tests {
     #[test]
     fn can_transmute_empty_tuple() {
         let mut worlds = Worlds::new();
-        let world = worlds.get_main_world_mut();
+        let world = worlds.get_world_mut(worlds.create_world());
         world.register_component::<A>();
         let entity = world.spawn(A(10)).id();
 
@@ -1975,7 +1973,7 @@ mod tests {
     #[test]
     fn can_transmute_immut_fetch() {
         let mut worlds = Worlds::new();
-        let world = worlds.get_main_world_mut();
+        let world = worlds.get_world_mut(worlds.create_world());
         world.spawn(A(10));
 
         let q = world.query::<&A>();
@@ -1989,7 +1987,7 @@ mod tests {
     #[test]
     fn can_transmute_mut_fetch() {
         let mut worlds = Worlds::new();
-        let world = worlds.get_main_world_mut();
+        let world = worlds.get_world_mut(worlds.create_world());
         world.spawn(A(0));
 
         let q = world.query::<&mut A>();
@@ -2000,7 +1998,7 @@ mod tests {
     #[test]
     fn can_transmute_entity_mut() {
         let mut worlds = Worlds::new();
-        let world = worlds.get_main_world_mut();
+        let world = worlds.get_world_mut(worlds.create_world());
         world.spawn(A(0));
 
         let q: QueryState<EntityMut<'_>> = world.query::<EntityMut>();
@@ -2010,7 +2008,7 @@ mod tests {
     #[test]
     fn can_generalize_with_option() {
         let mut worlds = Worlds::new();
-        let world = worlds.get_main_world_mut();
+        let world = worlds.get_world_mut(worlds.create_world());
         world.spawn((A(0), B(0)));
 
         let query_state = world.query::<(Option<&A>, &B)>();
@@ -2024,7 +2022,7 @@ mod tests {
     )]
     fn cannot_transmute_to_include_data_not_in_original_query() {
         let mut worlds = Worlds::new();
-        let world = worlds.get_main_world_mut();
+        let world = worlds.get_world_mut(worlds.create_world());
         world.register_component::<A>();
         world.register_component::<B>();
         world.spawn(A(0));
@@ -2039,7 +2037,7 @@ mod tests {
     )]
     fn cannot_transmute_immut_to_mut() {
         let mut worlds = Worlds::new();
-        let world = worlds.get_main_world_mut();
+        let world = worlds.get_world_mut(worlds.create_world());
         world.spawn(A(0));
 
         let query_state = world.query::<&A>();
@@ -2052,7 +2050,7 @@ mod tests {
     )]
     fn cannot_transmute_option_to_immut() {
         let mut worlds = Worlds::new();
-        let world = worlds.get_main_world_mut();
+        let world = worlds.get_world_mut(worlds.create_world());
         world.spawn(C(0));
 
         let query_state = world.query::<Option<&A>>();
@@ -2067,7 +2065,7 @@ mod tests {
     )]
     fn cannot_transmute_entity_ref() {
         let mut worlds = Worlds::new();
-        let world = worlds.get_main_world_mut();
+        let world = worlds.get_world_mut(worlds.create_world());
         world.register_component::<A>();
 
         let q = world.query::<EntityRef>();
@@ -2077,7 +2075,7 @@ mod tests {
     #[test]
     fn can_transmute_filtered_entity() {
         let mut worlds = Worlds::new();
-        let world = worlds.get_main_world_mut();
+        let world = worlds.get_world_mut(worlds.create_world());
         let entity = world.spawn((A(0), B(1))).id();
         let query =
             QueryState::<(Entity, &A, &B)>::new(world).transmute::<FilteredEntityRef>(&*world);
@@ -2094,7 +2092,7 @@ mod tests {
     #[test]
     fn can_transmute_added() {
         let mut worlds = Worlds::new();
-        let world = worlds.get_main_world_mut();
+        let world = worlds.get_world_mut(worlds.create_world());
         let entity_a = world.spawn(A(0)).id();
 
         let mut query = QueryState::<(Entity, &A, Has<B>)>::new(world)
@@ -2115,7 +2113,7 @@ mod tests {
     #[test]
     fn can_transmute_changed() {
         let mut worlds = Worlds::new();
-        let world = worlds.get_main_world_mut();
+        let world = worlds.get_world_mut(worlds.create_world());
         let entity_a = world.spawn(A(0)).id();
 
         let mut detection_query = QueryState::<(Entity, &A)>::new(world)
@@ -2139,7 +2137,7 @@ mod tests {
     )]
     fn cannot_transmute_changed_without_access() {
         let mut worlds = Worlds::new();
-        let world = worlds.get_main_world_mut();
+        let world = worlds.get_world_mut(worlds.create_world());
         world.register_component::<A>();
         world.register_component::<B>();
         let query = QueryState::<&A>::new(world);
@@ -2152,11 +2150,11 @@ mod tests {
     )]
     fn cannot_transmute_mutable_after_readonly() {
         let mut worlds = Worlds::new();
-        let world = worlds.get_main_world_mut();
+        let world = worlds.get_world_mut(worlds.create_world());
         // Calling this method would mean we had aliasing queries.
-        fn bad(_: Query<&mut A, (), MainWorld>, _: Query<&A, (), MainWorld>) {}
+        fn bad(_: Query<&mut A, ()>, _: Query<&A, ()>) {}
         world
-            .run_system_once(|query: Query<&mut A, MainWorld>| {
+            .run_system_once(|query: Query<&mut A>| {
                 let mut readonly = query.as_readonly();
                 let mut lens: QueryLens<&mut A> = readonly.transmute_lens();
                 bad(lens.query(), query.as_readonly());
@@ -2169,8 +2167,8 @@ mod tests {
     #[should_panic]
     fn transmute_with_different_world() {
         let mut worlds = Worlds::new();
-        worlds.create_world::<SubWorld>();
-        let (world_1, world_2) = worlds.get_2_mut::<MainWorld, SubWorld>();
+        let world_1 = worlds.get_world_mut(worlds.create_world());
+        let world_2 = worlds.get_world_mut(worlds.create_world());
 
         world_1.spawn((A(1), B(2)));
         world_2.register_component::<B>();
@@ -2297,15 +2295,13 @@ mod tests {
         let mut worlds = Worlds::new();
         let world = worlds.get_main_world_mut();
         // Calling this method would mean we had aliasing queries.
-        fn bad(_: Query<MainWorld, (&mut A, &mut B)>, _: Query<MainWorld, &A>) {}
+        fn bad(_: Query<(&mut A, &mut B)>, _: Query<&A>) {}
         world
-            .run_system_once(
-                |query_a: Query<MainWorld, &mut A>, mut query_b: Query<MainWorld, &mut B>| {
-                    let mut readonly = query_a.as_readonly();
-                    let mut lens: QueryLens<(&mut A, &mut B)> = readonly.join(&mut query_b);
-                    bad(lens.query(), query_a.as_readonly());
-                },
-            )
+            .run_system_once(|query_a: Query<&mut A>, mut query_b: Query<&mut B>| {
+                let mut readonly = query_a.as_readonly();
+                let mut lens: QueryLens<(&mut A, &mut B)> = readonly.join(&mut query_b);
+                bad(lens.query(), query_a.as_readonly());
+            })
             .unwrap();
     }
 

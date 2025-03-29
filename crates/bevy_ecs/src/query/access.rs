@@ -693,7 +693,7 @@ impl AccessConflicts {
         }
     }
 
-    pub(crate) fn format_conflict_list<W: WorldLabel>(&self, world: &World<W>) -> String {
+    pub(crate) fn format_conflict_list(&self, world: &World) -> String {
         match self {
             AccessConflicts::All => String::new(),
             AccessConflicts::Individual(indices) => indices

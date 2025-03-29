@@ -146,7 +146,6 @@ mod tests {
         vec,
         vec::Vec,
     };
-    use bevy_ecs_macros::ComponentWorld;
     use bevy_platform_support::collections::HashSet;
     use bevy_tasks::{ComputeTaskPool, TaskPool};
     use core::{
@@ -1556,20 +1555,18 @@ mod tests {
     #[test]
     #[should_panic]
     fn multiple_worlds_same_query_iter() {
-        #[derive(ComponentWorld)]
-        struct SubWorld;
-
         let mut worlds = Worlds::new();
-        let (world_a, world_b) = worlds.get_2_mut::<MainWorld, SubWorld>();
+        let world_a = worlds.get_world(worlds.create_world());
+        let world_b = worlds.get_world(worlds.create_world());
         let mut query = world_a.query::<&A>();
-        query.iter(&world_a);
-        query.iter(&world_b);
+        query.iter(world_a);
+        query.iter(world_b);
     }
 
     #[test]
     fn query_filters_dont_collide_with_fetches() {
         let mut worlds = Worlds::new();
-        let world = worlds.get_main_world_mut();
+        let world = worlds.get_world(worlds.create_world());
         world.query_filtered::<&mut A, Changed<A>>();
     }
 

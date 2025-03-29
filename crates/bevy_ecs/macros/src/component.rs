@@ -650,8 +650,8 @@ fn hook_register_function_call(
 ) -> Option<TokenStream2> {
     function.map(|meta| {
         quote! {
-            fn #hook<W: #bevy_ecs_path::world::WorldLabel>() -> ::core::option::Option<#bevy_ecs_path::component::ComponentHook<W>> {
-                ::core::option::Option::Some(#meta::<W>)
+            fn #hook() -> ::core::option::Option<#bevy_ecs_path::component::ComponentHook> {
+                ::core::option::Option::Some(#meta)
             }
         }
     })
