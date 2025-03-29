@@ -195,7 +195,7 @@ pub unsafe trait SystemParam: Sized {
     /// You could think of [`SystemParam::Item<'w, 's>`] as being an *operation* that changes the lifetimes bound to `Self`.
     type Item<'world, 'state>: SystemParam<State = Self::State>;
 
-    type World<'w>: FromIds;
+    type World<'w>: FromIds<'w>;
 
     fn init_world_access<'w>(world: Self::World<'w>, system_meta: &mut SystemMeta);
 
@@ -309,23 +309,23 @@ pub unsafe trait ReadOnlySystemParam: SystemParam {}
 /// Shorthand way of accessing the associated type [`SystemParam::Item`] for a given [`SystemParam`].
 pub type SystemParamItem<'w, 's, P> = <P as SystemParam>::Item<'w, 's>;
 
-trait FromIds {
+trait FromIds<'w> {
     type Ids;
-    fn from_ids(worlds: UnsafeWorldsCell, ids: Self::Ids) -> Self;
+    fn from_ids(worlds: UnsafeWorldsCell<'w>, ids: Self::Ids) -> Self;
 }
 
-impl FromIds for UnsafeWorldCell<'_> {
+impl<'w> FromIds<'w> for UnsafeWorldCell<'w> {
     type Ids = WorldId;
 
-    fn from_ids(worlds: UnsafeWorldsCell, id: WorldId) -> Self {
+    fn from_ids(worlds: UnsafeWorldsCell<'w>, id: WorldId) -> Self {
         unsafe { worlds.get_unsafe_world_cell_mut(id) }
     }
 }
 
-impl FromIds for UnsafeWorldsCell<'_> {
+impl<'w> FromIds<'w> for UnsafeWorldsCell<'w> {
     type Ids = ();
 
-    fn from_ids(worlds: UnsafeWorldsCell, _ids: ()) -> Self {
+    fn from_ids(worlds: UnsafeWorldsCell<'w>, _ids: ()) -> Self {
         worlds
     }
 }
@@ -336,7 +336,7 @@ macro_rules! impl_from_ids {
             clippy::allow_attributes,
             reason = "This is in a macro, and as such, the below lints may not always apply."
         )]
-        impl<$($param: FromIds),*> FromIds for ($($param,)*) {
+        impl<'w, $($param: FromIds<'w>),*> FromIds<'w> for ($($param,)*) {
             type Ids = ($($param::Ids,)*);
 
             fn from_ids(worlds: UnsafeWorldsCell, ($($id,)*): Self::Ids) -> Self {
@@ -351,6 +351,26 @@ macro_rules! impl_from_ids {
 }
 
 all_tuples!(impl_from_ids, 0, 16, P, i);
+
+macro_rules! impl_from_world {
+    ($($param:ident),*) => {
+        #[expect(
+            clippy::allow_attributes,
+            reason = "This is in a macro, and as such, the below lints may not always apply."
+        )]
+        impl<'w, $($param: From<UnsafeWorldCell<'w>>),*> From<UnsafeWorldCell<'w>> for ($($param,)*) {
+            fn from(world: UnsafeWorldCell<'w>) -> Self {
+                #[allow(
+                    clippy::unused_unit,
+                    reason = "Zero-length tuples won't have any params to get."
+                )]
+                ($($param::from(world), )*)
+            }
+        }
+    };
+}
+
+all_tuples!(impl_from_world, 0, 16, P);
 
 // SAFETY: QueryState is constrained to read-only fetches, so it only reads World.
 unsafe impl<'w, 's, D: ReadOnlyQueryData + 'static, F: QueryFilter + 'static> ReadOnlySystemParam

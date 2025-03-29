@@ -3634,7 +3634,7 @@ impl<'a, B: Bundle> From<&'a EntityRefExcept<'_, B>> for FilteredEntityRef<'a> {
             let components = value.entity.world().components();
             B::get_component_ids(components, &mut |maybe_id| {
                 if let Some(id) = maybe_id {
-                    access.remove_component_read(id);
+                    access.remove_read(id);
                 }
             });
             FilteredEntityRef::new(value.entity, access)
@@ -3977,7 +3977,7 @@ impl<'a, B: Bundle> From<&'a EntityMutExcept<'_, B>> for FilteredEntityMut<'a> {
             let components = value.entity.world().components();
             B::get_component_ids(components, &mut |maybe_id| {
                 if let Some(id) = maybe_id {
-                    access.remove_component_read(id);
+                    access.remove_read(id);
                 }
             });
             FilteredEntityMut::new(value.entity, access)

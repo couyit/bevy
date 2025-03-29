@@ -691,10 +691,10 @@ impl<D: QueryData, F: QueryFilter> QueryState<D, F> {
                     match component_access {
                         ComponentAccessKind::Archetypal(_) => {}
                         ComponentAccessKind::Shared(_) => {
-                            access.add_component_read(id);
+                            access.add_read(id);
                         }
                         ComponentAccessKind::Exclusive(_) => {
-                            access.add_component_write(id);
+                            access.add_write(id);
                         }
                     }
                 }
@@ -711,14 +711,14 @@ impl<D: QueryData, F: QueryFilter> QueryState<D, F> {
                 .access
                 .has_component_read(component_id)
             {
-                access.add_component_read(archetype_component_id);
+                access.add_read(archetype_component_id);
             }
             if self
                 .component_access
                 .access
                 .has_component_write(component_id)
             {
-                access.add_component_write(archetype_component_id);
+                access.add_write(archetype_component_id);
             }
         }
     }

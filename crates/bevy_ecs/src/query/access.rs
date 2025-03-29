@@ -1,6 +1,6 @@
+use crate::component::ComponentId;
 use crate::storage::SparseSetIndex;
 use crate::world::World;
-use crate::{component::ComponentId, world::WorldLabel};
 use alloc::{format, string::String, vec, vec::Vec};
 use core::{fmt, fmt::Debug, marker::PhantomData};
 use derive_more::From;
@@ -126,7 +126,7 @@ impl<T: SparseSetIndex> Access<T> {
         }
     }
 
-    fn add_component_sparse_set_index_read(&mut self, index: usize) {
+    fn add_sparse_set_index_read(&mut self, index: usize) {
         if !self.read_and_writes_inverted {
             self.read_and_writes.grow_and_insert(index);
         } else if index < self.read_and_writes.len() {
@@ -134,7 +134,7 @@ impl<T: SparseSetIndex> Access<T> {
         }
     }
 
-    fn add_component_sparse_set_index_write(&mut self, index: usize) {
+    fn add_sparse_set_index_write(&mut self, index: usize) {
         if !self.writes_inverted {
             self.writes.grow_and_insert(index);
         } else if index < self.writes.len() {
@@ -143,32 +143,19 @@ impl<T: SparseSetIndex> Access<T> {
     }
 
     /// Adds access to the component given by `index`.
-    pub fn add_component_read(&mut self, index: T) {
+    pub fn add_read(&mut self, index: T) {
         let sparse_set_index = index.sparse_set_index();
-        self.add_component_sparse_set_index_read(sparse_set_index);
+        self.add_sparse_set_index_read(sparse_set_index);
     }
 
     /// Adds exclusive access to the component given by `index`.
-    pub fn add_component_write(&mut self, index: T) {
+    pub fn add_write(&mut self, index: T) {
         let sparse_set_index = index.sparse_set_index();
-        self.add_component_sparse_set_index_read(sparse_set_index);
-        self.add_component_sparse_set_index_write(sparse_set_index);
+        self.add_sparse_set_index_read(sparse_set_index);
+        self.add_sparse_set_index_write(sparse_set_index);
     }
 
-    /// Adds access to the resource given by `index`.
-    pub fn add_resource_read(&mut self, index: T) {
-        self.read_and_writes
-            .grow_and_insert(index.sparse_set_index());
-    }
-
-    /// Adds exclusive access to the resource given by `index`.
-    pub fn add_resource_write(&mut self, index: T) {
-        self.read_and_writes
-            .grow_and_insert(index.sparse_set_index());
-        self.writes.grow_and_insert(index.sparse_set_index());
-    }
-
-    fn remove_component_sparse_set_index_read(&mut self, index: usize) {
+    fn remove_sparse_set_index_read(&mut self, index: usize) {
         if self.read_and_writes_inverted {
             self.read_and_writes.grow_and_insert(index);
         } else if index < self.read_and_writes.len() {
@@ -176,7 +163,7 @@ impl<T: SparseSetIndex> Access<T> {
         }
     }
 
-    fn remove_component_sparse_set_index_write(&mut self, index: usize) {
+    fn remove_sparse_set_index_write(&mut self, index: usize) {
         if self.writes_inverted {
             self.writes.grow_and_insert(index);
         } else if index < self.writes.len() {
@@ -192,10 +179,10 @@ impl<T: SparseSetIndex> Access<T> {
     /// can't replace a call to `remove_component_read` followed by a call to
     /// `extend` with a call to `extend` followed by a call to
     /// `remove_component_read`.
-    pub fn remove_component_read(&mut self, index: T) {
+    pub fn remove_read(&mut self, index: T) {
         let sparse_set_index = index.sparse_set_index();
-        self.remove_component_sparse_set_index_write(sparse_set_index);
-        self.remove_component_sparse_set_index_read(sparse_set_index);
+        self.remove_sparse_set_index_write(sparse_set_index);
+        self.remove_sparse_set_index_read(sparse_set_index);
     }
 
     /// Removes write access to the component given by `index`.
@@ -206,9 +193,9 @@ impl<T: SparseSetIndex> Access<T> {
     /// can't replace a call to `remove_component_write` followed by a call to
     /// `extend` with a call to `extend` followed by a call to
     /// `remove_component_write`.
-    pub fn remove_component_write(&mut self, index: T) {
+    pub fn remove_write(&mut self, index: T) {
         let sparse_set_index = index.sparse_set_index();
-        self.remove_component_sparse_set_index_write(sparse_set_index);
+        self.remove_sparse_set_index_write(sparse_set_index);
     }
 
     /// Adds an archetypal (indirect) access to the component given by `index`.
@@ -762,14 +749,14 @@ impl<T: SparseSetIndex> FilteredAccess<T> {
 
     /// Adds access to the component given by `index`.
     pub fn add_component_read(&mut self, index: T) {
-        self.access.add_component_read(index.clone());
+        self.access.add_read(index.clone());
         self.add_required(index.clone());
         self.and_with(index);
     }
 
     /// Adds exclusive access to the component given by `index`.
     pub fn add_component_write(&mut self, index: T) {
-        self.access.add_component_write(index.clone());
+        self.access.add_write(index.clone());
         self.add_required(index.clone());
         self.and_with(index);
     }
@@ -1150,9 +1137,9 @@ mod tests {
     fn create_sample_access() -> Access<usize> {
         let mut access = Access::<usize>::default();
 
-        access.add_component_read(1);
-        access.add_component_read(2);
-        access.add_component_write(3);
+        access.add_read(1);
+        access.add_read(2);
+        access.add_write(3);
         access.add_archetypal(5);
         access.read_all();
 
@@ -1202,8 +1189,8 @@ mod tests {
         let original: Access<usize> = create_sample_access();
         let mut cloned = Access::<usize>::default();
 
-        cloned.add_component_write(7);
-        cloned.add_component_read(4);
+        cloned.add_write(7);
+        cloned.add_read(4);
         cloned.add_archetypal(8);
         cloned.write_all();
 
@@ -1281,7 +1268,7 @@ mod tests {
     fn read_all_access_conflicts() {
         // read_all / single write
         let mut access_a = Access::<usize>::default();
-        access_a.add_component_write(0);
+        access_a.add_write(0);
 
         let mut access_b = Access::<usize>::default();
         access_b.read_all();
@@ -1301,18 +1288,18 @@ mod tests {
     #[test]
     fn access_get_conflicts() {
         let mut access_a = Access::<usize>::default();
-        access_a.add_component_read(0);
-        access_a.add_component_read(1);
+        access_a.add_read(0);
+        access_a.add_read(1);
 
         let mut access_b = Access::<usize>::default();
-        access_b.add_component_read(0);
-        access_b.add_component_write(1);
+        access_b.add_read(0);
+        access_b.add_write(1);
 
         assert_eq!(access_a.get_conflicts(&access_b), vec![1_usize].into());
 
         let mut access_c = Access::<usize>::default();
-        access_c.add_component_write(0);
-        access_c.add_component_write(1);
+        access_c.add_write(0);
+        access_c.add_write(1);
 
         assert_eq!(
             access_a.get_conflicts(&access_c),
@@ -1324,7 +1311,7 @@ mod tests {
         );
 
         let mut access_d = Access::<usize>::default();
-        access_d.add_component_read(0);
+        access_d.add_read(0);
 
         assert_eq!(access_d.get_conflicts(&access_a), AccessConflicts::empty());
         assert_eq!(access_d.get_conflicts(&access_b), AccessConflicts::empty());
@@ -1420,9 +1407,9 @@ mod tests {
     fn try_iter_component_access_simple() {
         let mut access = Access::<usize>::default();
 
-        access.add_component_read(1);
-        access.add_component_read(2);
-        access.add_component_write(3);
+        access.add_read(1);
+        access.add_read(2);
+        access.add_write(3);
         access.add_archetypal(5);
 
         let result = access
@@ -1444,8 +1431,8 @@ mod tests {
     fn try_iter_component_access_unbounded_write_all() {
         let mut access = Access::<usize>::default();
 
-        access.add_component_read(1);
-        access.add_component_read(2);
+        access.add_read(1);
+        access.add_read(2);
         access.write_all();
 
         let result = access
@@ -1465,8 +1452,8 @@ mod tests {
     fn try_iter_component_access_unbounded_read_all() {
         let mut access = Access::<usize>::default();
 
-        access.add_component_read(1);
-        access.add_component_read(2);
+        access.add_read(1);
+        access.add_read(2);
         access.read_all();
 
         let result = access

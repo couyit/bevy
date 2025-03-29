@@ -862,7 +862,7 @@ where
         let mut my_access = Access::new();
         my_access.read_all_components();
         for id in state {
-            my_access.remove_component_read(*id);
+            my_access.remove_read(*id);
         }
 
         let access = filtered_access.access_mut();
@@ -962,7 +962,7 @@ where
         let mut my_access = Access::new();
         my_access.write_all_components();
         for id in state {
-            my_access.remove_component_read(*id);
+            my_access.remove_read(*id);
         }
 
         let access = filtered_access.access_mut();
