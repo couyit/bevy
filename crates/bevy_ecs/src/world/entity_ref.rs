@@ -4962,7 +4962,7 @@ mod tests {
     fn entity_ref_get_by_id() {
         let mut worlds = Worlds::new();
         let world = worlds.get_world_mut(worlds.create_world());
-        let entity = worlds.spawn::<MainWorld, _>(TestComponent(42)).id();
+        let entity = world.spawn(TestComponent(42)).id();
         let component_id = world
             .components()
             .get_id(core::any::TypeId::of::<TestComponent>())
@@ -4979,8 +4979,8 @@ mod tests {
     #[test]
     fn entity_mut_get_by_id() {
         let mut worlds = Worlds::new();
-        let entity = worlds.spawn::<MainWorld, _>(TestComponent(42)).id();
-        let world = worlds.get_main_world_mut();
+        let world = worlds.get_world_mut(worlds.create_world());
+        let entity = world.spawn(TestComponent(42)).id();
         let component_id = world
             .components()
             .get_id(core::any::TypeId::of::<TestComponent>())
@@ -5030,8 +5030,9 @@ mod tests {
     #[test]
     fn entity_mut_world_scope_panic() {
         let mut worlds = Worlds::new();
+        let world = worlds.get_world_mut(worlds.create_world());
 
-        let mut entity = worlds.spawn_empty::<MainWorld>();
+        let mut entity = world.spawn_empty();
         let old_location = entity.location();
         let id = entity.id();
         let res = std::panic::catch_unwind(AssertUnwindSafe(|| {
@@ -5061,8 +5062,9 @@ mod tests {
         struct Sparse;
 
         let mut worlds = Worlds::new();
-        let e1 = worlds.spawn::<MainWorld, _>((Dense(0), Sparse)).id();
-        let e2 = worlds.spawn::<MainWorld, _>((Dense(1), Sparse)).id();
+        let world = worlds.get_world_mut(worlds.create_world());
+        let e1 = world.spawn((Dense(0), Sparse)).id();
+        let e2 = world.spawn((Dense(1), Sparse)).id();
 
         let world = worlds.get_main_world_mut();
         world.entity_mut(e1).remove::<Sparse>();
@@ -5080,8 +5082,9 @@ mod tests {
         struct Sparse;
 
         let mut worlds = Worlds::new();
-        let e1 = worlds.spawn::<MainWorld, _>((Dense(0), Sparse)).id();
-        let e2 = worlds.spawn::<MainWorld, _>((Dense(1), Sparse)).id();
+        let world = worlds.get_world_mut(worlds.create_world());
+        let e1 = world.spawn((Dense(0), Sparse)).id();
+        let e2 = world.spawn((Dense(1), Sparse)).id();
 
         let world = worlds.get_main_world_mut();
         world.entity_mut(e1).remove::<Dense>();
@@ -5095,9 +5098,8 @@ mod tests {
         struct Marker<const N: usize>;
 
         let mut worlds = Worlds::new();
-        let ent = worlds
-            .spawn::<MainWorld, _>((Marker::<1>, Marker::<2>, Marker::<3>))
-            .id();
+        let world = worlds.get_world_mut(worlds.create_world());
+        let ent = worlds.spawn((Marker::<1>, Marker::<2>, Marker::<3>)).id();
 
         let world = worlds.get_main_world_mut();
         world.entity_mut(ent).retain::<()>();
@@ -5111,9 +5113,8 @@ mod tests {
         struct Marker<const N: usize>;
 
         let mut worlds = Worlds::new();
-        let ent = worlds
-            .spawn::<MainWorld, _>((Marker::<1>, Marker::<2>, Marker::<3>))
-            .id();
+        let world = worlds.get_world_mut(worlds.create_world());
+        let ent = worlds.spawn((Marker::<1>, Marker::<2>, Marker::<3>)).id();
 
         let world = worlds.get_main_world_mut();
         world.entity_mut(ent).retain::<(Marker<2>, Marker<4>)>();
@@ -5142,8 +5143,9 @@ mod tests {
         struct Sparse;
 
         let mut worlds = Worlds::new();
-        let e1 = worlds.spawn::<MainWorld, _>(Dense(0)).id();
-        let e2 = worlds.spawn::<MainWorld, _>(Dense(1)).id();
+        let world = worlds.get_world_mut(worlds.create_world());
+        let e1 = world.spawn(Dense(0)).id();
+        let e2 = world.spawn(Dense(1)).id();
 
         let world = worlds.get_main_world_mut();
         world.entity_mut(e1).insert(Sparse);
@@ -5164,8 +5166,9 @@ mod tests {
         struct Sparse;
 
         let mut worlds = Worlds::new();
-        let e1 = worlds.spawn::<MainWorld, _>(Dense(0)).id();
-        let e2 = worlds.spawn::<MainWorld, _>(Dense(1)).id();
+        let world = worlds.get_world_mut(worlds.create_world());
+        let e1 = world.spawn(Dense(0)).id();
+        let e2 = world.spawn(Dense(1)).id();
 
         let world = worlds.get_main_world_mut();
         world.entity_mut(e1).insert(Sparse).remove::<Sparse>();
@@ -5191,8 +5194,9 @@ mod tests {
         struct Sparse;
 
         let mut worlds = Worlds::new();
-        let e1 = worlds.spawn::<MainWorld, _>(Dense(0)).id();
-        let e2 = worlds.spawn::<MainWorld, _>(Dense(1)).id();
+        let world = worlds.get_world_mut(worlds.create_world());
+        let e1 = world.spawn(Dense(0)).id();
+        let e2 = world.spawn(Dense(1)).id();
 
         let world = worlds.get_main_world_mut();
         world.entity_mut(e1).insert(Sparse).remove::<Sparse>();
@@ -5216,8 +5220,9 @@ mod tests {
         struct Sparse;
 
         let mut worlds = Worlds::new();
-        let e1 = worlds.spawn::<MainWorld, _>(Dense(0)).id();
-        let e2 = worlds.spawn::<MainWorld, _>(Dense(1)).id();
+        let world = worlds.get_world_mut(worlds.create_world());
+        let e1 = world.spawn(Dense(0)).id();
+        let e2 = world.spawn(Dense(1)).id();
 
         let world = worlds.get_main_world_mut();
         world.entity_mut(e1).insert(Sparse).remove::<Sparse>();
@@ -5241,8 +5246,9 @@ mod tests {
         struct Sparse;
 
         let mut worlds = Worlds::new();
-        let e1 = worlds.spawn::<MainWorld, _>(Dense(0)).id();
-        let e2 = worlds.spawn::<MainWorld, _>(Dense(1)).id();
+        let world = worlds.get_world_mut(worlds.create_world());
+        let e1 = world.spawn(Dense(0)).id();
+        let e2 = world.spawn(Dense(1)).id();
 
         world.entity_mut(e1).insert(Sparse).remove::<Sparse>();
 
@@ -5257,6 +5263,7 @@ mod tests {
     #[test]
     fn entity_mut_insert_by_id() {
         let mut worlds = Worlds::new();
+        let world = worlds.get_world_mut(worlds.create_world());
         let test_component_id = world.register_component::<TestComponent>();
 
         let mut entity = world.spawn_empty();
@@ -5285,6 +5292,7 @@ mod tests {
     #[test]
     fn entity_mut_insert_bundle_by_id() {
         let mut worlds = Worlds::new();
+        let world = worlds.get_world_mut(worlds.create_world());
         let test_component_id = world.register_component::<TestComponent>();
         let test_component_2_id = world.register_component::<TestComponent2>();
 
@@ -5325,6 +5333,7 @@ mod tests {
     #[test]
     fn entity_mut_remove_by_id() {
         let mut worlds = Worlds::new();
+        let world = worlds.get_world_mut(worlds.create_world());
         let test_component_id = world.register_component::<TestComponent>();
 
         let mut entity = world.spawn(TestComponent(42));
@@ -5342,6 +5351,7 @@ mod tests {
     #[test]
     fn entity_ref_except() {
         let mut worlds = Worlds::new();
+        let world = worlds.get_world_mut(worlds.create_world());
         world.register_component::<TestComponent>();
         world.register_component::<TestComponent2>();
 
@@ -5370,12 +5380,13 @@ mod tests {
     #[should_panic]
     fn entity_ref_except_conflicts_with_self() {
         let mut worlds = Worlds::new();
+        let world = worlds.get_world_mut(worlds.create_world());
         world.spawn(TestComponent(0)).insert(TestComponent2(0));
 
         // This should panic, because we have a mutable borrow on
         // `TestComponent` but have a simultaneous indirect immutable borrow on
         // that component via `EntityRefExcept`.
-        world.run_system_once(system).unwrap();
+        worlds.run_system_once(system).unwrap();
 
         fn system(_: Query<(&mut TestComponent, EntityRefExcept<TestComponent2>)>) {}
     }
@@ -5386,12 +5397,13 @@ mod tests {
     #[should_panic]
     fn entity_ref_except_conflicts_with_other() {
         let mut worlds = Worlds::new();
+        let world = worlds.get_world_mut(worlds.create_world());
         world.spawn(TestComponent(0)).insert(TestComponent2(0));
 
         // This should panic, because we have a mutable borrow on
         // `TestComponent` but have a simultaneous indirect immutable borrow on
         // that component via `EntityRefExcept`.
-        world.run_system_once(system).unwrap();
+        worlds.run_system_once(system).unwrap();
 
         fn system(_: Query<&mut TestComponent>, _: Query<EntityRefExcept<TestComponent2>>) {}
     }
@@ -5401,6 +5413,7 @@ mod tests {
     #[test]
     fn entity_ref_except_doesnt_conflict() {
         let mut worlds = Worlds::new();
+        let world = worlds.get_world_mut(worlds.create_world());
         world.spawn(TestComponent(0)).insert(TestComponent2(0));
 
         world.run_system_once(system).unwrap();
@@ -5420,6 +5433,7 @@ mod tests {
     #[test]
     fn entity_mut_except() {
         let mut worlds = Worlds::new();
+        let world = worlds.get_world_mut(worlds.create_world());
         world.spawn(TestComponent(0)).insert(TestComponent2(0));
 
         let mut query = world.query::<EntityMutExcept<TestComponent>>();
@@ -5446,6 +5460,7 @@ mod tests {
     #[should_panic]
     fn entity_mut_except_conflicts_with_self() {
         let mut worlds = Worlds::new();
+        let world = worlds.get_world_mut(worlds.create_world());
         world.spawn(TestComponent(0)).insert(TestComponent2(0));
 
         // This should panic, because we have a mutable borrow on
@@ -5462,6 +5477,7 @@ mod tests {
     #[should_panic]
     fn entity_mut_except_conflicts_with_other() {
         let mut worlds = Worlds::new();
+        let world = worlds.get_world_mut(worlds.create_world());
         world.spawn(TestComponent(0)).insert(TestComponent2(0));
 
         // This should panic, because we have a mutable borrow on
@@ -5483,6 +5499,7 @@ mod tests {
     #[test]
     fn entity_mut_except_doesnt_conflict() {
         let mut worlds = Worlds::new();
+        let world = worlds.get_world_mut(worlds.create_world());
         world.spawn(TestComponent(0)).insert(TestComponent2(0));
 
         world.run_system_once(system).unwrap();
@@ -5605,6 +5622,7 @@ mod tests {
     #[test]
     fn filtered_entity_ref_normal() {
         let mut worlds = Worlds::new();
+        let world = worlds.get_world_mut(worlds.create_world());
         let a_id = world.register_component::<A>();
 
         let e: FilteredEntityRef = world.spawn(A).into();
@@ -5619,6 +5637,7 @@ mod tests {
     #[test]
     fn filtered_entity_ref_missing() {
         let mut worlds = Worlds::new();
+        let world = worlds.get_world_mut(worlds.create_world());
         let a_id = world.register_component::<A>();
 
         let e: FilteredEntityRef = world.spawn(()).into();
@@ -5633,6 +5652,7 @@ mod tests {
     #[test]
     fn filtered_entity_mut_normal() {
         let mut worlds = Worlds::new();
+        let world = worlds.get_world_mut(worlds.create_world());
         let a_id = world.register_component::<A>();
 
         let mut e: FilteredEntityMut = world.spawn(A).into();
@@ -5649,6 +5669,7 @@ mod tests {
     #[test]
     fn filtered_entity_mut_missing() {
         let mut worlds = Worlds::new();
+        let world = worlds.get_world_mut(worlds.create_world());
         let a_id = world.register_component::<A>();
 
         let mut e: FilteredEntityMut = world.spawn(()).into();
@@ -5670,7 +5691,8 @@ mod tests {
 
     #[test]
     fn get_components() {
-        let mut world = World::default();
+        let mut worlds = Worlds::default();
+        let world = worlds.get_world_mut(worlds.create_world());
         let e1 = world.spawn((X(7), Y(10))).id();
         let e2 = world.spawn(X(8)).id();
         let e3 = world.spawn_empty().id();
@@ -5685,7 +5707,8 @@ mod tests {
 
     #[test]
     fn get_by_id_array() {
-        let mut world = World::default();
+        let mut worlds = Worlds::default();
+        let world = worlds.get_world_mut(worlds.create_world());
         let e1 = world.spawn((X(7), Y(10))).id();
         let e2 = world.spawn(X(8)).id();
         let e3 = world.spawn_empty().id();
@@ -5727,7 +5750,8 @@ mod tests {
 
     #[test]
     fn get_by_id_vec() {
-        let mut world = World::default();
+        let mut worlds = Worlds::default();
+        let world = worlds.get_world_mut(worlds.create_world());
         let e1 = world.spawn((X(7), Y(10))).id();
         let e2 = world.spawn(X(8)).id();
         let e3 = world.spawn_empty().id();
@@ -5781,7 +5805,8 @@ mod tests {
 
     #[test]
     fn get_mut_by_id_array() {
-        let mut world = World::default();
+        let mut worlds = Worlds::default();
+        let world = worlds.get_world_mut(worlds.create_world());
         let e1 = world.spawn((X(7), Y(10))).id();
         let e2 = world.spawn(X(8)).id();
         let e3 = world.spawn_empty().id();
@@ -5844,7 +5869,8 @@ mod tests {
 
     #[test]
     fn get_mut_by_id_vec() {
-        let mut world = World::default();
+        let mut worlds = Worlds::default();
+        let world = worlds.get_world_mut(worlds.create_world());
         let e1 = world.spawn((X(7), Y(10))).id();
         let e2 = world.spawn(X(8)).id();
         let e3 = world.spawn_empty().id();
@@ -5946,6 +5972,7 @@ mod tests {
     #[test]
     fn adding_observer_updates_location() {
         let mut worlds = Worlds::new();
+        let world = worlds.get_world_mut(worlds.create_world());
         let entity = world
             .spawn_empty()
             .observe(
@@ -5969,6 +5996,7 @@ mod tests {
     #[should_panic]
     fn location_on_despawned_entity_panics() {
         let mut worlds = Worlds::new();
+        let world = worlds.get_world_mut(worlds.create_world());
         world.add_observer(
             |trigger: Trigger<OnAdd, TestComponent>, mut commands: ComponentCommands| {
                 commands.entity(trigger.target()).despawn();
@@ -5990,6 +6018,7 @@ mod tests {
     #[test]
     fn archetype_modifications_trigger_flush() {
         let mut worlds = Worlds::new();
+        let world = worlds.get_world_mut(worlds.create_world());
         world.insert_resource(TestFlush(0));
         world.add_observer(
             |_: Trigger<OnAdd, TestComponent>, mut commands: ComponentCommands| {
@@ -6135,6 +6164,7 @@ mod tests {
     #[test]
     fn command_ordering_is_correct() {
         let mut worlds = Worlds::new();
+        let world = worlds.get_world_mut(worlds.create_world());
         world.insert_resource(TestVec(Vec::new()));
         world.add_observer(ord_a_observer_on_add);
         world.add_observer(ord_a_observer_on_insert);
@@ -6165,6 +6195,7 @@ mod tests {
             "OrdB hook on_remove",
         ];
         world.flush();
+        // TODO
         assert_eq!(world.resource_mut::<TestVec>().0.as_slice(), &expected[..]);
     }
 
@@ -6183,6 +6214,7 @@ mod tests {
         struct D;
 
         let mut worlds = Worlds::new();
+        let world = worlds.get_world_mut(worlds.create_world());
         let entity_a = world.spawn((A, B, C(5))).id();
         let entity_b = world.spawn((A, C(4))).id();
 
@@ -6216,6 +6248,7 @@ mod tests {
         struct D;
 
         let mut worlds = Worlds::new();
+        let world = worlds.get_world_mut(worlds.create_world());
         let entity_a = world.spawn(A).id();
         let entity_b = world.spawn_empty().id();
 
@@ -6243,6 +6276,7 @@ mod tests {
     #[test]
     fn update_despawned_by_after_observers() {
         let mut worlds = Worlds::new();
+        let world = worlds.get_world_mut(worlds.create_world());
 
         #[derive(Component)]
         #[component(on_remove = get_tracked)]
