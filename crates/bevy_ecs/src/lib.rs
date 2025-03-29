@@ -138,7 +138,7 @@ mod tests {
         prelude::Or,
         query::{Added, Changed, FilteredAccess, QueryFilter, With, Without},
         resource::Resource,
-        world::{EntityMut, EntityRef, MainWorld, Mut, World, Worlds},
+        world::{EntityMut, EntityRef, Mut, World, Worlds},
     };
     use alloc::{
         string::{String, ToString},

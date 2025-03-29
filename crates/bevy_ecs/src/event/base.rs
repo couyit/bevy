@@ -1,6 +1,6 @@
 use crate::change_detection::MaybeLocation;
 use crate::component::ComponentId;
-use crate::world::{ResourceWorld, World};
+use crate::world::World;
 use crate::{component::Component, traversal::Traversal};
 #[cfg(feature = "bevy_reflect")]
 use bevy_reflect::Reflect;

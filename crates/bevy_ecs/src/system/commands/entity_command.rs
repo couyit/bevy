@@ -15,7 +15,7 @@ use crate::{
     event::Event,
     relationship::RelationshipHookMode,
     system::IntoObserverSystem,
-    world::{error::EntityMutableFetchError, ComponentWorld, EntityWorldMut, FromWorld},
+    world::{error::EntityMutableFetchError, EntityWorldMut, FromWorld},
 };
 use bevy_ptr::OwningPtr;
 
@@ -78,9 +78,9 @@ use bevy_ptr::OwningPtr;
 ///     assert_eq!(names, HashSet::from_iter(["Entity #0", "Entity #1"]));
 /// }
 /// ```
-pub trait EntityCommand<W: ComponentWorld, Out = ()>: Send + 'static {
+pub trait EntityCommand<Out = ()>: Send + 'static {
     /// Executes this command for the given [`Entity`].
-    fn apply(self, entity: EntityWorldMut<W>) -> Out;
+    fn apply(self, entity: EntityWorldMut) -> Out;
 }
 
 /// An error that occurs when running an [`EntityCommand`] on a specific entity.

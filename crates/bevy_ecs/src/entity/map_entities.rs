@@ -1,11 +1,9 @@
 pub use bevy_ecs_macros::MapEntities;
 
-use core::marker::PhantomData;
-
 use crate::{
     entity::{hash_map::EntityHashMap, Entity},
     identifier::masks::{IdentifierMask, HIGH_MASK},
-    world::{World, WorldLabel},
+    world::World,
 };
 
 use alloc::{collections::VecDeque, vec::Vec};
@@ -170,7 +168,7 @@ impl EntityMapper for &mut dyn EntityMapper {
     }
 }
 
-impl<W: WorldLabel> EntityMapper for SceneEntityMapper<'_, W> {
+impl EntityMapper for SceneEntityMapper<'_> {
     /// Returns the corresponding mapped entity or reserves a new dead entity ID in the current world if it is absent.
     fn get_mapped(&mut self, source: Entity) -> Entity {
         if let Some(&mapped) = self.map.get(&source) {
@@ -212,7 +210,7 @@ impl EntityMapper for EntityHashMap<Entity> {
 ///
 /// References are allocated by returning increasing generations starting from an internally initialized base
 /// [`Entity`]. After it is finished being used, this entity is despawned and the requisite number of generations reserved.
-pub struct SceneEntityMapper<'m, W: WorldLabel> {
+pub struct SceneEntityMapper<'m> {
     /// A mapping from one set of entities to another.
     ///
     /// This is typically used to coordinate data transfer between sets of entities, such as between a scene and the world
@@ -226,10 +224,9 @@ pub struct SceneEntityMapper<'m, W: WorldLabel> {
     dead_start: Entity,
     /// The number of generations this mapper has allocated thus far.
     generations: u32,
-    marker: PhantomData<W>,
 }
 
-impl<'m, W: WorldLabel> SceneEntityMapper<'m, W> {
+impl<'m> SceneEntityMapper<'m> {
     /// Gets a reference to the underlying [`EntityHashMap<Entity>`].
     pub fn get_map(&'m self) -> &'m EntityHashMap<Entity> {
         self.map
@@ -241,7 +238,7 @@ impl<'m, W: WorldLabel> SceneEntityMapper<'m, W> {
     }
 
     /// Creates a new [`SceneEntityMapper`], spawning a temporary base [`Entity`] in the provided [`World`]
-    pub fn new(map: &'m mut EntityHashMap<Entity>, world: &mut World<W>) -> Self {
+    pub fn new(map: &'m mut EntityHashMap<Entity>, world: &mut World) -> Self {
         // We're going to be calling methods on `Entities` that require advance
         // flushing, such as `alloc` and `free`.
         world.flush_entities();
@@ -250,14 +247,13 @@ impl<'m, W: WorldLabel> SceneEntityMapper<'m, W> {
             // SAFETY: Entities data is kept in a valid state via `EntityMapper::world_scope`
             dead_start: unsafe { world.entities_mut().alloc() },
             generations: 0,
-            marker: PhantomData,
         }
     }
 
     /// Reserves the allocated references to dead entities within the world. This frees the temporary base
     /// [`Entity`] while reserving extra generations. Because this makes the [`SceneEntityMapper`] unable to
     /// safely allocate any more references, this method takes ownership of `self` in order to render it unusable.
-    pub fn finish(self, world: &mut World<W>) {
+    pub fn finish(self, world: &mut World) {
         // SAFETY: Entities data is kept in a valid state via `EntityMap::world_scope`
         let entities = unsafe { world.entities_mut() };
         assert!(entities.free(self.dead_start).is_some());
@@ -272,8 +268,8 @@ impl<'m, W: WorldLabel> SceneEntityMapper<'m, W> {
     /// parameter `R`.
     pub fn world_scope<R>(
         entity_map: &'m mut EntityHashMap<Entity>,
-        world: &mut World<W>,
-        f: impl FnOnce(&mut World<W>, &mut Self) -> R,
+        world: &mut World,
+        f: impl FnOnce(&mut World, &mut Self) -> R,
     ) -> R {
         let mut mapper = Self::new(entity_map, world);
         let result = f(world, &mut mapper);

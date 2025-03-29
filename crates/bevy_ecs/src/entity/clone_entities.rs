@@ -3,7 +3,6 @@ use bevy_platform_support::collections::{HashMap, HashSet};
 use bevy_ptr::{Ptr, PtrMut};
 use bumpalo::Bump;
 use core::any::TypeId;
-use core::marker::PhantomData;
 
 use crate::{
     bundle::Bundle,
@@ -353,7 +352,6 @@ pub struct EntityCloner {
     default_clone_fn: ComponentCloneFn,
     clone_queue: VecDeque<Entity>,
     deferred_commands: VecDeque<Box<dyn FnOnce(&mut World, &mut dyn EntityMapper)>>,
-    marker: PhantomData,
 }
 
 impl Default for EntityCloner {
@@ -367,7 +365,6 @@ impl Default for EntityCloner {
             clone_behavior_overrides: Default::default(),
             clone_queue: Default::default(),
             deferred_commands: Default::default(),
-            marker: PhantomData,
         }
     }
 }

@@ -74,8 +74,8 @@ impl<'w> UnsafeWorldsCell<'w> {
         unsafe { &*self.ptr }
     }
 
-    pub unsafe fn get_unsafe_world_cell_mut<W: WorldLabel>(self) -> UnsafeWorldCell<'w> {
-        unsafe { self.get_mut().get_world_mut::<W>().as_unsafe_world_cell() }
+    pub unsafe fn get_unsafe_world_cell_mut(self, id: WorldId) -> UnsafeWorldCell<'w> {
+        unsafe { self.get_mut().get_world_mut(id).as_unsafe_world_cell() }
     }
 
     #[cfg_attr(debug_assertions, inline(never), track_caller)]

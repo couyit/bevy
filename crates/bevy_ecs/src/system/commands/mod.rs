@@ -28,12 +28,9 @@ use crate::{
     schedule::ScheduleLabel,
     system::{
         Deferred, IntoObserverSystem, IntoSystem, RegisteredSystem, SystemId, SystemInput,
-        SystemParamValidationError,
+        SystemParam, SystemParamValidationError,
     },
-    world::{
-        command_queue::RawCommandQueue, CommandQueue, ComponentWorld, EntityWorldMut, FromWorld,
-        ManyWorldLabel, World,
-    },
+    world::{command_queue::RawCommandQueue, CommandQueue, EntityWorldMut, FromWorld, World},
 };
 
 /// A [`Command`] queue to perform structural changes to the [`World`].
@@ -104,52 +101,55 @@ use crate::{
 /// The [`error`](crate::error) module provides some simple error handlers for convenience.
 ///
 /// [`ApplyDeferred`]: crate::schedule::ApplyDeferred
-pub struct ComponentCommands<'w, 's, W: ComponentWorld> {
+pub struct ComponentCommands<'w, 's> {
     queue: InternalQueue<'s>,
-    entities: &'w Entities<W>,
+    entities: &'w Entities,
 }
 
 // SAFETY: All commands [`Command`] implement [`Send`]
-unsafe impl<W: ComponentWorld> Send for ComponentCommands<'_, '_, W> {}
+unsafe impl Send for ComponentCommands<'_, '_> {}
 
 // SAFETY: `Commands` never gives access to the inner commands.
-unsafe impl<W: ComponentWorld> Sync for ComponentCommands<'_, '_, W> {}
+unsafe impl Sync for ComponentCommands<'_, '_> {}
 
 const _: () = {
-    type __StructFieldsAlias<'w, 's, W> = (Deferred<'s, CommandQueue>, &'w Entities<W>);
+    type __StructFieldsAlias<'w, 's> = (Deferred<'s, CommandQueue>, &'w Entities);
     #[doc(hidden)]
-    pub struct FetchState<W: ComponentWorld> {
-        state: <__StructFieldsAlias<'static, 'static, W> as SystemParam>::State,
+    pub struct FetchState {
+        state: <__StructFieldsAlias<'static, 'static> as SystemParam>::State,
     }
     // SAFETY: Only reads Entities
-    unsafe impl<W: ComponentWorld> SystemParam for ComponentCommands<'_, '_, W> {
-        type State = FetchState<W>;
-        type Item<'w, 's> = ComponentCommands<'w, 's, W>;
-        type World = <__StructFieldsAlias<'static, 'static, W> as SystemParam>::World;
+    unsafe impl SystemParam for ComponentCommands<'_, '_> {
+        type State = FetchState;
+        type Item<'w, 's> = ComponentCommands<'w, 's>;
+        type World<'w> = <__StructFieldsAlias<'static, 'static> as SystemParam>::World<'w>;
+
+        fn init_world_access<'w>(world: Self::World<'w>, system_meta: &mut super::SystemMeta) {
+            <__StructFieldsAlias<'_, '_> as SystemParam>::init_world_access(world, system_meta)
+        }
 
         fn init_state<'w>(
-            world: <Self::World as ManyWorldLabel>::World<'w>,
+            world: Self::World<'w>,
             system_meta: &mut bevy_ecs::system::SystemMeta,
         ) -> Self::State {
             FetchState {
-                state: <__StructFieldsAlias<'_, '_, W> as SystemParam>::init_state(
-                    world,
-                    system_meta,
-                ),
+                state: <__StructFieldsAlias<'_, '_> as SystemParam>::init_state(world, system_meta),
             }
         }
 
         unsafe fn new_archetype(
             state: &mut Self::State,
             archetype: &bevy_ecs::archetype::Archetype,
-            system_meta: &mut bevy_ecs::system::SystemMeta,
+            archetype_component_id: &mut crate::query::Access<
+                crate::archetype::ArchetypeComponentId,
+            >,
         ) {
             // SAFETY: Caller guarantees the archetype is from the world used in `init_state`
             unsafe {
-                <__StructFieldsAlias<'_, '_, W> as SystemParam>::new_archetype(
+                <__StructFieldsAlias<'_, '_> as SystemParam>::new_archetype(
                     &mut state.state,
                     archetype,
-                    system_meta,
+                    archetype_component_id,
                 );
             };
         }
@@ -157,9 +157,9 @@ const _: () = {
         fn apply<'w>(
             state: &mut Self::State,
             system_meta: &bevy_ecs::system::SystemMeta,
-            world: <Self::World as ManyWorldLabel>::World<'w>,
+            world: Self::World<'w>,
         ) {
-            <__StructFieldsAlias<'_, '_, W> as SystemParam>::apply(
+            <__StructFieldsAlias<'_, '_> as SystemParam>::apply(
                 &mut state.state,
                 system_meta,
                 world,
@@ -169,9 +169,9 @@ const _: () = {
         fn queue<'w>(
             state: &mut Self::State,
             system_meta: &bevy_ecs::system::SystemMeta,
-            world: <Self::World as ManyWorldLabel>::World<'w>,
+            world: Self::World<'w>,
         ) {
-            <__StructFieldsAlias<'_, '_, W> as SystemParam>::queue(
+            <__StructFieldsAlias<'_, '_> as SystemParam>::queue(
                 &mut state.state,
                 system_meta,
                 world,
@@ -182,9 +182,9 @@ const _: () = {
         unsafe fn validate_param<'w>(
             state: &Self::State,
             system_meta: &bevy_ecs::system::SystemMeta,
-            world: <Self::World as ManyWorldLabel>::World<'w>,
+            world: Self::World<'w>,
         ) -> Result<(), SystemParamValidationError> {
-            <(Deferred<CommandQueue>, &Entities<W>) as SystemParam>::validate_param(
+            <(Deferred<CommandQueue>, &Entities) as SystemParam>::validate_param(
                 &state.state,
                 system_meta,
                 world,
@@ -195,7 +195,7 @@ const _: () = {
         unsafe fn get_param<'w, 's>(
             state: &'s mut Self::State,
             system_meta: &bevy_ecs::system::SystemMeta,
-            world: <Self::World as ManyWorldLabel>::World<'w>,
+            world: Self::World<'w>,
             change_tick: bevy_ecs::component::Tick,
         ) -> Self::Item<'w, 's> {
             let (f0, f1) = <(Deferred<'s, CommandQueue>, &'w Entities) as SystemParam>::get_param(
@@ -211,11 +211,10 @@ const _: () = {
         }
     }
     // SAFETY: Only reads Entities
-    unsafe impl<'w, 's, W: ComponentWorld> bevy_ecs::system::ReadOnlySystemParam
-        for ComponentCommands<'w, 's, W>
+    unsafe impl<'w, 's> bevy_ecs::system::ReadOnlySystemParam for ComponentCommands<'w, 's>
     where
         Deferred<'s, CommandQueue>: bevy_ecs::system::ReadOnlySystemParam,
-        &'w Entities<W>: bevy_ecs::system::ReadOnlySystemParam,
+        &'w Entities: bevy_ecs::system::ReadOnlySystemParam,
     {
     }
 };
@@ -225,13 +224,13 @@ enum InternalQueue<'s> {
     RawCommandQueue(RawCommandQueue),
 }
 
-impl<'w, 's, W: ComponentWorld> ComponentCommands<'w, 's, W> {
+impl<'w, 's> ComponentCommands<'w, 's> {
     /// Returns a new `Commands` instance from a [`CommandQueue`] and a [`World`].
     ///
     /// It is not required to call this constructor when using `Commands` as a [system parameter].
     ///
     /// [system parameter]: crate::system::SystemParam
-    pub fn new(queue: &'s mut CommandQueue, world: &'w World<W>) -> Self {
+    pub fn new(queue: &'s mut CommandQueue, world: &'w World) -> Self {
         Self::new_from_entities(queue, &world.entities)
     }
 
@@ -240,7 +239,7 @@ impl<'w, 's, W: ComponentWorld> ComponentCommands<'w, 's, W> {
     /// It is not required to call this constructor when using `Commands` as a [system parameter].
     ///
     /// [system parameter]: crate::system::SystemParam
-    pub fn new_from_entities(queue: &'s mut CommandQueue, entities: &'w Entities<W>) -> Self {
+    pub fn new_from_entities(queue: &'s mut CommandQueue, entities: &'w Entities) -> Self {
         Self {
             queue: InternalQueue::CommandQueue(Deferred(queue)),
             entities,
@@ -256,7 +255,7 @@ impl<'w, 's, W: ComponentWorld> ComponentCommands<'w, 's, W> {
     /// * Caller ensures that `queue` must outlive 'w
     pub(crate) unsafe fn new_raw_from_entities(
         queue: RawCommandQueue,
-        entities: &'w Entities<W>,
+        entities: &'w Entities,
     ) -> Self {
         Self {
             queue: InternalQueue::RawCommandQueue(queue),
@@ -282,7 +281,7 @@ impl<'w, 's, W: ComponentWorld> ComponentCommands<'w, 's, W> {
     /// #
     /// # fn do_initialization(_: Commands) {}
     /// ```
-    pub fn reborrow(&mut self) -> ComponentCommands<'w, '_, W> {
+    pub fn reborrow(&mut self) -> ComponentCommands<'w, '_> {
         ComponentCommands {
             queue: match &mut self.queue {
                 InternalQueue::CommandQueue(queue) => InternalQueue::CommandQueue(queue.reborrow()),
@@ -642,7 +641,7 @@ impl<'w, 's, W: ComponentWorld> ComponentCommands<'w, 's, W> {
     /// # bevy_ecs::system::assert_is_system(add_three_to_counter_system);
     /// # bevy_ecs::system::assert_is_system(add_twenty_five_to_counter_system);
     /// ```
-    pub fn queue_handled<C: Command<WT> + HandleError<T>, T>(
+    pub fn queue_handled<C: Command<T> + HandleError<T>, T>(
         &mut self,
         command: C,
         error_handler: fn(BevyError, ErrorContext),

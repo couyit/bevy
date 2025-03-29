@@ -71,11 +71,10 @@ use crate::{
         Identifier,
     },
     storage::{SparseSetIndex, TableId, TableRow},
-    world::ComponentWorld,
 };
 use alloc::vec::Vec;
 use bevy_platform_support::sync::atomic::Ordering;
-use core::{fmt, hash::Hash, marker::PhantomData, mem, num::NonZero, panic::Location};
+use core::{fmt, hash::Hash, mem, num::NonZero, panic::Location};
 use log::warn;
 
 #[cfg(feature = "serialize")]
@@ -525,7 +524,7 @@ unsafe impl EntitySetIterator for ReserveEntitiesIterator<'_> {}
 ///
 /// [`World`]: crate::world::World
 #[derive(Debug)]
-pub struct Entities<W: ComponentWorld> {
+pub struct Entities {
     meta: Vec<EntityMeta>,
 
     /// The `pending` and `free_cursor` fields describe three sets of Entity IDs
@@ -570,16 +569,14 @@ pub struct Entities<W: ComponentWorld> {
     /// [`flush`]: Entities::flush
     pending: Vec<u32>,
     free_cursor: AtomicIdCursor,
-    marker: PhantomData<W>,
 }
 
-impl<W: ComponentWorld> Entities<W> {
+impl Entities {
     pub(crate) const fn new() -> Self {
         Entities {
             meta: Vec::new(),
             pending: Vec::new(),
             free_cursor: AtomicIdCursor::new(0),
-            marker: PhantomData,
         }
     }
 
@@ -1049,7 +1046,7 @@ pub struct EntityDoesNotExistError {
 }
 
 impl EntityDoesNotExistError {
-    pub(crate) fn new<W: ComponentWorld>(entity: Entity, entities: &Entities<W>) -> Self {
+    pub(crate) fn new(entity: Entity, entities: &Entities) -> Self {
         Self {
             entity,
             details: entities.entity_does_not_exist_error_details(entity),
@@ -1135,8 +1132,6 @@ impl EntityLocation {
 
 #[cfg(test)]
 mod tests {
-    use crate::world::InvalidComponentWorld;
-
     use super::*;
     use alloc::format;
 
@@ -1155,7 +1150,7 @@ mod tests {
 
     #[test]
     fn reserve_entity_len() {
-        let mut e = Entities::<InvalidComponentWorld>::new();
+        let mut e = Entities::new();
         e.reserve_entity();
         // SAFETY: entity_location is left invalid
         unsafe { e.flush(|_, _| {}) };
@@ -1164,7 +1159,7 @@ mod tests {
 
     #[test]
     fn get_reserved_and_invalid() {
-        let mut entities = Entities::<InvalidComponentWorld>::new();
+        let mut entities = Entities::new();
         let e = entities.reserve_entity();
         assert!(entities.contains(e));
         assert!(entities.get(e).is_none());
@@ -1199,7 +1194,7 @@ mod tests {
 
     #[test]
     fn reserve_generations() {
-        let mut entities = Entities::<InvalidComponentWorld>::new();
+        let mut entities = Entities::new();
         let entity = entities.alloc();
         entities.free(entity);
 
@@ -1210,7 +1205,7 @@ mod tests {
     fn reserve_generations_and_alloc() {
         const GENERATIONS: u32 = 10;
 
-        let mut entities = Entities::<InvalidComponentWorld>::new();
+        let mut entities = Entities::new();
         let entity = entities.alloc();
         entities.free(entity);
 

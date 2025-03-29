@@ -3,7 +3,7 @@ use core::{any::type_name, fmt};
 use crate::{
     entity::Entity,
     system::{entity_command::EntityCommandError, Command, EntityCommand},
-    world::{error::EntityMutableFetchError, ComponentWorld, Worlds},
+    world::{error::EntityMutableFetchError, Worlds},
 };
 
 use super::{default_error_handler, BevyError, ErrorContext};
@@ -66,16 +66,15 @@ where
 // "non-result returning entity commands" require different implementations, so they cannot be automatically
 // implemented. And this isn't the type of implementation that we want to thrust on people implementing
 // EntityCommand.
-pub trait CommandWithEntity<W: ComponentWorld, Out> {
+pub trait CommandWithEntity<Out> {
     /// Passes in a specific entity to an [`EntityCommand`], resulting in a [`Command`] that
     /// internally runs the [`EntityCommand`] on that entity.
     fn with_entity(self, entity: Entity) -> impl Command<Out> + HandleError<Out>;
 }
 
-impl<C, W> CommandWithEntity<W, Result<(), EntityMutableFetchError>> for C
+impl<C> CommandWithEntity<Result<(), EntityMutableFetchError>> for C
 where
-    C: EntityCommand<W>,
-    W: ComponentWorld,
+    C: EntityCommand,
 {
     fn with_entity(
         self,
@@ -90,11 +89,10 @@ where
     }
 }
 
-impl<C, T, Err, W> CommandWithEntity<W, Result<T, EntityCommandError<Err>>> for C
+impl<C, T, Err> CommandWithEntity<Result<T, EntityCommandError<Err>>> for C
 where
-    C: EntityCommand<W, Result<T, Err>>,
+    C: EntityCommand<Result<T, Err>>,
     Err: fmt::Debug + fmt::Display + Send + Sync + 'static,
-    W: ComponentWorld,
 {
     fn with_entity(
         self,

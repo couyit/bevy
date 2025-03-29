@@ -7,7 +7,7 @@ use crate::{
     query::{Access, FilteredAccess, QueryCombinationIter, QueryIter, QueryParIter, WorldQuery},
     storage::{SparseSetIndex, TableId},
     system::Query,
-    world::{unsafe_world_cell::UnsafeWorldCell, ComponentWorld, World, WorldId},
+    world::{unsafe_world_cell::UnsafeWorldCell, World, WorldId},
 };
 
 #[cfg(all(not(target_arch = "wasm32"), feature = "multi_threaded"))]
@@ -436,12 +436,12 @@ impl<D: QueryData, F: QueryFilter> QueryState<D, F> {
     /// have unique access to the components they query.
     /// This does not validate that `world.id()` matches `self.world_id`. Calling this on a `world`
     /// with a mismatched [`WorldId`] is unsound.
-    pub unsafe fn query_unchecked_manual_with_ticks<'w, 's, W: ComponentWorld>(
+    pub unsafe fn query_unchecked_manual_with_ticks<'w, 's>(
         &'s self,
         world: UnsafeWorldCell<'w>,
         last_run: Tick,
         this_run: Tick,
-    ) -> Query<'w, 's, D, F, W> {
+    ) -> Query<'w, 's, D, F> {
         // SAFETY:
         // - The caller ensured we have the correct access to the world.
         // - The caller ensured that the world matches.
@@ -1886,11 +1886,8 @@ mod tests {
         entity_disabling::DefaultQueryFilters,
         prelude::*,
         system::{QueryLens, RunSystemOnce},
-        world::{FilteredEntityMut, FilteredEntityRef, MainWorld, Worlds},
+        world::{FilteredEntityMut, FilteredEntityRef, Worlds},
     };
-
-    #[derive(ComponentWorld)]
-    struct SubWorld;
 
     #[test]
     #[should_panic]

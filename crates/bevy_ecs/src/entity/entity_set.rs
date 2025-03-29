@@ -469,7 +469,7 @@ mod tests {
     use crate::entity::Entity;
     use crate::query::{QueryState, With};
     use crate::system::Query;
-    use crate::world::{MainWorld, Mut, Worlds};
+    use crate::world::{Mut, Worlds};
 
     use super::UniqueEntityIter;
 
@@ -518,8 +518,8 @@ mod tests {
         world.spawn_batch(vec![Thing; 1000]);
 
         pub fn system(
-            mut thing_entities: Query<Entity, With<Thing>, MainWorld>,
-            mut things: Query<&mut Thing, (), MainWorld>,
+            mut thing_entities: Query<Entity, With<Thing>>,
+            mut things: Query<&mut Thing, ()>,
         ) {
             things.iter_many_unique(thing_entities.iter());
             things.iter_many_unique_mut(thing_entities.iter_mut());

@@ -25,13 +25,11 @@ use crate::{
     entity::{Entity, EntityLocation},
     observer::Observers,
     storage::{ImmutableSparseSet, SparseArray, SparseSet, SparseSetIndex, TableId, TableRow},
-    world::{ComponentWorld, InvalidWorld},
 };
 use alloc::{boxed::Box, vec::Vec};
 use bevy_platform_support::collections::HashMap;
 use core::{
     hash::Hash,
-    marker::PhantomData,
     ops::{Index, IndexMut, RangeFrom},
 };
 
@@ -383,7 +381,7 @@ pub struct Archetype {
 impl Archetype {
     /// `table_components` and `sparse_set_components` must be sorted
     pub(crate) fn new(
-        components: &Components<InvalidWorld>,
+        components: &Components,
         component_index: &mut ComponentIndex,
         observers: &Observers,
         id: ArchetypeId,
@@ -794,14 +792,13 @@ pub type ComponentIndex = HashMap<ComponentId, HashMap<ArchetypeId, ArchetypeRec
 ///
 /// [`World`]: crate::world::World
 /// [module level documentation]: crate::archetype
-pub struct Archetypes<W: ComponentWorld> {
+pub struct Archetypes {
     pub(crate) archetypes: Vec<Archetype>,
     archetype_component_count: usize,
     /// find the archetype id by the archetype's components
     by_components: HashMap<ArchetypeComponents, ArchetypeId>,
     /// find all the archetypes that contain a component
     pub(crate) by_component: ComponentIndex,
-    marker: PhantomData<W>,
 }
 
 /// Metadata about how a component is stored in an [`Archetype`].
@@ -815,14 +812,13 @@ pub struct ArchetypeRecord {
     pub(crate) column: Option<usize>,
 }
 
-impl<W: ComponentWorld> Archetypes<W> {
+impl Archetypes {
     pub(crate) fn new() -> Self {
         let mut archetypes = Archetypes {
             archetypes: Vec::new(),
             by_components: Default::default(),
             by_component: Default::default(),
             archetype_component_count: 0,
-            marker: PhantomData,
         };
         // SAFETY: Empty archetype has no components
         unsafe {
@@ -932,7 +928,7 @@ impl<W: ComponentWorld> Archetypes<W> {
     /// `table_components` and `sparse_set_components` must exist in `components`
     pub(crate) unsafe fn get_id_or_insert(
         &mut self,
-        components: &Components<InvalidWorld>,
+        components: &Components,
         observers: &Observers,
         table_id: TableId,
         table_components: Vec<ComponentId>,
@@ -1020,7 +1016,7 @@ impl<W: ComponentWorld> Archetypes<W> {
     }
 }
 
-impl<W: ComponentWorld> Index<RangeFrom<ArchetypeGeneration>> for Archetypes<W> {
+impl Index<RangeFrom<ArchetypeGeneration>> for Archetypes {
     type Output = [Archetype];
 
     #[inline]
@@ -1028,7 +1024,7 @@ impl<W: ComponentWorld> Index<RangeFrom<ArchetypeGeneration>> for Archetypes<W> 
         &self.archetypes[index.start.0.index()..]
     }
 }
-impl<W: ComponentWorld> Index<ArchetypeId> for Archetypes<W> {
+impl Index<ArchetypeId> for Archetypes {
     type Output = Archetype;
 
     #[inline]
@@ -1037,7 +1033,7 @@ impl<W: ComponentWorld> Index<ArchetypeId> for Archetypes<W> {
     }
 }
 
-impl<W: ComponentWorld> IndexMut<ArchetypeId> for Archetypes<W> {
+impl IndexMut<ArchetypeId> for Archetypes {
     #[inline]
     fn index_mut(&mut self, index: ArchetypeId) -> &mut Self::Output {
         &mut self.archetypes[index.index()]
