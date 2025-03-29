@@ -127,8 +127,13 @@ impl Worlds {
 
     pub fn create_world(&mut self) -> WorldId {
         let id = WorldId(self.worlds.len());
-        self.worlds.push(World::new(id).as_invalid_world());
+        self.worlds.push(World::new_for_components(id));
+        id
+    }
 
+    pub fn create_resource_world(&mut self) -> WorldId {
+        let id = WorldId(self.worlds.len());
+        self.worlds.push(World::new_for_resources(id));
         id
     }
 
@@ -140,13 +145,11 @@ impl Worlds {
         &mut self.worlds
     }
 
-    pub fn get_world_with_id(&self, id: TypeId) -> &World {
-        let id = self.indices.get(&id).unwrap();
+    pub fn get_world(&self, id: WorldId) -> &World {
         &self.worlds[id.0].as_world()
     }
 
-    pub fn get_world_with_id_mut(&mut self, id: TypeId) -> &mut World {
-        let id = self.indices.get(&id).unwrap();
+    pub fn get_world_mut(&mut self, id: WorldId) -> &mut World {
         &mut self.worlds[id.0].as_world_mut()
     }
 }
@@ -801,7 +804,7 @@ impl World {
 }
 
 impl World {
-    fn new(id: WorldId) -> Self {
+    fn new_for_components(id: WorldId) -> Self {
         Self::new_for_storage(
             id,
             Storage::Components {
@@ -2628,7 +2631,7 @@ impl World {
         }
     }
 
-    fn new(id: WorldId) -> Self {
+    fn new_for_resources(id: WorldId) -> Self {
         let mut world = Self::new_for_storage(
             id,
             Storage::Resources {
@@ -4134,7 +4137,7 @@ mod tests {
 
         let res = std::panic::catch_unwind(|| {
             let mut worlds = Worlds::new();
-            let world = worlds.get_main_world_mut();
+            let world = worlds.get_world_mut(worlds.create_world());
             world
                 .spawn_empty()
                 .insert(helper.make_component(true, 0))
@@ -4398,7 +4401,7 @@ mod tests {
     #[test]
     fn inspect_entity_components() {
         let mut worlds = Worlds::new();
-        let world = worlds.get_main_world_mut();
+        let world = worlds.get_world_mut(worlds.create_world());
         let ent0 = world.spawn((Foo, Bar, Baz)).id();
         let ent1 = world.spawn((Foo, Bar)).id();
         let ent2 = world.spawn((Bar, Baz)).id();
@@ -4458,7 +4461,7 @@ mod tests {
     #[test]
     fn iterate_entities() {
         let mut worlds = Worlds::new();
-        let world = worlds.get_main_world_mut();
+        let world = worlds.get_world_mut(worlds.create_world());
         let mut entity_counters = <HashMap<_, _>>::default();
 
         let iterate_and_count_entities = |world: &World, entity_counters: &mut HashMap<_, _>| {
@@ -4534,7 +4537,7 @@ mod tests {
         struct B(i32);
 
         let mut worlds = Worlds::new();
-        let world = worlds.get_main_world_mut();
+        let world = worlds.get_world_mut(worlds.create_world());
 
         let a1 = world.spawn(A(1)).id();
         let a2 = world.spawn(A(2)).id();
@@ -4577,14 +4580,14 @@ mod tests {
     #[test]
     fn spawn_empty_bundle() {
         let mut worlds = Worlds::new();
-        let world = worlds.get_main_world_mut();
+        let world = worlds.get_world_mut(worlds.create_world());
         world.spawn(());
     }
 
     #[test]
     fn get_entity() {
         let mut worlds = Worlds::new();
-        let world = worlds.get_main_world_mut();
+        let world = worlds.get_world_mut(worlds.create_world());
 
         let e1 = world.spawn_empty().id();
         let e2 = world.spawn_empty().id();
@@ -4635,7 +4638,7 @@ mod tests {
     #[test]
     fn get_entity_mut() {
         let mut worlds = Worlds::new();
-        let world = worlds.get_main_world_mut();
+        let world = worlds.get_world_mut(worlds.create_world());
 
         let e1 = world.spawn_empty().id();
         let e2 = world.spawn_empty().id();
@@ -4700,7 +4703,7 @@ mod tests {
         use core::panic::Location;
 
         let mut worlds = Worlds::new();
-        let world = worlds.get_main_world_mut();
+        let world = worlds.get_world_mut(worlds.create_world());
         let entity = world.spawn_empty().id();
         assert_eq!(
             world.entities().entity_get_spawned_or_despawned_by(entity),
@@ -4727,7 +4730,7 @@ mod tests {
     #[test]
     fn new_world_has_disabling() {
         let mut worlds = Worlds::new();
-        let world = worlds.get_main_world_mut();
+        let world = worlds.get_world_mut(worlds.create_world());
         world.spawn(Foo);
         world.spawn((Foo, Disabled));
         assert_eq!(1, world.query::<&Foo>().iter(&world).count());
@@ -4743,7 +4746,7 @@ mod tests {
         struct Foo(u32);
 
         let mut worlds = Worlds::new();
-        let world = worlds.get_main_world_mut();
+        let world = worlds.get_world_mut(worlds.create_world());
 
         let eid = world.spawn(Foo(35)).id();
 
@@ -4764,7 +4767,7 @@ mod tests {
         struct Foo(u32);
 
         let mut worlds = Worlds::new();
-        let world = worlds.get_main_world_mut();
+        let world = worlds.get_world_mut(worlds.create_world());
 
         let eid = world.spawn(Foo(1)).id();
 

@@ -37,9 +37,7 @@ use core::{
 };
 use thiserror::Error;
 
-use super::{
-    unsafe_world_cell::UnsafeWorldCell, ComponentWorld, InvalidComponentWorld, Storage, Worlds,
-};
+use super::{Storage, Worlds};
 
 /// A read-only reference to a particular [`Entity`] and all of its components.
 ///
@@ -304,16 +302,16 @@ impl<'w> EntityRef<'w> {
     }
 }
 
-impl<'w, W: ComponentWorld> From<EntityWorldMut<'w, W>> for EntityRef<'w> {
-    fn from(entity: EntityWorldMut<'w, W>) -> EntityRef<'w> {
+impl<'w> From<EntityWorldMut<'w>> for EntityRef<'w> {
+    fn from(entity: EntityWorldMut<'w>) -> EntityRef<'w> {
         // SAFETY:
         // - `EntityWorldMut` guarantees exclusive access to the entire world.
         unsafe { EntityRef::new(entity.into_unsafe_entity_cell()) }
     }
 }
 
-impl<'a, W: ComponentWorld> From<&'a EntityWorldMut<'_, W>> for EntityRef<'a> {
-    fn from(entity: &'a EntityWorldMut<'_, W>) -> Self {
+impl<'a> From<&'a EntityWorldMut<'_>> for EntityRef<'a> {
+    fn from(entity: &'a EntityWorldMut<'_>) -> Self {
         // SAFETY:
         // - `EntityWorldMut` guarantees exclusive access to the entire world.
         // - `&entity` ensures no mutable accesses are active.
@@ -479,10 +477,7 @@ impl<'w> EntityMut<'w> {
         EntityRef::from(self)
     }
 
-    pub fn into_world_mut<W: ComponentWorld>(
-        self,
-        world: &'w mut World<W>,
-    ) -> EntityWorldMut<'w, W> {
+    pub fn into_world_mut(self, world: &'w mut World) -> EntityWorldMut<'w> {
         EntityWorldMut {
             world,
             entity: self.entity(),
@@ -1008,15 +1003,15 @@ impl<'w> From<&'w mut EntityMut<'_>> for EntityMut<'w> {
     }
 }
 
-impl<'w, W: ComponentWorld> From<EntityWorldMut<'w, W>> for EntityMut<'w> {
-    fn from(entity: EntityWorldMut<'w, W>) -> Self {
+impl<'w> From<EntityWorldMut<'w>> for EntityMut<'w> {
+    fn from(entity: EntityWorldMut<'w>) -> Self {
         // SAFETY: `EntityWorldMut` guarantees exclusive access to the entire world.
         unsafe { EntityMut::new(entity.into_unsafe_entity_cell()) }
     }
 }
 
-impl<'a, W: ComponentWorld> From<&'a mut EntityWorldMut<'_, W>> for EntityMut<'a> {
-    fn from(entity: &'a mut EntityWorldMut<'_, W>) -> Self {
+impl<'a> From<&'a mut EntityWorldMut<'_>> for EntityMut<'a> {
+    fn from(entity: &'a mut EntityWorldMut<'_>) -> Self {
         // SAFETY: `EntityWorldMut` guarantees exclusive access to the entire world.
         unsafe { EntityMut::new(entity.as_unsafe_entity_cell()) }
     }
@@ -1100,13 +1095,13 @@ unsafe impl TrustedEntityBorrow for EntityMut<'_> {}
 /// See also [`EntityMut`], which allows disjoint mutable access to multiple
 /// entities at once.  Unlike `EntityMut`, this type allows adding and
 /// removing components, and despawning the entity.
-pub struct EntityWorldMut<'w, W: ComponentWorld> {
-    world: &'w mut World<W>,
+pub struct EntityWorldMut<'w> {
+    world: &'w mut World,
     entity: Entity,
     location: EntityLocation,
 }
 
-impl<'w, W: ComponentWorld> EntityWorldMut<'w, W> {
+impl<'w> EntityWorldMut<'w> {
     #[track_caller]
     #[inline(never)]
     #[cold]
@@ -1161,7 +1156,7 @@ impl<'w, W: ComponentWorld> EntityWorldMut<'w, W> {
     ///  The above is trivially satisfied if `location` was sourced from `world.entities().get(entity)`.
     #[inline]
     pub(crate) unsafe fn new(
-        world: &'w mut World<W>,
+        world: &'w mut World,
         entity: Entity,
         location: EntityLocation,
     ) -> Self {
@@ -1867,7 +1862,7 @@ impl<'w, W: ComponentWorld> EntityWorldMut<'w, W> {
         let bundle_id = bundles.init_component_info(sparse_sets, &world.components, component_id);
         let storage_type = bundles.get_storage_unchecked(bundle_id);
 
-        let bundle_inserter = BundleInserter::<W>::new_with_id(
+        let bundle_inserter = BundleInserter::new_with_id(
             world.as_unsafe_world_cell(),
             self.location.archetype_id,
             bundle_id,
@@ -1937,7 +1932,7 @@ impl<'w, W: ComponentWorld> EntityWorldMut<'w, W> {
 
         let bundle_id = bundles.init_dynamic_info(sparse_sets, &world.components, component_ids);
         let mut storage_types = core::mem::take(bundles.get_storages_unchecked(bundle_id));
-        let bundle_inserter = BundleInserter::<W>::new_with_id(
+        let bundle_inserter = BundleInserter::new_with_id(
             world.as_unsafe_world_cell(),
             self.location.archetype_id,
             bundle_id,
@@ -2098,8 +2093,8 @@ impl<'w, W: ComponentWorld> EntityWorldMut<'w, W> {
         self_location: &mut EntityLocation,
         old_archetype_id: ArchetypeId,
         old_location: EntityLocation,
-        entities: &mut Entities<InvalidComponentWorld>,
-        archetypes: &mut Archetypes<InvalidComponentWorld>,
+        entities: &mut Entities,
+        archetypes: &mut Archetypes,
         tables: &mut Tables,
         new_archetype_id: ArchetypeId,
     ) {
@@ -2533,10 +2528,7 @@ impl<'w, W: ComponentWorld> EntityWorldMut<'w, W> {
         // SAFETY: Archetype cannot be mutably aliased by DeferredWorld
         let (archetype, mut deferred_world) = unsafe {
             let archetype: *const Archetype = archetype;
-            (
-                &*archetype,
-                self.worlds.as_unsafe_cell().into_deferred::<W>(),
-            )
+            (&*archetype, self.worlds.as_unsafe_cell().into_deferred())
         };
 
         // SAFETY: All components in the archetype exist in world
@@ -2586,7 +2578,7 @@ impl<'w, W: ComponentWorld> EntityWorldMut<'w, W> {
             );
         }
 
-        let world = self.worlds.get_world_mut::<W>();
+        let world = self.worlds.get_world_mut();
 
         for component_id in archetype.components() {
             world.removed_components.send(component_id, self.entity);
@@ -2671,7 +2663,7 @@ impl<'w, W: ComponentWorld> EntityWorldMut<'w, W> {
 
     /// Ensures any commands triggered by the actions of Self are applied, equivalent to [`World::flush`]
     pub fn flush(self) -> Entity {
-        self.worlds.get_world_mut::<W>().flush();
+        self.worlds.get_world_mut().flush();
         self.entity
     }
 
@@ -2706,11 +2698,11 @@ impl<'w, W: ComponentWorld> EntityWorldMut<'w, W> {
     /// # assert_eq!(new_r.0, 1);
     /// ```
     pub fn worlds_scope<U>(&mut self, f: impl FnOnce(&mut Worlds) -> U) -> U {
-        struct Guard<'w, 'a, W: ComponentWorld> {
-            entity_mut: &'a mut EntityWorldMut<'w, W>,
+        struct Guard<'w, 'a> {
+            entity_mut: &'a mut EntityWorldMut<'w>,
         }
 
-        impl<W: ComponentWorld> Drop for Guard<'_, '_, W> {
+        impl Drop for Guard<'_, '_> {
             #[inline]
             fn drop(&mut self) {
                 self.entity_mut.update_location();
@@ -2774,7 +2766,7 @@ impl<'w, W: ComponentWorld> EntityWorldMut<'w, W> {
     /// # Panics
     ///
     /// If the entity has been despawned while this `EntityWorldMut` is still alive.
-    pub fn entry<'a, T: Component>(&'a mut self) -> Entry<'w, 'a, W, T> {
+    pub fn entry<'a, T: Component>(&'a mut self) -> Entry<'w, 'a, T> {
         if self.contains::<T>() {
             Entry::Occupied(OccupiedEntry {
                 entity_world: self,
@@ -2860,7 +2852,7 @@ impl<'w, W: ComponentWorld> EntityWorldMut<'w, W> {
     pub fn clone_with(
         &mut self,
         target: Entity,
-        config: impl FnOnce(&mut EntityClonerBuilder<W>) + Send + Sync + 'static,
+        config: impl FnOnce(&mut EntityClonerBuilder) + Send + Sync + 'static,
     ) -> &mut Self {
         self.assert_not_despawned();
 
@@ -2917,7 +2909,7 @@ impl<'w, W: ComponentWorld> EntityWorldMut<'w, W> {
     /// If this entity has been despawned while this `EntityWorldMut` is still alive.
     pub fn clone_and_spawn_with(
         &mut self,
-        config: impl FnOnce(&mut EntityClonerBuilder<W>) + Send + Sync + 'static,
+        config: impl FnOnce(&mut EntityClonerBuilder) + Send + Sync + 'static,
     ) -> Entity {
         self.assert_not_despawned();
 
@@ -2990,8 +2982,8 @@ impl<'w, W: ComponentWorld> EntityWorldMut<'w, W> {
 
 /// # Safety
 /// All components in the archetype must exist in world
-unsafe fn trigger_on_replace_and_on_remove_hooks_and_observers<W: ComponentWorld>(
-    deferred_world: &mut DeferredWorld<W>,
+unsafe fn trigger_on_replace_and_on_remove_hooks_and_observers(
+    deferred_world: &mut DeferredWorld,
     archetype: &Archetype,
     entity: Entity,
     bundle_info: &BundleInfo,
@@ -3033,14 +3025,14 @@ unsafe fn trigger_on_replace_and_on_remove_hooks_and_observers<W: ComponentWorld
 /// This `enum` can only be constructed from the [`entry`] method on [`EntityWorldMut`].
 ///
 /// [`entry`]: EntityWorldMut::entry
-pub enum Entry<'w, 'a, W: ComponentWorld, T: Component> {
+pub enum Entry<'w, 'a, T: Component> {
     /// An occupied entry.
-    Occupied(OccupiedEntry<'w, 'a, W, T>),
+    Occupied(OccupiedEntry<'w, 'a, T>),
     /// A vacant entry.
-    Vacant(VacantEntry<'w, 'a, W, T>),
+    Vacant(VacantEntry<'w, 'a, T>),
 }
 
-impl<'w, 'a, W: ComponentWorld, T: Component<Mutability = Mutable>> Entry<'w, 'a, W, T> {
+impl<'w, 'a, T: Component<Mutability = Mutable>> Entry<'w, 'a, T> {
     /// Provides in-place mutable access to an occupied entry.
     ///
     /// # Examples
@@ -3068,7 +3060,7 @@ impl<'w, 'a, W: ComponentWorld, T: Component<Mutability = Mutable>> Entry<'w, 'a
     }
 }
 
-impl<'w, 'a, W: ComponentWorld, T: Component> Entry<'w, 'a, W, T> {
+impl<'w, 'a, T: Component> Entry<'w, 'a, T> {
     /// Replaces the component of the entry, and returns an [`OccupiedEntry`].
     ///
     /// # Examples
@@ -3088,7 +3080,7 @@ impl<'w, 'a, W: ComponentWorld, T: Component> Entry<'w, 'a, W, T> {
     /// assert_eq!(entry.get(), &Comp(2));
     /// ```
     #[inline]
-    pub fn insert_entry(self, component: T) -> OccupiedEntry<'w, 'a, W, T> {
+    pub fn insert_entry(self, component: T) -> OccupiedEntry<'w, 'a, T> {
         match self {
             Entry::Occupied(mut entry) => {
                 entry.insert(component);
@@ -3120,7 +3112,7 @@ impl<'w, 'a, W: ComponentWorld, T: Component> Entry<'w, 'a, W, T> {
     /// assert_eq!(world.query::<&Comp>().single(&world).unwrap().0, 8);
     /// ```
     #[inline]
-    pub fn or_insert(self, default: T) -> OccupiedEntry<'w, 'a, W, T> {
+    pub fn or_insert(self, default: T) -> OccupiedEntry<'w, 'a, T> {
         match self {
             Entry::Occupied(entry) => entry,
             Entry::Vacant(entry) => entry.insert(default),
@@ -3144,7 +3136,7 @@ impl<'w, 'a, W: ComponentWorld, T: Component> Entry<'w, 'a, W, T> {
     /// assert_eq!(world.query::<&Comp>().single(&world).unwrap().0, 4);
     /// ```
     #[inline]
-    pub fn or_insert_with<F: FnOnce() -> T>(self, default: F) -> OccupiedEntry<'w, 'a, W, T> {
+    pub fn or_insert_with<F: FnOnce() -> T>(self, default: F) -> OccupiedEntry<'w, 'a, T> {
         match self {
             Entry::Occupied(entry) => entry,
             Entry::Vacant(entry) => entry.insert(default()),
@@ -3152,7 +3144,7 @@ impl<'w, 'a, W: ComponentWorld, T: Component> Entry<'w, 'a, W, T> {
     }
 }
 
-impl<'w, 'a, W: ComponentWorld, T: Component + Default> Entry<'w, 'a, W, T> {
+impl<'w, 'a, T: Component + Default> Entry<'w, 'a, T> {
     /// Ensures the entry has this component by inserting the default value if empty, and
     /// returns a mutable reference to this component in the entry.
     ///
@@ -3170,7 +3162,7 @@ impl<'w, 'a, W: ComponentWorld, T: Component + Default> Entry<'w, 'a, W, T> {
     /// assert_eq!(world.query::<&Comp>().single(&world).unwrap().0, 0);
     /// ```
     #[inline]
-    pub fn or_default(self) -> OccupiedEntry<'w, 'a, W, T> {
+    pub fn or_default(self) -> OccupiedEntry<'w, 'a, T> {
         match self {
             Entry::Occupied(entry) => entry,
             Entry::Vacant(entry) => entry.insert(Default::default()),
@@ -3181,12 +3173,12 @@ impl<'w, 'a, W: ComponentWorld, T: Component + Default> Entry<'w, 'a, W, T> {
 /// A view into an occupied entry in a [`EntityWorldMut`]. It is part of the [`Entry`] enum.
 ///
 /// The contained entity must have the component type parameter if we have this struct.
-pub struct OccupiedEntry<'w, 'a, W: ComponentWorld, T: Component> {
-    entity_world: &'a mut EntityWorldMut<'w, W>,
+pub struct OccupiedEntry<'w, 'a, T: Component> {
+    entity_world: &'a mut EntityWorldMut<'w>,
     _marker: PhantomData<T>,
 }
 
-impl<'w, 'a, W: ComponentWorld, T: Component> OccupiedEntry<'w, 'a, W, T> {
+impl<'w, 'a, T: Component> OccupiedEntry<'w, 'a, T> {
     /// Gets a reference to the component in the entry.
     ///
     /// # Examples
@@ -3257,7 +3249,7 @@ impl<'w, 'a, W: ComponentWorld, T: Component> OccupiedEntry<'w, 'a, W, T> {
     }
 }
 
-impl<'w, 'a, W: ComponentWorld, T: Component<Mutability = Mutable>> OccupiedEntry<'w, 'a, W, T> {
+impl<'w, 'a, T: Component<Mutability = Mutable>> OccupiedEntry<'w, 'a, T> {
     /// Gets a mutable reference to the component in the entry.
     ///
     /// If you need a reference to the `OccupiedEntry` which may outlive the destruction of
@@ -3322,12 +3314,12 @@ impl<'w, 'a, W: ComponentWorld, T: Component<Mutability = Mutable>> OccupiedEntr
 }
 
 /// A view into a vacant entry in a [`EntityWorldMut`]. It is part of the [`Entry`] enum.
-pub struct VacantEntry<'w, 'a, W: ComponentWorld, T: Component> {
-    entity_world: &'a mut EntityWorldMut<'w, W>,
+pub struct VacantEntry<'w, 'a, T: Component> {
+    entity_world: &'a mut EntityWorldMut<'w>,
     _marker: PhantomData<T>,
 }
 
-impl<'w, 'a, W: ComponentWorld, T: Component> VacantEntry<'w, 'a, W, T> {
+impl<'w, 'a, T: Component> VacantEntry<'w, 'a, T> {
     /// Inserts the component into the `VacantEntry` and returns an `OccupiedEntry`.
     ///
     /// # Examples
@@ -3347,7 +3339,7 @@ impl<'w, 'a, W: ComponentWorld, T: Component> VacantEntry<'w, 'a, W, T> {
     /// assert_eq!(world.query::<&Comp>().single(&world).unwrap().0, 10);
     /// ```
     #[inline]
-    pub fn insert(self, component: T) -> OccupiedEntry<'w, 'a, W, T> {
+    pub fn insert(self, component: T) -> OccupiedEntry<'w, 'a, T> {
         self.entity_world.insert(component);
         OccupiedEntry {
             entity_world: self.entity_world,
@@ -3608,8 +3600,8 @@ impl<'a> From<&'a EntityMut<'_>> for FilteredEntityRef<'a> {
     }
 }
 
-impl<'a, W: ComponentWorld> From<EntityWorldMut<'a, W>> for FilteredEntityRef<'a> {
-    fn from(entity: EntityWorldMut<'a, W>) -> Self {
+impl<'a> From<EntityWorldMut<'a>> for FilteredEntityRef<'a> {
+    fn from(entity: EntityWorldMut<'a>) -> Self {
         // SAFETY:
         // - `EntityWorldMut` guarantees exclusive access to the entire world.
         unsafe {
@@ -3620,8 +3612,8 @@ impl<'a, W: ComponentWorld> From<EntityWorldMut<'a, W>> for FilteredEntityRef<'a
     }
 }
 
-impl<'a, W: ComponentWorld> From<&'a EntityWorldMut<'_, W>> for FilteredEntityRef<'a> {
-    fn from(entity: &'a EntityWorldMut<'_, W>) -> Self {
+impl<'a> From<&'a EntityWorldMut<'_>> for FilteredEntityRef<'a> {
+    fn from(entity: &'a EntityWorldMut<'_>) -> Self {
         // SAFETY:
         // - `EntityWorldMut` guarantees exclusive access to the entire world.
         unsafe {
@@ -3949,8 +3941,8 @@ impl<'a> From<&'a mut EntityMut<'_>> for FilteredEntityMut<'a> {
     }
 }
 
-impl<'a, W: ComponentWorld> From<EntityWorldMut<'a, W>> for FilteredEntityMut<'a> {
-    fn from(entity: EntityWorldMut<'a, W>) -> Self {
+impl<'a> From<EntityWorldMut<'a>> for FilteredEntityMut<'a> {
+    fn from(entity: EntityWorldMut<'a>) -> Self {
         // SAFETY:
         // - `EntityWorldMut` guarantees exclusive access to the entire world.
         unsafe {
@@ -3962,8 +3954,8 @@ impl<'a, W: ComponentWorld> From<EntityWorldMut<'a, W>> for FilteredEntityMut<'a
     }
 }
 
-impl<'a, W: ComponentWorld> From<&'a mut EntityWorldMut<'_, W>> for FilteredEntityMut<'a> {
-    fn from(entity: &'a mut EntityWorldMut<'_, W>) -> Self {
+impl<'a> From<&'a mut EntityWorldMut<'_>> for FilteredEntityMut<'a> {
+    fn from(entity: &'a mut EntityWorldMut<'_>) -> Self {
         // SAFETY:
         // - `EntityWorldMut` guarantees exclusive access to the entire world.
         unsafe {
@@ -4473,10 +4465,7 @@ impl<B: Bundle> EntityBorrow for EntityMutExcept<'_, B> {
 // SAFETY: This type represents one Entity. We implement the comparison traits based on that Entity.
 unsafe impl<B: Bundle> TrustedEntityBorrow for EntityMutExcept<'_, B> {}
 
-fn bundle_contains_component<B>(
-    components: &Components<InvalidComponentWorld>,
-    query_id: ComponentId,
-) -> bool
+fn bundle_contains_component<B>(components: &Components, query_id: ComponentId) -> bool
 where
     B: Bundle,
 {
@@ -4499,11 +4488,10 @@ where
 unsafe fn insert_dynamic_bundle<
     'a,
     'w,
-    W: ComponentWorld,
     I: Iterator<Item = OwningPtr<'a>>,
     S: Iterator<Item = StorageType>,
 >(
-    mut bundle_inserter: BundleInserter<'w, W>,
+    mut bundle_inserter: BundleInserter<'w>,
     worlds: &'w mut Worlds,
     entity: Entity,
     location: EntityLocation,
@@ -4562,7 +4550,7 @@ unsafe fn insert_dynamic_bundle<
 pub(crate) unsafe fn take_component<'a>(
     sparse_sets: &'a mut SparseSets,
     tables: &'a mut Tables,
-    components: &Components<InvalidComponentWorld>,
+    components: &Components,
     removed_components: &mut RemovedComponentEvents,
     component_id: ComponentId,
     entity: Entity,
@@ -4952,7 +4940,7 @@ mod tests {
     use std::sync::OnceLock;
 
     use crate::component::HookContext;
-    use crate::world::{MainWorld, Worlds};
+    use crate::world::Worlds;
     use crate::{
         change_detection::{MaybeLocation, MutUntyped},
         component::ComponentId,
@@ -4973,8 +4961,8 @@ mod tests {
     #[test]
     fn entity_ref_get_by_id() {
         let mut worlds = Worlds::new();
+        let world = worlds.get_world_mut(worlds.create_world());
         let entity = worlds.spawn::<MainWorld, _>(TestComponent(42)).id();
-        let world = worlds.get_main_world_mut();
         let component_id = world
             .components()
             .get_id(core::any::TypeId::of::<TestComponent>())
