@@ -14,7 +14,7 @@ use crate::{
     system::{input::SystemInput, SystemIn},
     world::{
         unsafe_world_cell::{UnsafeWorldCell, UnsafeWorldsCell},
-        DeferredWorld, World, Worlds,
+        World, Worlds,
     },
 };
 
@@ -115,11 +115,11 @@ pub trait System: Send + Sync + 'static {
     /// Applies any [`Deferred`](crate::system::Deferred) system parameters (or other system buffers) of this system to the world.
     ///
     /// This is where [`Commands`](crate::system::Commands) get applied.
-    fn apply_deferred(&mut self, worlds: &mut Worlds);
+    fn apply_deferred(&mut self, worlds: UnsafeWorldsCell);
 
     /// Enqueues any [`Deferred`](crate::system::Deferred) system parameters (or other system buffers)
     /// of this system into the world's command buffer.
-    fn queue_deferred(&mut self, world: DeferredWorld);
+    fn queue_deferred(&mut self, worlds: UnsafeWorldsCell);
 
     /// Validates that all parameters can be acquired and that system can run without panic.
     /// Built-in executors use this to prevent invalid systems from running.
@@ -142,7 +142,7 @@ pub trait System: Send + Sync + 'static {
     ///   panics (or otherwise does not return for any reason), this method must not be called.
     unsafe fn validate_param_unsafe(
         &mut self,
-        world: UnsafeWorldCell,
+        worlds: UnsafeWorldsCell,
     ) -> Result<(), SystemParamValidationError>;
 
     /// Safe version of [`System::validate_param_unsafe`].
@@ -209,14 +209,22 @@ pub unsafe trait ReadOnlySystem: System {
     ///
     /// Unlike [`System::run`], this can be called with a shared reference to the world,
     /// since this system is known not to modify the world.
-    fn run_readonly(&mut self, input: SystemIn<'_, Self>, world: &World) -> Self::Out {
-        let world = world.as_unsafe_world_cell_readonly();
-        self.update_archetype_component_access(world);
+    fn run_readonly(&mut self, input: SystemIn<'_, Self>, worlds: &Worlds) -> Self::Out {
+        let worlds = worlds.as_unsafe_cell_readonly();
+        self.update_archetype_component_access(worlds);
         // SAFETY:
         // - We have read-only access to the entire world.
         // - `update_archetype_component_access` has been called.
-        unsafe { self.run_unsafe(input, world) }
+        unsafe { self.run_unsafe(input, worlds) }
     }
+}
+
+pub trait LocalSystem: System {
+    fn run_local(&mut self, input: SystemIn<'_, Self>, world: &mut World) -> Self::Out;
+
+    fn initialize_local(&mut self, world: &World);
+
+    fn update_archetype_component_access_local(&mut self, world: UnsafeWorldCell);
 }
 
 /// A convenience type alias for a boxed [`System`] trait object.

@@ -9,6 +9,8 @@ use crate::{
     },
 };
 
+use super::EntityWorldMut;
+
 /// Provides a safe interface for non-structural access to the entities in a [`World`].
 ///
 /// This cannot add or remove components, or spawn or despawn entities,
@@ -196,7 +198,7 @@ pub unsafe trait WorldEntityFetch {
 // - No structurally-mutable references are returned by `fetch_deferred_mut`.
 unsafe impl WorldEntityFetch for Entity {
     type Ref<'w> = EntityRef<'w>;
-    type Mut<'w> = EntityMut<'w>;
+    type Mut<'w> = EntityWorldMut<'w>;
     type DeferredMut<'w> = EntityMut<'w>;
 
     unsafe fn fetch_ref(
@@ -212,16 +214,23 @@ unsafe impl WorldEntityFetch for Entity {
         self,
         cell: UnsafeWorldCell<'_>,
     ) -> Result<Self::Mut<'_>, EntityMutableFetchError> {
-        let ecell = cell.get_entity(self)?;
+        let location = cell
+            .entities()
+            .get(self)
+            .ok_or(EntityDoesNotExistError::new(self, cell.entities()))?;
         // SAFETY: caller ensures that the world cell has mutable access to the entity.
-        Ok(unsafe { EntityMut::new(ecell) })
+        let world = unsafe { cell.world_mut() };
+        // SAFETY: location was fetched from the same world's `Entities`.
+        Ok(unsafe { EntityWorldMut::new(world, self, location) })
     }
 
     unsafe fn fetch_deferred_mut(
         self,
         cell: UnsafeWorldCell<'_>,
     ) -> Result<Self::DeferredMut<'_>, EntityMutableFetchError> {
-        unsafe { self.fetch_mut(cell) }
+        let ecell = cell.get_entity(self)?;
+        // SAFETY: caller ensures that the world cell has mutable access to the entity.
+        Ok(unsafe { EntityMut::new(ecell) })
     }
 }
 

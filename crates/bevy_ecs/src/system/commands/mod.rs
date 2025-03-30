@@ -1,6 +1,5 @@
 pub mod command;
 pub mod entity_command;
-pub mod local_command;
 
 #[cfg(feature = "std")]
 mod parallel_scope;
@@ -124,12 +123,12 @@ const _: () = {
         type Item<'w, 's> = ComponentCommands<'w, 's>;
         type World<'w> = <__StructFieldsAlias<'static, 'static> as SystemParam>::World<'w>;
 
-        fn init_world_access<'w>(world: Self::World<'w>, system_meta: &mut super::SystemMeta) {
+        fn init_world_access<'w>(world: &Self::World<'w>, system_meta: &mut super::SystemMeta) {
             <__StructFieldsAlias<'_, '_> as SystemParam>::init_world_access(world, system_meta)
         }
 
         fn init_state<'w>(
-            world: Self::World<'w>,
+            world: &Self::World<'w>,
             system_meta: &mut bevy_ecs::system::SystemMeta,
         ) -> Self::State {
             FetchState {
@@ -157,7 +156,7 @@ const _: () = {
         fn apply<'w>(
             state: &mut Self::State,
             system_meta: &bevy_ecs::system::SystemMeta,
-            world: Self::World<'w>,
+            world: &Self::World<'w>,
         ) {
             <__StructFieldsAlias<'_, '_> as SystemParam>::apply(
                 &mut state.state,
@@ -169,7 +168,7 @@ const _: () = {
         fn queue<'w>(
             state: &mut Self::State,
             system_meta: &bevy_ecs::system::SystemMeta,
-            world: Self::World<'w>,
+            world: &Self::World<'w>,
         ) {
             <__StructFieldsAlias<'_, '_> as SystemParam>::queue(
                 &mut state.state,
@@ -182,7 +181,7 @@ const _: () = {
         unsafe fn validate_param<'w>(
             state: &Self::State,
             system_meta: &bevy_ecs::system::SystemMeta,
-            world: Self::World<'w>,
+            world: &Self::World<'w>,
         ) -> Result<(), SystemParamValidationError> {
             <(Deferred<CommandQueue>, &Entities) as SystemParam>::validate_param(
                 &state.state,
@@ -195,14 +194,12 @@ const _: () = {
         unsafe fn get_param<'w, 's>(
             state: &'s mut Self::State,
             system_meta: &bevy_ecs::system::SystemMeta,
-            world: Self::World<'w>,
-            change_tick: bevy_ecs::component::Tick,
+            world: &Self::World<'w>,
         ) -> Self::Item<'w, 's> {
             let (f0, f1) = <(Deferred<'s, CommandQueue>, &'w Entities) as SystemParam>::get_param(
                 &mut state.state,
                 system_meta,
                 world,
-                change_tick,
             );
             ComponentCommands {
                 queue: InternalQueue::CommandQueue(f0),

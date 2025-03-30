@@ -4,7 +4,7 @@ use super::{IntoSystem, ReadOnlySystem, System, SystemParamValidationError};
 use crate::{
     schedule::InternedSystemSet,
     system::{input::SystemInput, SystemIn},
-    world::unsafe_world_cell::UnsafeWorldCell,
+    world::{unsafe_world_cell::UnsafeWorldsCell, Worlds},
 };
 
 /// Customizes the behavior of an [`AdapterSystem`]
@@ -154,40 +154,40 @@ where
     unsafe fn run_unsafe(
         &mut self,
         input: SystemIn<'_, Self>,
-        world: UnsafeWorldCell,
+        worlds: UnsafeWorldsCell,
     ) -> Self::Out {
         // SAFETY: `system.run_unsafe` has the same invariants as `self.run_unsafe`.
         self.func.adapt(input, |input| unsafe {
-            self.system.run_unsafe(input, world)
+            self.system.run_unsafe(input, worlds)
         })
     }
 
     #[inline]
-    fn apply_deferred(&mut self, world: &mut crate::prelude::World) {
-        self.system.apply_deferred(world);
+    fn apply_deferred(&mut self, worlds: UnsafeWorldsCell) {
+        self.system.apply_deferred(worlds);
     }
 
     #[inline]
-    fn queue_deferred(&mut self, world: crate::world::DeferredWorld) {
-        self.system.queue_deferred(world);
+    fn queue_deferred(&mut self, worlds: UnsafeWorldsCell) {
+        self.system.queue_deferred(worlds);
     }
 
     #[inline]
     unsafe fn validate_param_unsafe(
         &mut self,
-        world: UnsafeWorldCell,
+        worlds: UnsafeWorldsCell,
     ) -> Result<(), SystemParamValidationError> {
         // SAFETY: Delegate to other `System` implementations.
-        unsafe { self.system.validate_param_unsafe(world) }
+        unsafe { self.system.validate_param_unsafe(worlds) }
     }
 
-    fn initialize(&mut self, world: &mut crate::prelude::World) {
-        self.system.initialize(world);
+    fn initialize(&mut self, worlds: &mut Worlds) {
+        self.system.initialize(worlds);
     }
 
     #[inline]
-    fn update_archetype_component_access(&mut self, world: UnsafeWorldCell) {
-        self.system.update_archetype_component_access(world);
+    fn update_archetype_component_access(&mut self, worlds: UnsafeWorldsCell) {
+        self.system.update_archetype_component_access(worlds);
     }
 
     fn check_change_tick(&mut self, change_tick: crate::component::Tick) {

@@ -270,7 +270,6 @@ pub fn move_components<B: Bundle>(target: Entity) -> impl EntityCommand {
 pub fn log_components() -> impl EntityCommand {
     move |entity: EntityWorldMut| {
         let debug_infos: Vec<_> = entity
-            .world()
             .inspect_entity(entity.id())
             .expect("Entity existence is verified before an EntityCommand is executed")
             .map(ComponentInfo::name)

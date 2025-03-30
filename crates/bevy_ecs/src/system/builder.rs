@@ -11,7 +11,7 @@ use crate::{
     },
     world::{
         FilteredResources, FilteredResourcesBuilder, FilteredResourcesMut,
-        FilteredResourcesMutBuilder, FromWorld, World,
+        FilteredResourcesMutBuilder, FromWorld, FromWorlds, World,
     },
 };
 use core::fmt::Debug;
@@ -555,7 +555,7 @@ unsafe impl<'a, 'w, 's> SystemParamBuilder<DynSystemParam<'w, 's>> for DynParamB
 pub struct LocalBuilder<T>(pub T);
 
 // SAFETY: `Local` performs no world access.
-unsafe impl<'s, T: FromWorld + Send + 'static> SystemParamBuilder<Local<'s, T>>
+unsafe impl<'s, T: FromWorlds + Send + 'static> SystemParamBuilder<Local<'s, T>>
     for LocalBuilder<T>
 {
     fn build(

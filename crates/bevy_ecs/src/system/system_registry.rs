@@ -443,11 +443,7 @@ mod tests {
 
     use bevy_utils::default;
 
-    use crate::{
-        prelude::*,
-        system::SystemId,
-        world::{MainWorld, Worlds},
-    };
+    use crate::{prelude::*, system::SystemId, world::Worlds};
 
     #[derive(Resource, Default, PartialEq, Debug)]
     struct Counter(u8);
@@ -630,7 +626,7 @@ mod tests {
     #[test]
     fn exclusive_system() {
         let mut worlds = Worlds::new();
-        let exclusive_system_id = worlds.register_system(|world: &mut World<MainWorld>| {
+        let exclusive_system_id = worlds.register_system(|world: &mut World| {
             world.spawn_empty();
         });
         let entity_count = worlds.get_main_world().entities().len();

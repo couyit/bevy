@@ -2,7 +2,6 @@ use crate::{
     bundle::{Bundle, BundleSpawner, NoBundleEffect},
     change_detection::MaybeLocation,
     entity::{Entity, EntitySetIterator},
-    world::World,
 };
 use core::iter::FusedIterator;
 
