@@ -406,11 +406,11 @@ pub fn derive_system_param(input: TokenStream) -> TokenStream {
                 type Item<'w, 's> = #struct_name #ty_generics;
                 type World<'w> = <#fields_alias::<'static, 'static, #punctuated_generic_idents> as #path::system::SystemParam>::World<'w>;
 
-                fn init_world_access<'w>(world: Self::World<'w>, system_meta: & mut #path::system::SystemMeta) {
+                fn init_world_access<'w>(world: &Self::World<'w>, system_meta: & mut #path::system::SystemMeta) {
                     #fields_alias::<'_, '_, #punctuated_generic_idents>::init_world_access(world, system_meta);
                 }
 
-                fn init_state<'w>(world: Self::World<'w>, system_meta: & mut #path::system::SystemMeta) -> Self::State {
+                fn init_state<'w>(world: &Self::World<'w>, system_meta: & mut #path::system::SystemMeta) -> Self::State {
                     #state_struct_name {
                         state: #fields_alias::<'_, '_, #punctuated_generic_idents>::init_state(world, system_meta),
                     }
@@ -421,11 +421,11 @@ pub fn derive_system_param(input: TokenStream) -> TokenStream {
                     unsafe { #fields_alias::<'_, '_, #punctuated_generic_idents>::new_archetype(&mut state.state, archetype, archetype_component_access) }
                 }
 
-                fn apply<'w, 's>(state: &'s mut Self::State, system_meta: &#path::system::SystemMeta, world: Self::World<'w>) {
+                fn apply<'w, 's>(state: &'s mut Self::State, system_meta: &#path::system::SystemMeta, world: &Self::World<'w>) {
                     #fields_alias::<'_, '_, #punctuated_generic_idents>::apply(&mut state.state, system_meta, world);
                 }
 
-                fn queue<'w, 's>(state: &'s mut Self::State, system_meta: &#path::system::SystemMeta, world: Self::World<'w>) {
+                fn queue<'w, 's>(state: &'s mut Self::State, system_meta: &#path::system::SystemMeta, world: &Self::World<'w>) {
                     #fields_alias::<'_, '_, #punctuated_generic_idents>::queue(&mut state.state, system_meta, world);
                 }
 
@@ -433,7 +433,7 @@ pub fn derive_system_param(input: TokenStream) -> TokenStream {
                 unsafe fn validate_param<'w, 's>(
                     state: &'s Self::State,
                     system_meta: &#path::system::SystemMeta,
-                    world: Self::World<'w>,
+                    world: &Self::World<'w>,
                 ) -> Result<(), #path::system::SystemParamValidationError> {
                     <(#(#tuple_types,)*)>::validate_param(&state.state, system_meta, world)
                 }
@@ -442,10 +442,9 @@ pub fn derive_system_param(input: TokenStream) -> TokenStream {
                 unsafe fn get_param<'w, 's>(
                     state: &'s mut Self::State,
                     system_meta: &#path::system::SystemMeta,
-                    world: Self::World<'w>,
-                    change_tick: #path::component::Tick,
+                    world: &Self::World<'w>,
                 ) -> Self::Item<'w, 's> {
-                    let (#(#tuple_patterns,)*) = <(#(#tuple_types,)*)>::get_param(&mut state.state, system_meta, world, change_tick);
+                    let (#(#tuple_patterns,)*) = <(#(#tuple_types,)*)>::get_param(&mut state.state, system_meta, world);
                     #struct_name {
                         #(#fields: #field_locals,)*
                     }

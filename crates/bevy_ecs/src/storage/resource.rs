@@ -3,7 +3,6 @@ use crate::{
     change_detection::{MaybeLocation, MutUntyped, TicksMut},
     component::{ComponentId, ComponentTicks, Components, Tick, TickCells},
     storage::{blob_vec::BlobVec, SparseSet},
-    world::InvalidWorld,
 };
 use alloc::string::String;
 use bevy_ptr::{OwningPtr, Ptr, UnsafeCellDeref};

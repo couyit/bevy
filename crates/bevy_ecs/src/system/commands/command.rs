@@ -14,7 +14,7 @@ use crate::{
     resource::Resource,
     schedule::ScheduleLabel,
     system::{IntoSystem, SystemId, SystemInput},
-    world::{FromWorld, ResourceWorld, SpawnBatchIter, WorldLabel, Worlds},
+    world::{FromWorld, SpawnBatchIter, World, Worlds},
 };
 
 /// A [`World`] mutation.
@@ -63,6 +63,19 @@ where
     }
 }
 
+pub trait LocalCommand<Out = ()>: Send + 'static {
+    fn apply(self, world: &World) -> Out;
+}
+
+impl<F, Out> LocalCommand<Out> for F
+where
+    F: FnOnce(&mut World) -> Out + Send + 'static,
+{
+    fn apply(self, world: &mut World) -> Out {
+        self(world)
+    }
+}
+
 /// A [`Command`] that consumes an iterator of [`Bundles`](Bundle) to spawn a series of entities.
 ///
 /// This is more efficient than spawning the entities individually.
@@ -85,14 +98,14 @@ where
 ///
 /// This is more efficient than inserting the bundles individually.
 #[track_caller]
-pub fn insert_batch<I, B>(batch: I, insert_mode: InsertMode) -> impl Command<Result>
+pub fn insert_batch<I, B>(batch: I, insert_mode: InsertMode) -> impl LocalCommand<Result>
 where
     I: IntoIterator<Item = (Entity, B)> + Send + Sync + 'static,
     B: Bundle<Effect: NoBundleEffect>,
 {
     let caller = MaybeLocation::caller();
-    move |worlds: &mut Worlds| -> Result {
-        worlds.try_insert_batch_with_caller::<I, B>(batch, insert_mode, caller)?;
+    move |world: &mut World| -> Result {
+        world.try_insert_batch_with_caller::<I, B>(batch, insert_mode, caller)?;
         Ok(())
     }
 }
@@ -100,27 +113,25 @@ where
 /// A [`Command`] that inserts a [`Resource`] into the world using a value
 /// created with the [`FromWorld`] trait.
 #[track_caller]
-pub fn init_resource<R: Resource + FromWorld<ResourceWorld>>() -> impl Command {
-    move |worlds: &mut Worlds| {
-        worlds.get_world_mut().init_resource::<R>();
+pub fn init_resource<R: Resource + FromWorld>() -> impl LocalCommand {
+    move |world: &mut World| {
+        world.init_resource::<R>();
     }
 }
 
 /// A [`Command`] that inserts a [`Resource`] into the world.
 #[track_caller]
-pub fn insert_resource<R: Resource>(resource: R) -> impl Command {
+pub fn insert_resource<R: Resource>(resource: R) -> impl LocalCommand {
     let caller = MaybeLocation::caller();
-    move |worlds: &mut Worlds| {
-        worlds
-            .get_world_mut()
-            .insert_resource_with_caller(resource, caller);
+    move |world: &mut World| {
+        world.insert_resource_with_caller(resource, caller);
     }
 }
 
 /// A [`Command`] that removes a [`Resource`] from the world.
-pub fn remove_resource<R: Resource>() -> impl Command {
-    move |worlds: &mut Worlds| {
-        worlds.get_world_mut().remove_resource::<R>();
+pub fn remove_resource<R: Resource>() -> impl LocalCommand {
+    move |world: &mut World| {
+        world.remove_resource::<R>();
     }
 }
 
@@ -210,34 +221,30 @@ pub fn run_schedule(label: impl ScheduleLabel) -> impl Command<Result> {
 
 /// A [`Command`] that sends a global [`Trigger`](crate::observer::Trigger) without any targets.
 #[track_caller]
-pub fn trigger<W: WorldLabel>(event: impl Event) -> impl Command {
+pub fn trigger(event: impl Event) -> impl LocalCommand {
     let caller = MaybeLocation::caller();
-    move |worlds: &mut Worlds| {
-        worlds
-            .get_world_mut::<W>()
-            .trigger_with_caller(event, caller);
+    move |world: &mut World| {
+        world.trigger_with_caller(event, caller);
     }
 }
 
 /// A [`Command`] that sends a [`Trigger`](crate::observer::Trigger) for the given targets.
-pub fn trigger_targets<W: WorldLabel>(
+pub fn trigger_targets(
     event: impl Event,
     targets: impl TriggerTargets + Send + Sync + 'static,
-) -> impl Command {
+) -> impl LocalCommand {
     let caller = MaybeLocation::caller();
-    move |worlds: &mut Worlds| {
-        worlds
-            .get_world_mut::<W>()
-            .trigger_targets_with_caller(event, targets, caller);
+    move |world: &mut World| {
+        world.trigger_targets_with_caller(event, targets, caller);
     }
 }
 
 /// A [`Command`] that sends an arbitrary [`Event`].
 #[track_caller]
-pub fn send_event<E: Event>(event: E) -> impl Command {
+pub fn send_event<E: Event>(event: E) -> impl LocalCommand {
     let caller = MaybeLocation::caller();
-    move |worlds: &mut Worlds| {
-        let mut events = worlds.get_world_mut().resource_mut::<Events<E>>();
+    move |world: &mut World| {
+        let mut events = world.resource_mut::<Events<E>>();
         events.send_with_caller(event, caller);
     }
 }

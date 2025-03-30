@@ -11,7 +11,7 @@ use crate::{
     },
     world::{
         unsafe_world_cell::{UnsafeWorldCell, UnsafeWorldsCell},
-        DeferredWorld, World, WorldId, Worlds, WorldsId,
+        World, WorldId, Worlds,
     },
 };
 
@@ -23,7 +23,7 @@ use variadics_please::all_tuples;
 use tracing::{info_span, Span};
 
 use super::{
-     IntoSystem, LocalSystem, ReadOnlySystem, SystemParamBuilder,
+    FromIds, IntoSystem, LocalSystem, ReadOnlySystem, SystemParamBuilder,
     SystemParamValidationError,
 };
 
@@ -51,7 +51,8 @@ pub struct SystemMeta {
     // SystemParams from overriding each other
     is_send: bool,
     has_deferred: bool,
-    pub(crate) last_run: SparseSet<WorldId, Tick>,
+    // Stores last ticks at index 0 and current ticks at index 1.
+    pub(crate) change_ticks: [SparseSet<WorldId, Tick>; 2],
     #[cfg(feature = "trace")]
     pub(crate) system_span: Span,
     #[cfg(feature = "trace")]
@@ -67,7 +68,7 @@ impl SystemMeta {
             component_accesses: SparseSet::new(),
             is_send: true,
             has_deferred: false,
-            last_run: Tick::new(0),
+            change_ticks: [SparseSet::new(); 2],
             #[cfg(feature = "trace")]
             system_span: info_span!("system", name = name),
             #[cfg(feature = "trace")]
@@ -121,14 +122,6 @@ impl SystemMeta {
     #[inline]
     pub fn set_has_deferred(&mut self) {
         self.has_deferred = true;
-    }
-
-    pub fn world_read_write(&mut self, id: WorldId) {
-        self.world_access.grow_and_insert(id.0);
-    }
-
-    pub fn world_read_write(&mut self, id: WorldId) {
-        self.world_access.grow_and_insert(id.0);
     }
 
     pub fn get_component_access(
@@ -338,6 +331,7 @@ pub struct SystemState<Param: SystemParam + 'static> {
     meta: SystemMeta,
     param_state: Param::State,
     archetype_generation: ArchetypeGeneration,
+    ids: Option<<Param::World<'static> as FromIds<'static>>::Ids>,
 }
 
 // Allow closure arguments to be inferred.
@@ -405,33 +399,59 @@ where
     ///
     /// `new` does not cache any of the world's archetypes, so you must call [`SystemState::update_archetypes`]
     /// manually before calling `get_manual{_mut}`.
-    pub fn new(world: &mut World,) -> Self {
+    pub fn new(world: &mut World) -> Self {
         let mut meta = SystemMeta::new::<Param>();
-        meta.world_access.add_read(index);
-        meta.last_run = world.change_tick().relative_to(Tick::MAX);
-        let param_state = Param::init_state(world, &mut meta);
+        let world_param = Param::World::from(world.as_unsafe_world_cell_readonly());
+        Param::init_world_access(world_param, &mut meta);
+        meta.change_ticks[0].insert(world.id(), world.change_tick().relative_to(Tick::MAX));
+        let param_state = Param::init_state(world_param, &mut meta);
         Self {
             meta,
             param_state,
             archetype_generation: ArchetypeGeneration::initial(),
+            ids: None,
+        }
+    }
+
+    /// Create a [`SystemState`] from a [`SystemParamBuilder`]
+    pub(crate) fn from_builder(world: &mut World, builder: impl SystemParamBuilder<Param>) -> Self {
+        let mut meta = SystemMeta::new::<Param>();
+        Param::init_world_access(
+            Param::World::from(world.as_unsafe_world_cell_readonly()),
+            &mut meta,
+        );
+        meta.change_ticks[0].insert(world.id(), world.change_tick().relative_to(Tick::MAX));
+        let param_state = builder.build(world, &mut meta);
+        Self {
+            meta,
+            param_state,
+            archetype_generation: ArchetypeGeneration::initial(),
+            ids: None,
         }
     }
 }
 
 impl<Param: SystemParam> SystemState<Param> {
-    /// Create a [`SystemState`] from a [`SystemParamBuilder`]
-    pub(crate) fn from_builder(
-        worlds: &mut Worlds,
-        builder: impl SystemParamBuilder<Param>,
-    ) -> Self {
+    pub fn new_with_ids<'w>(worlds: &'w mut Worlds, ids: <Param::World<'w> as FromIds<'w>>::Ids) {
         let mut meta = SystemMeta::new::<Param>();
-        meta.last_run = world.change_tick().relative_to(Tick::MAX);
-        let param_state = builder.build(world, &mut meta);
+        let world_param = Param::World::from_ids(worlds.as_unsafe_cell_readonly(), ids);
+        Param::init_world_access(world_param, &mut meta);
+        meta.world_access
+            .try_iter_component_access()
+            .unwrap()
+            .for_each(|component_access_kind| {
+                let id = component_access_kind.index();
+                meta.change_ticks[0].insert(
+                    id,
+                    worlds.get_world(id).change_tick().relative_to(Tick::MAX),
+                );
+            });
+        let param_state = Param::init_state(world_param, &mut meta);
         Self {
             meta,
             param_state,
-            worlds_id: worlds.id(),
             archetype_generation: ArchetypeGeneration::initial(),
+            ids,
         }
     }
 
@@ -446,10 +466,10 @@ impl<Param: SystemParam> SystemState<Param> {
             func,
             state: Some(FunctionSystemState {
                 param: self.param_state,
-                world_id: self.world_id,
             }),
             system_meta: self.meta,
-            archetype_generation: self.archetype_generation,
+            ids: self.ids,
+            archetype_generations: self.archetype_generation,
             marker: PhantomData,
         }
     }
@@ -509,29 +529,6 @@ impl<Param: SystemParam> SystemState<Param> {
     ) -> Result<(), SystemParamValidationError> {
         // SAFETY: Delegated to existing `SystemParam` implementations.
         unsafe { Param::validate_param(&state.param_state, &state.meta, world) }
-    }
-
-    /// Returns `true` if `world_id` matches the [`World`] that was used to call [`SystemState::new`].
-    /// Otherwise, this returns false.
-    #[inline]
-    pub fn matches_world(&self, world_id: WorldId) -> bool {
-        self.world_id == world_id
-    }
-
-    /// Asserts that the [`SystemState`] matches the provided world.
-    #[inline]
-    #[track_caller]
-    fn validate_world(&self, world_id: WorldId) {
-        #[inline(never)]
-        #[track_caller]
-        #[cold]
-        fn panic_mismatched(this: WorldId, other: WorldId) -> ! {
-            panic!("Encountered a mismatched World. This SystemState was created from {this:?}, but a method was called using {other:?}.");
-        }
-
-        if !self.matches_world(world_id) {
-            panic_mismatched(self.world_id, world_id);
-        }
     }
 
     /// Updates the state's internal view of the [`World`]'s archetypes. If this is not called before fetching the parameters,
@@ -634,8 +631,7 @@ impl<Param: SystemParam> SystemState<Param> {
         change_tick: Tick,
     ) -> SystemParamItem<'w, 's, Param> {
         // SAFETY: The invariants are upheld by the caller.
-        let param =
-            unsafe { Param::get_param(&mut self.param_state, &self.meta, world, change_tick) };
+        let param = unsafe { Param::get_param(&mut self.param_state, &self.meta, world) };
         self.meta.last_run = change_tick;
         param
     }
@@ -666,6 +662,12 @@ impl<Param: SystemParam> FromWorld for SystemState<Param> {
     }
 }
 
+#[derive(Clone)]
+enum Ids<Param: SystemParam> {
+    Tuple(<Param::World<'static> as FromIds<'static>>::Ids),
+    Duplicated(WorldId),
+}
+
 /// The [`System`] counter part of an ordinary function.
 ///
 /// You get this by calling [`IntoSystem::into_system`]  on a function that only accepts
@@ -683,7 +685,8 @@ where
     func: F,
     state: Option<FunctionSystemState<F::Param>>,
     system_meta: SystemMeta,
-    archetype_generation: ArchetypeGeneration,
+    ids: Ids<F::Param>,
+    archetype_generations: SparseSet<WorldId, ArchetypeGeneration>,
     // NOTE: PhantomData<fn()-> T> gives this safe Send/Sync impls
     marker: PhantomData<fn() -> Marker>,
 }
@@ -694,10 +697,6 @@ where
 struct FunctionSystemState<P: SystemParam> {
     /// The cached state of the system's [`SystemParam`]s.
     param: P::State,
-    /// The id of the [`World`] this system was initialized with. If the world
-    /// passed to [`System::update_archetype_component_access`] does not match
-    /// this id, a panic will occur.
-    worlds_id: WorldsId,
 }
 
 impl<Marker, F> FunctionSystem<Marker, F>
@@ -723,7 +722,8 @@ where
             func: self.func.clone(),
             state: None,
             system_meta: SystemMeta::new::<F>(),
-            archetype_generation: ArchetypeGeneration::initial(),
+            ids: self.ids.clone(),
+            archetype_generations: SparseSet::new(),
             marker: PhantomData,
         }
     }
@@ -733,18 +733,53 @@ where
 #[doc(hidden)]
 pub struct IsFunctionSystem;
 
-impl<Marker, F> IntoSystem<F::In, F::Out, (IsFunctionSystem, Marker)> for F
+pub trait SystemBuilder<Marker: 'static, F: SystemParamFunction<Marker>> {
+    type System: System;
+    fn build(
+        self,
+        ids: <<F::Param as SystemParam>::World<'static> as FromIds<'static>>::Ids,
+    ) -> Self::System;
+}
+
+pub trait LocalSystemBuilder<Marker: 'static, F: SystemParamFunction<Marker>> {
+    type System: LocalSystem;
+    fn build(self, id: WorldId) -> Self::System;
+}
+
+impl<Marker, F> SystemBuilder<Marker, F> for F
 where
     Marker: 'static,
     F: SystemParamFunction<Marker>,
 {
     type System = FunctionSystem<Marker, F>;
-    fn into_system(func: Self) -> Self::System {
+    fn build(
+        self,
+        ids: <<F::Param as SystemParam>::World<'static> as FromIds<'static>>::Ids,
+    ) -> Self::System {
         FunctionSystem {
-            func,
+            func: self,
             state: None,
             system_meta: SystemMeta::new::<F>(),
-            archetype_generation: ArchetypeGeneration::initial(),
+            ids: Ids::Tuple(ids),
+            archetype_generations: SparseSet::new(),
+            marker: PhantomData,
+        }
+    }
+}
+
+impl<Marker, F> LocalSystemBuilder<Marker, F> for F
+where
+    Marker: 'static,
+    F: SystemParamFunction<Marker>,
+{
+    type System = FunctionSystem<Marker, F>;
+    fn build(self, id: WorldId) -> Self::System {
+        FunctionSystem {
+            func: self,
+            state: None,
+            system_meta: SystemMeta::new::<F>(),
+            ids: Ids::Duplicated(id),
+            archetype_generations: SparseSet::new(),
             marker: PhantomData,
         }
     }
@@ -808,37 +843,65 @@ where
         #[cfg(feature = "trace")]
         let _span_guard = self.system_meta.system_span.enter();
 
-        let change_tick = world.increment_change_tick();
+        self.system_meta
+            .world_access
+            .try_iter_component_access()
+            .unwrap()
+            .for_each(|component_access_kind| {
+                let &id = component_access_kind.index();
+
+                let tick = worlds.get_unsafe_world_cell_mut(id).increment_change_tick();
+
+                self.system_meta.change_ticks[1].insert(id, tick);
+            });
 
         let param_state = &mut self.state.as_mut().expect(Self::ERROR_UNINITIALIZED).param;
+
+        let Ids::Tuple(ids) = self.ids else {
+            unreachable!()
+        };
+
         // SAFETY:
         // - The caller has invoked `update_archetype_component_access`, which will panic
         //   if the world does not match.
         // - All world accesses used by `F::Param` have been registered, so the caller
         //   will ensure that there are no data access conflicts.
-        let params =
-            unsafe { F::Param::get_param(param_state, &self.system_meta, world, change_tick) };
+        let params = unsafe {
+            F::Param::get_param(
+                param_state,
+                &self.system_meta,
+                <F::Param as SystemParam>::World::from_ids(worlds, *ids),
+            )
+        };
         let out = self.func.run(input, params);
-        self.system_meta.last_run = change_tick;
+        self.system_meta.change_ticks.swap(0, 1);
         out
     }
 
     #[inline]
-    fn apply_deferred(&mut self, world: &mut World) {
+    fn apply_deferred(&mut self, worlds: UnsafeWorldsCell) {
         let param_state = &mut self.state.as_mut().expect(Self::ERROR_UNINITIALIZED).param;
-        F::Param::apply(param_state, &self.system_meta, world);
+        F::Param::apply(
+            param_state,
+            &self.system_meta,
+            <F::Param as SystemParam>::World::from_ids(worlds, self.ids),
+        );
     }
 
     #[inline]
-    fn queue_deferred(&mut self, world: DeferredWorld) {
+    fn queue_deferred(&mut self, worlds: UnsafeWorldsCell) {
         let param_state = &mut self.state.as_mut().expect(Self::ERROR_UNINITIALIZED).param;
-        F::Param::queue(param_state, &self.system_meta, world);
+        F::Param::queue(
+            param_state,
+            &self.system_meta,
+            <F::Param as SystemParam>::World::from_ids(worlds, self.ids),
+        );
     }
 
     #[inline]
     unsafe fn validate_param_unsafe(
         &mut self,
-        world: UnsafeWorldCell,
+        worlds: UnsafeWorldsCell,
     ) -> Result<(), SystemParamValidationError> {
         let param_state = &self.state.as_ref().expect(Self::ERROR_UNINITIALIZED).param;
         // SAFETY:
@@ -846,38 +909,68 @@ where
         //   if the world does not match.
         // - All world accesses used by `F::Param` have been registered, so the caller
         //   will ensure that there are no data access conflicts.
-        unsafe { F::Param::validate_param(param_state, &self.system_meta, world) }
+        unsafe {
+            F::Param::validate_param(
+                param_state,
+                &self.system_meta,
+                <F::Param as SystemParam>::World::from_ids(worlds, self.ids),
+            )
+        }
     }
 
     #[inline]
     fn initialize(&mut self, worlds: &mut Worlds) {
-        if let Some(state) = &self.state {
-            assert_eq!(
-                state.world_id,
-                world.id(),
-                "System built with a different world than the one it was added to.",
-            );
-        } else {
+        let Some(state) = &self.state else {
             self.state = Some(FunctionSystemState {
-                param: F::Param::init_state(world, &mut self.system_meta),
-                world_id: world.id(),
+                param: F::Param::init_state(
+                    <F::Param as SystemParam>::World::from_ids(worlds, self.ids),
+                    &mut self.system_meta,
+                ),
             });
-        }
-        self.system_meta.last_run = world.change_tick().relative_to(Tick::MAX);
+        };
+
+        self.system_meta
+            .world_access
+            .try_iter_component_access()
+            .unwrap()
+            .for_each(|component_access_kind| {
+                let id = component_access_kind.index();
+                self.archetype_generations
+                    .insert(id, ArchetypeGeneration::initial());
+                self.system_meta.change_ticks[0].insert(
+                    id,
+                    worlds.get_world(id).change_tick().relative_to(Tick::MAX),
+                );
+            });
     }
 
     fn update_archetype_component_access(&mut self, worlds: UnsafeWorldsCell) {
         let state = self.state.as_mut().expect(Self::ERROR_UNINITIALIZED);
-        assert_eq!(state.world_id, world.id(), "Encountered a mismatched World. A System cannot be used with Worlds other than the one it was initialized with.");
 
-        let archetypes = world.archetypes();
-        let old_generation =
-            core::mem::replace(&mut self.archetype_generation, archetypes.generation());
+        self.system_meta
+            .world_access
+            .try_iter_component_access()
+            .unwrap()
+            .for_each(|component_access_kind| {
+                let id = component_access_kind.index();
+                let world = unsafe { worlds.get_unsafe_world_cell_mut(id) };
+                let archetype_generation = self.archetype_generations.get_mut(*id).unwrap();
 
-        for archetype in &archetypes[old_generation..] {
-            // SAFETY: The assertion above ensures that the param_state was initialized from `world`.
-            unsafe { F::Param::new_archetype(&mut state.param, archetype, &mut self.system_meta) };
-        }
+                let archetypes = world.archetypes();
+                let old_generation =
+                    core::mem::replace(archetype_generation, archetypes.generation());
+
+                for archetype in &archetypes[old_generation..] {
+                    // SAFETY: The assertion above ensures that the param_state was initialized from `world`.
+                    unsafe {
+                        F::Param::new_archetype(
+                            &mut state.param,
+                            archetype,
+                            &mut self.system_meta.get_component_access_mut(id),
+                        )
+                    };
+                }
+            });
     }
 
     #[inline]
@@ -910,48 +1003,6 @@ where
     F: SystemParamFunction<Marker>,
     F::Param: ReadOnlySystemParam,
 {
-}
-
-impl<Marker, W, F> LocalSystem<W> for FunctionSystem<Marker, F>
-where
-    Marker: 'static,
-    W: WorldLabel,
-    F: SystemParamFunction<Marker>,
-    <F::Param as SystemParam>::World: ManySameWorldLabel<W>,
-{
-    fn run_local(&mut self, input: SystemIn<'_, Self>, world: &mut World<W>) -> Self::Out {
-        let change_tick = world.increment_change_tick();
-
-        let param_state = &mut self.state.as_mut().expect(Self::ERROR_UNINITIALIZED).param;
-        // SAFETY:
-        // - The caller has invoked `update_archetype_component_access`, which will panic
-        //   if the world does not match.
-        // - All world accesses used by `F::Param` have been registered, so the caller
-        //   will ensure that there are no data access conflicts.
-        let params = unsafe {
-            F::Param::get_param(
-                param_state,
-                &self.system_meta,
-                <F::Param as SystemParam>::World:get_local_mut(world.as_unsafe_world_cell()),
-                change_tick,
-            )
-        };
-        let out = self.func.run(input, params);
-        self.system_meta.last_run = change_tick;
-        out
-    }
-
-    fn initialize_local(&mut self, world: &mut World<W>) {
-        todo!()
-    }
-
-    unsafe fn validate_param_unsafe_local(&mut self, world: UnsafeWorldCell) -> bool {
-        todo!()
-    }
-
-    fn update_archetype_component_access_local(&mut self, world: UnsafeWorldCell) {
-        todo!()
-    }
 }
 
 /// A trait implemented for all functions that can be used as [`System`]s.

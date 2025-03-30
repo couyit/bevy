@@ -7,10 +7,7 @@ use crate::{
     query::Access,
     schedule::InternedSystemSet,
     system::{input::SystemInput, SystemIn, SystemParamValidationError},
-    world::{
-        unsafe_world_cell::{UnsafeWorldCell, UnsafeWorldsCell},
-        Worlds,
-    },
+    world::{unsafe_world_cell::UnsafeWorldsCell, Worlds},
 };
 
 use super::{IntoSystem, ReadOnlySystem, System};
@@ -190,24 +187,24 @@ where
     }
 
     #[inline]
-    fn apply_deferred(&mut self, worlds: &mut Worlds) {
+    fn apply_deferred(&mut self, worlds: UnsafeWorldsCell) {
         self.a.apply_deferred(worlds);
         self.b.apply_deferred(worlds);
     }
 
     #[inline]
-    fn queue_deferred(&mut self, mut world: crate::world::DeferredWorld) {
-        self.a.queue_deferred(world.reborrow());
-        self.b.queue_deferred(world);
+    fn queue_deferred(&mut self, worlds: UnsafeWorldsCell) {
+        self.a.queue_deferred(worlds);
+        self.b.queue_deferred(worlds);
     }
 
     #[inline]
     unsafe fn validate_param_unsafe(
         &mut self,
-        world: UnsafeWorldCell,
+        worlds: UnsafeWorldsCell,
     ) -> Result<(), SystemParamValidationError> {
         // SAFETY: Delegate to other `System` implementations.
-        unsafe { self.a.validate_param_unsafe(world) }
+        unsafe { self.a.validate_param_unsafe(worlds) }
     }
 
     fn initialize(&mut self, worlds: &mut Worlds) {
@@ -409,22 +406,22 @@ where
         self.b.run_unsafe(value, worlds)
     }
 
-    fn apply_deferred(&mut self, worlds: &mut Worlds) {
+    fn apply_deferred(&mut self, worlds: UnsafeWorldsCell) {
         self.a.apply_deferred(worlds);
         self.b.apply_deferred(worlds);
     }
 
-    fn queue_deferred(&mut self, mut world: crate::world::DeferredWorld) {
-        self.a.queue_deferred(world.reborrow());
-        self.b.queue_deferred(world);
+    fn queue_deferred(&mut self, worlds: UnsafeWorldsCell) {
+        self.a.queue_deferred(worlds);
+        self.b.queue_deferred(worlds);
     }
 
     unsafe fn validate_param_unsafe(
         &mut self,
-        world: UnsafeWorldCell,
+        worlds: UnsafeWorldsCell,
     ) -> Result<(), SystemParamValidationError> {
         // SAFETY: Delegate to other `System` implementations.
-        unsafe { self.a.validate_param_unsafe(world) }
+        unsafe { self.a.validate_param_unsafe(worlds) }
     }
 
     fn validate_param(&mut self, worlds: &Worlds) -> Result<(), SystemParamValidationError> {

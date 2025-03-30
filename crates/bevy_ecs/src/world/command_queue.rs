@@ -12,6 +12,8 @@ use core::{
 };
 use log::warn;
 
+use super::unsafe_world_cell::UnsafeWorldsCell;
+
 struct CommandMeta {
     /// SAFETY: The `value` must point to a value of type `T: Command`,
     /// where `T` is some specific type that was used to produce this metadata.
@@ -320,15 +322,15 @@ impl Drop for CommandQueue {
 
 impl SystemBuffer for CommandQueue {
     #[inline]
-    fn apply(&mut self, _system_meta: &SystemMeta, world: &mut World) {
+    fn apply(&mut self, _system_meta: &SystemMeta, worlds: UnsafeWorldsCell) {
         #[cfg(feature = "trace")]
         let _span_guard = _system_meta.commands_span.enter();
-        self.apply(world);
+        self.apply(worlds);
     }
 
     #[inline]
-    fn queue(&mut self, _system_meta: &SystemMeta, mut world: DeferredWorld) {
-        world.component_commands().append(self);
+    fn queue(&mut self, _system_meta: &SystemMeta, mut worlds: UnsafeWorldsCell) {
+        worlds.component_commands().append(self);
     }
 }
 

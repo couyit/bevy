@@ -82,7 +82,7 @@ where
     ) -> impl Command<Result<(), EntityMutableFetchError>>
            + HandleError<Result<(), EntityMutableFetchError>> {
         move |worlds: &mut Worlds| -> Result<(), EntityMutableFetchError> {
-            let entity = worlds.get_entity_mut::<W>(entity)?;
+            let entity = worlds.get_entity_mut(entity)?;
             self.apply(entity);
             Ok(())
         }
@@ -100,7 +100,7 @@ where
     ) -> impl Command<Result<T, EntityCommandError<Err>>> + HandleError<Result<T, EntityCommandError<Err>>>
     {
         move |worlds: &mut Worlds| {
-            let entity = worlds.get_entity_mut::<W>(entity)?;
+            let entity = worlds.get_entity_mut(entity)?;
             self.apply(entity)
                 .map_err(EntityCommandError::CommandFailed)
         }

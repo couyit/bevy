@@ -24,7 +24,6 @@ pub use crate::{
     change_detection::{Mut, Ref, CHECK_TICK_THRESHOLD},
     world::command_queue::CommandQueue,
 };
-use bevy_ecs_macros::ComponentWorld;
 pub use bevy_ecs_macros::FromWorld;
 pub use component_constants::*;
 pub use deferred_world::DeferredWorld;
@@ -146,11 +145,11 @@ impl Worlds {
     }
 
     pub fn get_world(&self, id: WorldId) -> &World {
-        &self.worlds[id.0].as_world()
+        &self.worlds[id.0]
     }
 
     pub fn get_world_mut(&mut self, id: WorldId) -> &mut World {
-        &mut self.worlds[id.0].as_world_mut()
+        &mut self.worlds[id.0]
     }
 }
 
@@ -1745,11 +1744,16 @@ impl World {
     /// This function will panic if any of the provided component ids do not belong to a component known to this [`World`].
     #[inline]
     pub fn register_dynamic_bundle(&mut self, component_ids: &[ComponentId]) -> &BundleInfo {
-        let id = self.bundles_mut().init_dynamic_info(
-            &mut self.storage,
-            &self.components,
-            component_ids,
-        );
+        let (bundles, sparse_sets) = match self.storage {
+            Storage::Components {
+                ref mut bundles,
+                ref mut sparse_sets,
+                ..
+            } => (bundles, sparse_sets),
+            Storage::Resources { .. } => panic!("Storage is not for Components"),
+        };
+
+        let id = bundles.init_dynamic_info(sparse_sets, &self.components, component_ids);
         // SAFETY: We just initialized the bundle so its id should definitely be valid.
         unsafe { self.bundles().get(id).debug_checked_unwrap() }
     }
@@ -1799,7 +1803,13 @@ impl World {
                 tables.check_change_ticks(change_tick);
                 sparse_sets.check_change_ticks(change_tick);
             }
-            Storage::Resources { .. } => unreachable!(),
+            Storage::Resources {
+                ref mut resources,
+                ref mut non_send_resources,
+            } => {
+                resources.check_change_ticks(change_tick);
+                non_send_resources.check_change_ticks(change_tick);
+            }
         }
 
         self.last_check_tick = change_tick;
@@ -1819,8 +1829,12 @@ impl World {
                 sparse_sets.clear_entities();
                 tables.clear();
             }
-            Storage::Resources { .. } => {
-                unreachable!()
+            Storage::Resources {
+                ref mut resources,
+                ref mut non_send_resources,
+            } => {
+                resources.clear();
+                non_send_resources.clear();
             }
         }
     }
@@ -3757,54 +3771,6 @@ impl World {
             return None;
         };
         Some(events_resource.send_batch(events))
-    }
-
-    /// Iterates all component change ticks and clamps any older than [`MAX_CHANGE_AGE`](crate::change_detection::MAX_CHANGE_AGE).
-    /// This prevents overflow and thus prevents false positives.
-    ///
-    /// **Note:** Does nothing if the [`World`] counter has not been incremented at least [`CHECK_TICK_THRESHOLD`]
-    /// times since the previous pass.
-    // TODO: benchmark and optimize
-    pub fn check_change_ticks(&mut self) {
-        let change_tick = self.change_tick();
-        if change_tick.relative_to(self.last_check_tick).get() < CHECK_TICK_THRESHOLD {
-            return;
-        }
-
-        #[cfg(feature = "trace")]
-        let _span = tracing::info_span!("check component ticks").entered();
-
-        match self.storage {
-            Storage::Components { .. } => unreachable!(),
-            Storage::Resources {
-                ref mut resources,
-                ref mut non_send_resources,
-            } => {
-                resources.check_change_ticks(change_tick);
-                non_send_resources.check_change_ticks(change_tick);
-            }
-        }
-
-        if let Some(mut schedules) = self.get_resource_mut::<Schedules>() {
-            schedules.check_change_ticks(change_tick);
-        }
-
-        self.last_check_tick = change_tick;
-    }
-
-    pub fn clear(&mut self) {
-        match self.storage {
-            Storage::Components { .. } => {
-                unreachable!()
-            }
-            Storage::Resources {
-                ref mut resources,
-                ref mut non_send_resources,
-            } => {
-                resources.clear();
-                non_send_resources.clear();
-            }
-        }
     }
 }
 

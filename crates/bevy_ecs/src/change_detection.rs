@@ -1480,7 +1480,7 @@ mod tests {
             MAX_CHANGE_AGE,
         },
         component::{Component, ComponentTicks, Tick},
-        system::{IntoSystem, Single, System},
+        system::{Single, System, SystemBuilder},
         world::Worlds,
     };
 
@@ -1519,15 +1519,16 @@ mod tests {
         }
 
         let mut worlds = Worlds::new();
-        let world = worlds.get_main_world_mut();
+        let id = worlds.create_world();
+        let world = worlds.get_world_mut(id);
 
         // component added: 1, changed: 1
         world.spawn(C);
 
-        let mut change_detected_system = IntoSystem::into_system(change_detected);
-        let mut change_expired_system = IntoSystem::into_system(change_expired);
-        change_detected_system.initialize(world);
-        change_expired_system.initialize(world);
+        let mut change_detected_system = change_detected.build((id,));
+        let mut change_expired_system = change_expired.build((id,));
+        change_detected_system.initialize(&mut worlds);
+        change_expired_system.initialize(&mut worlds);
 
         // world: 1, system last ran: 0, component changed: 1
         // The spawn will be detected since it happened after the system "last ran".

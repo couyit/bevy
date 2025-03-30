@@ -420,8 +420,8 @@ impl Observers {
     }
 
     /// This will run the observers of the given `event_type`, targeting the given `entity` and `components`.
-    pub(crate) fn invoke<W: WorldLabel, T>(
-        mut world: DeferredWorld<W>,
+    pub(crate) fn invoke<T>(
+        mut world: DeferredWorld,
         event_type: ComponentId,
         target: Entity,
         components: impl Iterator<Item = ComponentId> + Clone,
@@ -432,7 +432,7 @@ impl Observers {
         let trigger_for_components = components.clone();
 
         world.commands().queue(|worlds| {
-            let world = worlds.get_unsafe_world_cell::<W>();
+            let world = worlds.get_unsafe_world_cell();
             // SAFETY: There are no outstanding world references
             world.increment_trigger_id();
             let observers = world.observers();
@@ -440,7 +440,7 @@ impl Observers {
                 return;
             };
 
-            let mut trigger_observer = |(&observer, runner): (&Entity, &Ob serverRunner)| {
+            let mut trigger_observer = |(&observer, runner): (&Entity, &ObserverRunner)| {
                 (runner)(
                     worlds.as_unsafe_cell(),
                     ObserverTrigger {
@@ -537,7 +537,7 @@ impl Observers {
     }
 }
 
-impl<W: WorldLabel> World<W> {
+impl World {
     /// Spawns a "global" [`Observer`] which will watch for the given event.
     /// Returns its [`Entity`] as a [`EntityWorldMut`].
     ///
@@ -1649,7 +1649,7 @@ mod tests {
     // Originally for https://github.com/bevyengine/bevy/issues/18452
     #[test]
     fn observer_modifies_relationship() {
-        fn on_add(trigger: Trigger<OnAdd, A>, mut commands: Commands) {
+        fn on_add(trigger: Trigger<OnAdd, A>, mut commands: ComponentCommands) {
             commands
                 .entity(trigger.target())
                 .with_related::<crate::hierarchy::ChildOf>(|rsc| {

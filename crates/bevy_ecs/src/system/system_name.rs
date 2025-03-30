@@ -66,7 +66,6 @@ unsafe impl SystemParam for SystemName<'_> {
         name: &'s mut Self::State,
         _system_meta: &SystemMeta,
         _world: UnsafeWorldCell<'w>,
-        _change_tick: Tick,
     ) -> Self::Item<'w, 's> {
         SystemName(name)
     }
