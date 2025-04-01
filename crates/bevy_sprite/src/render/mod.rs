@@ -614,7 +614,7 @@ pub fn queue_sprites(
 }
 
 pub fn prepare_sprite_view_bind_groups(
-    mut commands: ComponentCommands,
+    mut commands: Commands,
     render_device: Res<RenderDevice>,
     sprite_pipeline: Res<SpritePipeline>,
     view_uniforms: Res<ViewUniforms>,

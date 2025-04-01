@@ -100,7 +100,7 @@ impl AnimationInfo {
 
 // Creates all the entities in the scene.
 fn setup(
-    mut commands: ComponentCommands,
+    mut commands: Commands,
     asset_server: Res<AssetServer>,
     mut animation_graphs: ResMut<Assets<AnimationGraph>>,
     mut animation_clips: ResMut<Assets<AnimationClip>>,

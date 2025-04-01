@@ -11,7 +11,7 @@ fn main() {
         .run();
 }
 
-fn setup(mut commands: ComponentCommands, asset_server: Res<AssetServer>) {
+fn setup(mut commands: Commands, asset_server: Res<AssetServer>) {
     commands.spawn(Camera2d);
 
     let image = asset_server.load("branding/icon.png");

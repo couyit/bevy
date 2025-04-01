@@ -43,7 +43,7 @@ fn main() {
 fn setup(
     asset_server: Res<AssetServer>,
     camera_settings: Res<CameraSettings>,
-    mut commands: ComponentCommands,
+    mut commands: Commands,
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<StandardMaterial>>,
 ) {
@@ -92,7 +92,7 @@ fn setup(
     ));
 }
 
-fn instructions(mut commands: ComponentCommands) {
+fn instructions(mut commands: Commands) {
     commands.spawn((
         Name::new("Instructions"),
         Text::new(

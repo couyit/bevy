@@ -154,7 +154,7 @@ pub struct OitResolvePipelineKey {
 }
 
 pub fn queue_oit_resolve_pipeline(
-    mut commands: ComponentCommands,
+    mut commands: Commands,
     pipeline_cache: Res<PipelineCache>,
     resolve_pipeline: Res<OitResolvePipeline>,
     views: Query<
@@ -241,7 +241,7 @@ fn specialize_oit_resolve_pipeline(
 }
 
 pub fn prepare_oit_resolve_bind_group(
-    mut commands: ComponentCommands,
+    mut commands: Commands,
     resolve_pipeline: Res<OitResolvePipeline>,
     render_device: Res<RenderDevice>,
     view_uniforms: Res<ViewUniforms>,

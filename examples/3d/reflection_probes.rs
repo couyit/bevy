@@ -80,7 +80,7 @@ fn main() {
 
 // Spawns all the scene objects.
 fn setup(
-    mut commands: ComponentCommands,
+    mut commands: Commands,
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<StandardMaterial>>,
     asset_server: Res<AssetServer>,
@@ -95,14 +95,14 @@ fn setup(
 }
 
 // Spawns the cubes, light, and camera.
-fn spawn_scene(commands: &mut ComponentCommands, asset_server: &AssetServer) {
+fn spawn_scene(commands: &mut Commands, asset_server: &AssetServer) {
     commands.spawn(SceneRoot(
         asset_server.load(GltfAssetLabel::Scene(0).from_asset("models/cubes/Cubes.glb")),
     ));
 }
 
 // Spawns the camera.
-fn spawn_camera(commands: &mut ComponentCommands) {
+fn spawn_camera(commands: &mut Commands) {
     commands.spawn((
         Camera3d::default(),
         Camera {
@@ -115,7 +115,7 @@ fn spawn_camera(commands: &mut ComponentCommands) {
 
 // Creates the sphere mesh and spawns it.
 fn spawn_sphere(
-    commands: &mut ComponentCommands,
+    commands: &mut Commands,
     meshes: &mut Assets<Mesh>,
     materials: &mut Assets<StandardMaterial>,
 ) {
@@ -135,7 +135,7 @@ fn spawn_sphere(
 }
 
 // Spawns the reflection probe.
-fn spawn_reflection_probe(commands: &mut ComponentCommands, cubemaps: &Cubemaps) {
+fn spawn_reflection_probe(commands: &mut Commands, cubemaps: &Cubemaps) {
     commands.spawn((
         LightProbe,
         EnvironmentMapLight {
@@ -150,7 +150,7 @@ fn spawn_reflection_probe(commands: &mut ComponentCommands, cubemaps: &Cubemaps)
 }
 
 // Spawns the help text.
-fn spawn_text(commands: &mut ComponentCommands, app_status: &AppStatus) {
+fn spawn_text(commands: &mut Commands, app_status: &AppStatus) {
     // Create the text.
     commands.spawn((
         app_status.create_text(),
@@ -167,7 +167,7 @@ fn spawn_text(commands: &mut ComponentCommands, app_status: &AppStatus) {
 // managed by the scene spawner, as it's part of the glTF file with the cubes, so we have to add
 // the environment map after the fact.
 fn add_environment_map_to_camera(
-    mut commands: ComponentCommands,
+    mut commands: Commands,
     query: Query<Entity, Added<Camera3d>>,
     cubemaps: Res<Cubemaps>,
 ) {
@@ -185,7 +185,7 @@ fn add_environment_map_to_camera(
 
 // A system that handles switching between different reflection modes.
 fn change_reflection_type(
-    mut commands: ComponentCommands,
+    mut commands: Commands,
     light_probe_query: Query<Entity, With<LightProbe>>,
     camera_query: Query<Entity, With<Camera3d>>,
     keyboard: Res<ButtonInput<KeyCode>>,

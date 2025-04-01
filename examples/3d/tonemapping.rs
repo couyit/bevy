@@ -52,7 +52,7 @@ fn main() {
 }
 
 fn setup(
-    mut commands: ComponentCommands,
+    mut commands: Commands,
     asset_server: Res<AssetServer>,
     camera_transform: Res<CameraTransform>,
 ) {
@@ -92,7 +92,7 @@ fn setup(
     ));
 }
 
-fn setup_basic_scene(mut commands: ComponentCommands, asset_server: Res<AssetServer>) {
+fn setup_basic_scene(mut commands: Commands, asset_server: Res<AssetServer>) {
     // Main scene
     commands.spawn((
         SceneRoot(asset_server.load(
@@ -130,7 +130,7 @@ fn setup_basic_scene(mut commands: ComponentCommands, asset_server: Res<AssetSer
 }
 
 fn setup_color_gradient_scene(
-    mut commands: ComponentCommands,
+    mut commands: Commands,
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<ColorGradientMaterial>>,
     camera_transform: Res<CameraTransform>,
@@ -148,7 +148,7 @@ fn setup_color_gradient_scene(
 }
 
 fn setup_image_viewer_scene(
-    mut commands: ComponentCommands,
+    mut commands: Commands,
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<StandardMaterial>>,
     camera_transform: Res<CameraTransform>,
@@ -196,7 +196,7 @@ fn drag_drop_image(
     mut materials: ResMut<Assets<StandardMaterial>>,
     mut drop_events: EventReader<FileDragAndDrop>,
     asset_server: Res<AssetServer>,
-    mut commands: ComponentCommands,
+    mut commands: Commands,
 ) {
     let Some(new_image) = drop_events.read().find_map(|e| match e {
         FileDragAndDrop::DroppedFile { path_buf, .. } => {

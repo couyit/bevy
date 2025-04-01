@@ -9,7 +9,7 @@ use bevy_ecs::{
     query::{With, Without},
     reflect::ReflectComponent,
     resource::Resource,
-    system::{ComponentCommands, Query, Res},
+    system::{Commands, Query, Res},
     world::{FromWorld, World},
 };
 use bevy_math::{uvec4, AspectRatio, UVec2, UVec3, UVec4, Vec3Swizzles as _, Vec4};
@@ -382,7 +382,7 @@ impl Clusters {
 }
 
 pub fn add_clusters(
-    mut commands: ComponentCommands,
+    mut commands: Commands,
     cameras: Query<(Entity, Option<&ClusterConfig>, &Camera), (Without<Clusters>, With<Camera3d>)>,
 ) {
     for (entity, config, camera) in &cameras {
@@ -522,7 +522,7 @@ impl Default for GpuClusterableObjectsUniform {
 
 /// Extracts clusters from the main world from the render world.
 pub fn extract_clusters(
-    mut commands: ComponentCommands,
+    mut commands: Commands,
     views: Extract<Query<(RenderEntity, &Clusters, &Camera)>>,
     mapper: Extract<Query<RenderEntity>>,
 ) {
@@ -566,7 +566,7 @@ pub fn extract_clusters(
 }
 
 pub fn prepare_clusters(
-    mut commands: ComponentCommands,
+    mut commands: Commands,
     render_device: Res<RenderDevice>,
     render_queue: Res<RenderQueue>,
     mesh_pipeline: Res<MeshPipeline>,

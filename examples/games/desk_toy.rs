@@ -97,7 +97,7 @@ const WINDOW_CLEAR_COLOR: Color = Color::srgb(0.2, 0.2, 0.2);
 
 /// Spawn the scene
 fn setup(
-    mut commands: ComponentCommands,
+    mut commands: Commands,
     asset_server: Res<AssetServer>,
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<ColorMaterial>>,
@@ -243,7 +243,7 @@ fn update_cursor_hit_test(
 
 /// Start the drag operation and record the offset we started dragging from
 fn start_drag(
-    mut commands: ComponentCommands,
+    mut commands: Commands,
     cursor_world_pos: Res<CursorWorldPos>,
     bevy_logo_transform: Single<&Transform, With<BevyLogo>>,
 ) {
@@ -262,7 +262,7 @@ fn start_drag(
 }
 
 /// Stop the current drag operation
-fn end_drag(mut commands: ComponentCommands) {
+fn end_drag(mut commands: Commands) {
     commands.remove_resource::<DragOperation>();
 }
 
@@ -321,7 +321,7 @@ fn quit(
 
 /// Enable transparency for the window and make it on top
 fn toggle_transparency(
-    mut commands: ComponentCommands,
+    mut commands: Commands,
     mut window_transparency: ResMut<WindowTransparency>,
     mut q_instructions_text: Query<&mut Visibility, With<InstructionsText>>,
     mut primary_window: Single<&mut Window, With<PrimaryWindow>>,

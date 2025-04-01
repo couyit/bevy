@@ -27,7 +27,7 @@ fn main() {
         .run();
 }
 
-fn setup(mut commands: ComponentCommands) {
+fn setup(mut commands: Commands) {
     // `from_env` panics on the web
     #[cfg(not(target_arch = "wasm32"))]
     let args: Args = argh::from_env();

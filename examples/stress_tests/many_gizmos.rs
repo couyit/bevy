@@ -80,7 +80,7 @@ fn system(config: Res<Config>, time: Res<Time>, mut draw: Gizmos) {
     }
 }
 
-fn setup(mut commands: ComponentCommands) {
+fn setup(mut commands: Commands) {
     warn!(include_str!("warning_string.txt"));
 
     commands.spawn((

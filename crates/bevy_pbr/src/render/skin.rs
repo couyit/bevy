@@ -595,7 +595,7 @@ fn remove_skin(skin_uniforms: &mut SkinUniforms, skinned_mesh_entity: MainEntity
 // NOTE: The skinned joints uniform buffer has to be bound at a dynamic offset per
 // entity and so cannot currently be batched on WebGL 2.
 pub fn no_automatic_skin_batching(
-    mut commands: ComponentCommands,
+    mut commands: Commands,
     query: Query<Entity, (With<SkinnedMesh>, Without<NoAutomaticBatching>)>,
     render_device: Res<RenderDevice>,
 ) {

@@ -124,7 +124,7 @@ struct CustomQueryFilter<T: Component, P: Component> {
     _generic_tuple: (With<T>, With<P>),
 }
 
-fn spawn(mut commands: ComponentCommands) {
+fn spawn(mut commands: Commands) {
     commands.spawn((ComponentA, ComponentB, ComponentC, ComponentD));
 }
 

@@ -35,6 +35,8 @@ mod tests {
     use bevy_ecs::{event::*, system::assert_is_read_only_system};
     use bevy_ecs_macros::Event;
 
+    use crate::{system::LocalSystemBuilder, world::Worlds};
+
     #[derive(Event, Copy, Clone, PartialEq, Eq, Debug)]
     struct TestEvent {
         i: usize,
@@ -228,13 +230,15 @@ mod tests {
     fn test_event_registry_can_add_and_remove_events_to_world() {
         use bevy_ecs::prelude::*;
 
-        let mut world = World::new();
-        EventRegistry::register_event::<TestEvent>(&mut world);
+        let mut worlds = Worlds::new();
+        let id = worlds.create_resource_world();
+        let world = worlds.get_world_mut(id);
+        EventRegistry::register_event::<TestEvent>(world);
 
         let has_events = world.get_resource::<Events<TestEvent>>().is_some();
         assert!(has_events, "Should have the events resource");
 
-        EventRegistry::deregister_events::<TestEvent>(&mut world);
+        EventRegistry::deregister_events::<TestEvent>(world);
 
         let has_events = world.get_resource::<Events<TestEvent>>().is_some();
         assert!(!has_events, "Should not have the events resource");
@@ -426,7 +430,9 @@ mod tests {
         #[derive(Resource)]
         struct Counter(AtomicUsize);
 
-        let mut world = World::new();
+        let mut worlds = Worlds::new();
+        let id = worlds.create_resource_world();
+        let world = worlds.get_world_mut(id);
         world.init_resource::<Events<TestEvent>>();
         for _ in 0..100 {
             world.send_event(TestEvent { i: 1 });
@@ -435,13 +441,16 @@ mod tests {
         let mut schedule = Schedule::default();
 
         schedule.add_systems(
-            |mut cursor: Local<EventCursor<TestEvent>>,
-             events: Res<Events<TestEvent>>,
-             counter: ResMut<Counter>| {
-                cursor.par_read(&events).for_each(|event| {
-                    counter.0.fetch_add(event.i, Ordering::Relaxed);
-                });
-            },
+            {
+                |mut cursor: Local<EventCursor<TestEvent>>,
+                 events: Res<Events<TestEvent>>,
+                 counter: ResMut<Counter>| {
+                    cursor.par_read(&events).for_each(|event| {
+                        counter.0.fetch_add(event.i, Ordering::Relaxed);
+                    });
+                }
+            }
+            .build(id),
         );
 
         world.insert_resource(Counter(AtomicUsize::new(0)));
@@ -468,21 +477,26 @@ mod tests {
         #[derive(Resource)]
         struct Counter(AtomicUsize);
 
-        let mut world = World::new();
+        let mut worlds = Worlds::new();
+        let id = worlds.create_resource_world();
+        let world = worlds.get_world_mut(id);
         world.init_resource::<Events<TestEvent>>();
         for _ in 0..100 {
             world.send_event(TestEvent { i: 1 });
         }
         let mut schedule = Schedule::default();
         schedule.add_systems(
-            |mut cursor: Local<EventCursor<TestEvent>>,
-             mut events: ResMut<Events<TestEvent>>,
-             counter: ResMut<Counter>| {
-                cursor.par_read_mut(&mut events).for_each(|event| {
-                    event.i += 1;
-                    counter.0.fetch_add(event.i, Ordering::Relaxed);
-                });
-            },
+            {
+                |mut cursor: Local<EventCursor<TestEvent>>,
+                 mut events: ResMut<Events<TestEvent>>,
+                 counter: ResMut<Counter>| {
+                    cursor.par_read_mut(&mut events).for_each(|event| {
+                        event.i += 1;
+                        counter.0.fetch_add(event.i, Ordering::Relaxed);
+                    });
+                }
+            }
+            .build(id),
         );
         world.insert_resource(Counter(AtomicUsize::new(0)));
         schedule.run(&mut world);
@@ -511,29 +525,32 @@ mod tests {
     fn test_event_reader_iter_last() {
         use bevy_ecs::prelude::*;
 
-        let mut world = World::new();
-        world.init_resource::<Events<TestEvent>>();
+        let mut worlds = Worlds::new();
+        let id = worlds.create_resource_world();
+        let world = worlds.get_world_mut(id);
 
-        let mut reader =
-            IntoSystem::into_system(|mut events: EventReader<TestEvent>| -> Option<TestEvent> {
+        let mut reader = {
+            |mut events: EventReader<TestEvent>| -> Option<TestEvent> {
                 events.read().last().copied()
-            });
-        reader.initialize(&mut world);
+            }
+        }
+        .build(id);
+        reader.initialize(worlds);
 
-        let last = reader.run((), &mut world);
+        let last = reader.run((), worlds);
         assert!(last.is_none(), "EventReader should be empty");
 
         world.send_event(TestEvent { i: 0 });
-        let last = reader.run((), &mut world);
+        let last = reader.run((), worlds);
         assert_eq!(last, Some(TestEvent { i: 0 }));
 
         world.send_event(TestEvent { i: 1 });
         world.send_event(TestEvent { i: 2 });
         world.send_event(TestEvent { i: 3 });
-        let last = reader.run((), &mut world);
+        let last = reader.run((), worlds);
         assert_eq!(last, Some(TestEvent { i: 3 }));
 
-        let last = reader.run((), &mut world);
+        let last = reader.run((), worlds);
         assert!(last.is_none(), "EventReader should be empty");
     }
 
@@ -541,29 +558,33 @@ mod tests {
     fn test_event_mutator_iter_last() {
         use bevy_ecs::prelude::*;
 
-        let mut world = World::new();
+        let mut worlds = Worlds::new();
+        let id = worlds.create_resource_world();
+        let world = worlds.get_world_mut(id);
         world.init_resource::<Events<TestEvent>>();
 
-        let mut mutator =
-            IntoSystem::into_system(|mut events: EventMutator<TestEvent>| -> Option<TestEvent> {
+        let mut mutator = {
+            |mut events: EventMutator<TestEvent>| -> Option<TestEvent> {
                 events.read().last().copied()
-            });
-        mutator.initialize(&mut world);
+            }
+        }
+        .build(id);
+        mutator.initialize(worlds);
 
-        let last = mutator.run((), &mut world);
+        let last = mutator.run((), worlds);
         assert!(last.is_none(), "EventMutator should be empty");
 
         world.send_event(TestEvent { i: 0 });
-        let last = mutator.run((), &mut world);
+        let last = mutator.run((), worlds);
         assert_eq!(last, Some(TestEvent { i: 0 }));
 
         world.send_event(TestEvent { i: 1 });
         world.send_event(TestEvent { i: 2 });
         world.send_event(TestEvent { i: 3 });
-        let last = mutator.run((), &mut world);
+        let last = mutator.run((), worlds);
         assert_eq!(last, Some(TestEvent { i: 3 }));
 
-        let last = mutator.run((), &mut world);
+        let last = mutator.run((), worlds);
         assert!(last.is_none(), "EventMutator should be empty");
     }
 
@@ -571,7 +592,9 @@ mod tests {
     fn test_event_reader_iter_nth() {
         use bevy_ecs::prelude::*;
 
-        let mut world = World::new();
+        let mut worlds = Worlds::new();
+        let id = worlds.create_resource_world();
+        let world = worlds.get_world_mut(id);
         world.init_resource::<Events<TestEvent>>();
 
         world.send_event(TestEvent { i: 0 });
@@ -581,15 +604,20 @@ mod tests {
         world.send_event(TestEvent { i: 4 });
 
         let mut schedule = Schedule::default();
-        schedule.add_systems(|mut events: EventReader<TestEvent>| {
-            let mut iter = events.read();
+        schedule.add_systems(
+            {
+                |mut events: EventReader<TestEvent>| {
+                    let mut iter = events.read();
 
-            assert_eq!(iter.next(), Some(&TestEvent { i: 0 }));
-            assert_eq!(iter.nth(2), Some(&TestEvent { i: 3 }));
-            assert_eq!(iter.nth(1), None);
+                    assert_eq!(iter.next(), Some(&TestEvent { i: 0 }));
+                    assert_eq!(iter.nth(2), Some(&TestEvent { i: 3 }));
+                    assert_eq!(iter.nth(1), None);
 
-            assert!(events.is_empty());
-        });
+                    assert!(events.is_empty());
+                }
+            }
+            .build(id),
+        );
         schedule.run(&mut world);
     }
 
@@ -597,7 +625,9 @@ mod tests {
     fn test_event_mutator_iter_nth() {
         use bevy_ecs::prelude::*;
 
-        let mut world = World::new();
+        let mut worlds = Worlds::new();
+        let id = worlds.create_resource_world();
+        let world = worlds.get_world_mut(id);
         world.init_resource::<Events<TestEvent>>();
 
         world.send_event(TestEvent { i: 0 });
@@ -607,15 +637,20 @@ mod tests {
         world.send_event(TestEvent { i: 4 });
 
         let mut schedule = Schedule::default();
-        schedule.add_systems(|mut events: EventReader<TestEvent>| {
-            let mut iter = events.read();
+        schedule.add_systems(
+            {
+                |mut events: EventReader<TestEvent>| {
+                    let mut iter = events.read();
 
-            assert_eq!(iter.next(), Some(&TestEvent { i: 0 }));
-            assert_eq!(iter.nth(2), Some(&TestEvent { i: 3 }));
-            assert_eq!(iter.nth(1), None);
+                    assert_eq!(iter.next(), Some(&TestEvent { i: 0 }));
+                    assert_eq!(iter.nth(2), Some(&TestEvent { i: 3 }));
+                    assert_eq!(iter.nth(1), None);
 
-            assert!(events.is_empty());
-        });
+                    assert!(events.is_empty());
+                }
+            }
+            .build(id),
+        );
         schedule.run(&mut world);
     }
 }

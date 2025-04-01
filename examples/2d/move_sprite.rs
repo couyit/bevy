@@ -16,7 +16,7 @@ enum Direction {
     Right,
 }
 
-fn setup(mut commands: ComponentCommands, asset_server: Res<AssetServer>) {
+fn setup(mut commands: Commands, asset_server: Res<AssetServer>) {
     commands.spawn(Camera2d);
 
     commands.spawn((

@@ -3,7 +3,7 @@ use crate::fullscreen_vertex_shader::fullscreen_shader_vertex_state;
 use bevy_ecs::{
     prelude::{Component, Entity},
     resource::Resource,
-    system::{ComponentCommands, Query, Res, ResMut},
+    system::{Commands, Query, Res, ResMut},
     world::{FromWorld, World},
 };
 use bevy_math::{Vec2, Vec4};
@@ -139,7 +139,7 @@ impl SpecializedRenderPipeline for BloomDownsamplingPipeline {
 }
 
 pub fn prepare_downsampling_pipeline(
-    mut commands: ComponentCommands,
+    mut commands: Commands,
     pipeline_cache: Res<PipelineCache>,
     mut pipelines: ResMut<SpecializedRenderPipelines<BloomDownsamplingPipeline>>,
     pipeline: Res<BloomDownsamplingPipeline>,

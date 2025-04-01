@@ -274,7 +274,7 @@ pub fn assert_is_system<In: SystemInput, Out: 'static, Marker>(
 
     // Initialize the system, which will panic if the system has access conflicts.
     let mut worlds = Worlds::new();
-    system.initialize(worlds.get_main_world_mut());
+    system.initialize(&mut worlds);
 }
 
 /// Ensure that a given function is a [read-only system](ReadOnlySystem).
@@ -318,8 +318,8 @@ where
 pub fn assert_system_does_not_conflict<Out, Params, S: IntoSystem<(), Out, Params>>(sys: S) {
     let mut worlds = Worlds::new();
     let mut system = IntoSystem::into_system(sys);
-    system.initialize(worlds);
-    system.run((), worlds);
+    system.initialize(&mut worlds);
+    system.run((), &mut worlds);
 }
 
 #[cfg(test)]
@@ -346,10 +346,10 @@ mod tests {
             Schedule,
         },
         system::{
-            ComponentCommands, In, IntoSystem, Local, NonSend, NonSendMut, ParamSet, Query, Res,
-            ResMut, Single, StaticSystemParam, System, SystemState,
+            Commands, In, IntoSystem, Local, LocalSystemBuilder, NonSend, NonSendMut,
+            ParamSet, Query, Res, ResMut, Single, StaticSystemParam, System, SystemState,
         },
-        world::{DeferredWorld, EntityMut, FromWorld, World},
+        world::{DeferredWorld, EntityMut, FromWorld, World, Worlds},
     };
 
     use super::ScheduleSystem;
@@ -384,12 +384,14 @@ mod tests {
             }
         }
 
-        let mut system = IntoSystem::into_system(sys);
-        let mut world = World::new();
+        let mut worlds = Worlds::new();
+        let id = worlds.create_world();
+        let mut system = sys.build(id);
+        let world = worlds.get_world_mut(id);
         world.spawn(A);
 
-        system.initialize(&mut world);
-        system.run((), &mut world);
+        system.initialize_local(&mut world);
+        system.run_local((), &mut world);
     }
 
     fn run_system<Marker, S: IntoScheduleConfigs<ScheduleSystem, Marker>>(
@@ -1551,7 +1553,7 @@ mod tests {
 
         run_system(
             &mut world,
-            move |mut commands_set: ParamSet<(ComponentCommands, ComponentCommands)>| {
+            move |mut commands_set: ParamSet<(Commands, Commands)>| {
                 commands_set.p0().entity(entity).insert(A);
                 commands_set.p1().entity(entity).insert(B);
             },

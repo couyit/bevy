@@ -845,6 +845,7 @@ mod tests {
     use bevy_ptr::OwningPtr;
 
     use crate::component::ComponentId;
+    use crate::world::Worlds;
     use crate::{
         change_detection::MaybeLocation,
         observer::{Observer, ObserverDescriptor, ObserverState, OnReplace},
@@ -898,10 +899,12 @@ mod tests {
 
     #[test]
     fn observer_order_spawn_despawn() {
-        let mut world = World::new();
+        let mut worlds = Worlds::new();
+        let id = worlds.create_world();
+        let world = worlds.get_world_mut(id);
         world.init_resource::<Order>();
 
-        world.add_observer(|_: Trigger<OnAdd, A>, mut res: ResMut<Order>| res.observed("add"));
+        world.add_observer(|_: Trigger<OnAdd, A>, mut commands: Commands| res.observed("add"));
         world
             .add_observer(|_: Trigger<OnInsert, A>, mut res: ResMut<Order>| res.observed("insert"));
         world.add_observer(|_: Trigger<OnReplace, A>, mut res: ResMut<Order>| {
@@ -997,20 +1000,20 @@ mod tests {
         let mut world = World::new();
         world.init_resource::<Order>();
         world.add_observer(
-            |obs: Trigger<OnAdd, A>, mut res: ResMut<Order>, mut commands: ComponentCommands| {
+            |obs: Trigger<OnAdd, A>, mut res: ResMut<Order>, mut commands: Commands| {
                 res.observed("add_a");
                 commands.entity(obs.target()).insert(B);
             },
         );
         world.add_observer(
-            |obs: Trigger<OnRemove, A>, mut res: ResMut<Order>, mut commands: ComponentCommands| {
+            |obs: Trigger<OnRemove, A>, mut res: ResMut<Order>, mut commands: Commands| {
                 res.observed("remove_a");
                 commands.entity(obs.target()).remove::<B>();
             },
         );
 
         world.add_observer(
-            |obs: Trigger<OnAdd, B>, mut res: ResMut<Order>, mut commands: ComponentCommands| {
+            |obs: Trigger<OnAdd, B>, mut res: ResMut<Order>, mut commands: Commands| {
                 res.observed("add_b");
                 commands.entity(obs.target()).remove::<A>();
             },
@@ -1649,7 +1652,7 @@ mod tests {
     // Originally for https://github.com/bevyengine/bevy/issues/18452
     #[test]
     fn observer_modifies_relationship() {
-        fn on_add(trigger: Trigger<OnAdd, A>, mut commands: ComponentCommands) {
+        fn on_add(trigger: Trigger<OnAdd, A>, mut commands: Commands) {
             commands
                 .entity(trigger.target())
                 .with_related::<crate::hierarchy::ChildOf>(|rsc| {
@@ -1670,7 +1673,7 @@ mod tests {
         let mut world = World::new();
 
         // Observe the removal of A - this will run during despawn
-        world.add_observer(|_: Trigger<OnRemove, A>, mut cmd: ComponentCommands| {
+        world.add_observer(|_: Trigger<OnRemove, A>, mut cmd: Commands| {
             // Spawn a new entity - this reserves a new ID and requires a flush
             // afterward before Entities::free can be called.
             cmd.spawn_empty();
@@ -1696,11 +1699,9 @@ mod tests {
 
         let mut world = World::new();
         // This fails because `ResA` is not present in the world
-        world.add_observer(
-            |_: Trigger<EventA>, _: Res<ResA>, mut commands: ComponentCommands| {
-                commands.insert_resource(ResB);
-            },
-        );
+        world.add_observer(|_: Trigger<EventA>, _: Res<ResA>, mut commands: Commands| {
+            commands.insert_resource(ResB);
+        });
         world.trigger(EventA);
     }
 
@@ -1711,7 +1712,7 @@ mod tests {
 
         let mut world = World::new();
         world.add_observer(
-            |_: Trigger<EventA>, mut params: ParamSet<(Query<Entity>, ComponentCommands)>| {
+            |_: Trigger<EventA>, mut params: ParamSet<(Query<Entity>, Commands)>| {
                 params.p1().insert_resource(ResA);
             },
         );

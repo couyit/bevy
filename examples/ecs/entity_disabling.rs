@@ -38,7 +38,7 @@ struct DisableOnClick;
 fn disable_entities_on_click(
     trigger: Trigger<Pointer<Click>>,
     valid_query: Query<&DisableOnClick>,
-    mut commands: ComponentCommands,
+    mut commands: Commands,
 ) {
     let clicked_entity = trigger.target();
     // Windows and text are entities and can be clicked!
@@ -60,7 +60,7 @@ struct EntityNameText;
 fn list_all_named_entities(
     query: Query<&Name>,
     mut name_text_query: Query<&mut Text, With<EntityNameText>>,
-    mut commands: ComponentCommands,
+    mut commands: Commands,
 ) {
     let mut text_string = String::from("Named entities found:\n");
     // Query iteration order is not guaranteed, so we sort the names
@@ -86,7 +86,7 @@ fn list_all_named_entities(
 }
 
 fn reenable_entities_on_space(
-    mut commands: ComponentCommands,
+    mut commands: Commands,
     // This query can find disabled entities,
     // because it explicitly includes the `Disabled` component.
     disabled_entities: Query<Entity, With<Disabled>>,
@@ -103,7 +103,7 @@ fn reenable_entities_on_space(
 const X_EXTENT: f32 = 900.;
 
 fn setup_scene(
-    mut commands: ComponentCommands,
+    mut commands: Commands,
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<ColorMaterial>>,
 ) {
@@ -138,7 +138,7 @@ fn setup_scene(
     }
 }
 
-fn display_instructions(mut commands: ComponentCommands) {
+fn display_instructions(mut commands: Commands) {
     commands.spawn((
         Text::new(
             "Click an entity to disable it.\n\nPress Space to re-enable all disabled entities.",

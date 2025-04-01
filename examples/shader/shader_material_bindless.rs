@@ -48,7 +48,7 @@ fn main() {
 
 // Creates a simple scene.
 fn setup(
-    mut commands: ComponentCommands,
+    mut commands: Commands,
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<BindlessMaterial>>,
     asset_server: Res<AssetServer>,

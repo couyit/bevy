@@ -124,7 +124,7 @@ const NEW_SCENE_FILE_PATH: &str = "scenes/load_scene_example-new.scn.ron";
 /// instances of the scene's entities as its children. If you modify the
 /// `SCENE_FILE_PATH` scene file, or if you enable file watching, you can see
 /// changes reflected immediately.
-fn load_scene_system(mut commands: ComponentCommands, asset_server: Res<AssetServer>) {
+fn load_scene_system(mut commands: Commands, asset_server: Res<AssetServer>) {
     commands.spawn(DynamicSceneRoot(asset_server.load(SCENE_FILE_PATH)));
 }
 
@@ -212,7 +212,7 @@ fn save_scene_system(world: &mut World) {
 /// check the console output for scene loading/saving messages.
 ///
 /// This system is only necessary for the info message in the UI.
-fn infotext_system(mut commands: ComponentCommands) {
+fn infotext_system(mut commands: Commands) {
     commands.spawn(Camera2d);
     commands.spawn((
         Text::new("Nothing to see in this window! Check the console output!"),

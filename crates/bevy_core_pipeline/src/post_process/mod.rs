@@ -12,7 +12,7 @@ use bevy_ecs::{
     reflect::ReflectComponent,
     resource::Resource,
     schedule::IntoScheduleConfigs as _,
-    system::{lifetimeless::Read, ComponentCommands, Query, Res, ResMut},
+    system::{lifetimeless::Read, Commands, Query, Res, ResMut},
     world::{FromWorld, World},
 };
 use bevy_image::{BevyDefault, Image};
@@ -433,7 +433,7 @@ impl ViewNode for PostProcessingNode {
 
 /// Specializes the built-in postprocessing pipeline for each applicable view.
 pub fn prepare_post_processing_pipelines(
-    mut commands: ComponentCommands,
+    mut commands: Commands,
     pipeline_cache: Res<PipelineCache>,
     mut pipelines: ResMut<SpecializedRenderPipelines<PostProcessingPipeline>>,
     post_processing_pipeline: Res<PostProcessingPipeline>,
@@ -461,7 +461,7 @@ pub fn prepare_post_processing_pipelines(
 /// Gathers the built-in postprocessing settings for every view and uploads them
 /// to the GPU.
 pub fn prepare_post_processing_uniforms(
-    mut commands: ComponentCommands,
+    mut commands: Commands,
     mut post_processing_uniform_buffers: ResMut<PostProcessingUniformBuffers>,
     render_device: Res<RenderDevice>,
     render_queue: Res<RenderQueue>,

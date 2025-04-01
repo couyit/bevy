@@ -420,7 +420,7 @@ mod tests {
 
         impl Resource for T {}
 
-        fn system(In(n): In<usize>, mut commands: ComponentCommands) -> usize {
+        fn system(In(n): In<usize>, mut commands: Commands) -> usize {
             commands.insert_resource(T(n));
             n + 1
         }
@@ -450,7 +450,7 @@ mod tests {
         assert_eq!(*world.resource::<Counter>(), Counter(2));
     }
 
-    fn spawn_entity(mut commands: ComponentCommands) {
+    fn spawn_entity(mut commands: Commands) {
         commands.spawn_empty();
     }
 

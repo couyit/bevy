@@ -47,7 +47,7 @@ use bevy_ecs::{
     reflect::ReflectComponent,
     resource::Resource,
     schedule::IntoScheduleConfigs as _,
-    system::{lifetimeless::Read, ComponentCommands, Query, Res, ResMut},
+    system::{lifetimeless::Read, Commands, Query, Res, ResMut},
     world::{FromWorld, Worlds},
 };
 use bevy_image::{BevyDefault, Image};
@@ -607,7 +607,7 @@ impl SpecializedRenderPipeline for SmaaNeighborhoodBlendingPipeline {
 /// A system, part of the render app, that specializes the three pipelines
 /// needed for SMAA according to each view's SMAA settings.
 fn prepare_smaa_pipelines(
-    mut commands: ComponentCommands,
+    mut commands: Commands,
     pipeline_cache: Res<PipelineCache>,
     mut specialized_render_pipelines: ResMut<SmaaSpecializedRenderPipelines>,
     smaa_pipelines: Res<SmaaPipelines>,
@@ -654,7 +654,7 @@ fn prepare_smaa_pipelines(
 /// A system, part of the render app, that builds the [`SmaaInfoUniform`] data
 /// for each view with SMAA enabled and writes the resulting data to GPU memory.
 fn prepare_smaa_uniforms(
-    mut commands: ComponentCommands,
+    mut commands: Commands,
     render_device: Res<RenderDevice>,
     render_queue: Res<RenderQueue>,
     view_targets: Query<(Entity, &ExtractedView), With<Smaa>>,
@@ -685,7 +685,7 @@ fn prepare_smaa_uniforms(
 /// texture; phase 2 (blend weight calculation) needs a four-channel RGBA
 /// texture.
 fn prepare_smaa_textures(
-    mut commands: ComponentCommands,
+    mut commands: Commands,
     render_device: Res<RenderDevice>,
     mut texture_cache: ResMut<TextureCache>,
     view_targets: Query<(Entity, &ExtractedCamera), (With<ExtractedView>, With<Smaa>)>,
@@ -758,7 +758,7 @@ fn prepare_smaa_textures(
 /// A system, part of the render app, that builds the SMAA bind groups for each
 /// view with SMAA enabled.
 fn prepare_smaa_bind_groups(
-    mut commands: ComponentCommands,
+    mut commands: Commands,
     render_device: Res<RenderDevice>,
     smaa_pipelines: Res<SmaaPipelines>,
     images: Res<RenderAssets<GpuImage>>,

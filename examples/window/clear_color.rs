@@ -13,7 +13,7 @@ fn main() {
         .run();
 }
 
-fn setup(mut commands: ComponentCommands) {
+fn setup(mut commands: Commands) {
     commands.spawn(Camera2d);
 }
 

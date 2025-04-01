@@ -17,7 +17,7 @@ fn main() {
 }
 
 fn setup(
-    mut commands: ComponentCommands,
+    mut commands: Commands,
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<ColorMaterial>>,
     asset_server: Res<AssetServer>,
@@ -75,7 +75,7 @@ fn setup(
 fn update_bloom_settings(
     camera: Single<(Entity, &Tonemapping, Option<&mut Bloom>), With<Camera>>,
     mut text: Single<&mut Text>,
-    mut commands: ComponentCommands,
+    mut commands: Commands,
     keycode: Res<ButtonInput<KeyCode>>,
     time: Res<Time>,
 ) {

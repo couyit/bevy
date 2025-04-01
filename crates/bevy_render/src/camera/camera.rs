@@ -29,7 +29,7 @@ use bevy_ecs::{
     query::Has,
     reflect::ReflectComponent,
     resource::Resource,
-    system::{ComponentCommands, Query, Res, ResMut},
+    system::{Commands, Query, Res, ResMut},
     world::DeferredWorld,
 };
 use bevy_image::Image;
@@ -1091,7 +1091,7 @@ pub struct ExtractedCamera {
 }
 
 pub fn extract_cameras(
-    mut commands: ComponentCommands,
+    mut commands: Commands,
     query: Extract<
         Query<(
             Entity,

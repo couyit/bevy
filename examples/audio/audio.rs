@@ -10,7 +10,7 @@ fn main() {
         .run();
 }
 
-fn setup(asset_server: Res<AssetServer>, mut commands: ComponentCommands) {
+fn setup(asset_server: Res<AssetServer>, mut commands: Commands) {
     commands.spawn(AudioPlayer::new(
         asset_server.load("sounds/Windless Slopes.ogg"),
     ));

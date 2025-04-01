@@ -348,7 +348,7 @@ impl FromWorld for TonemappingPipeline {
 pub struct ViewTonemappingPipeline(CachedRenderPipelineId);
 
 pub fn prepare_view_tonemapping_pipelines(
-    mut commands: ComponentCommands,
+    mut commands: Commands,
     pipeline_cache: Res<PipelineCache>,
     mut pipelines: ResMut<SpecializedRenderPipelines<TonemappingPipeline>>,
     upscaling_pipeline: Res<TonemappingPipeline>,

@@ -2,7 +2,7 @@ use core::hint::black_box;
 
 use bevy_ecs::{
     component::Component,
-    system::{Command, ComponentCommands},
+    system::{Command, Commands},
     world::{CommandQueue, World},
 };
 use criterion::Criterion;
@@ -42,7 +42,7 @@ pub fn spawn_commands(criterion: &mut Criterion) {
             let mut command_queue = CommandQueue::default();
 
             bencher.iter(|| {
-                let mut commands = ComponentCommands::new(&mut command_queue, &world);
+                let mut commands = Commands::new(&mut command_queue, &world);
                 for i in 0..entity_count {
                     let mut entity = commands.spawn_empty();
                     entity
@@ -83,7 +83,7 @@ pub fn insert_commands(criterion: &mut Criterion) {
         }
 
         bencher.iter(|| {
-            let mut commands = ComponentCommands::new(&mut command_queue, &world);
+            let mut commands = Commands::new(&mut command_queue, &world);
             for entity in &entities {
                 commands
                     .entity(*entity)
@@ -101,7 +101,7 @@ pub fn insert_commands(criterion: &mut Criterion) {
         }
 
         bencher.iter(|| {
-            let mut commands = ComponentCommands::new(&mut command_queue, &world);
+            let mut commands = Commands::new(&mut command_queue, &world);
             let mut values = Vec::with_capacity(entity_count);
             for entity in &entities {
                 values.push((*entity, (Matrix::default(), Vec3::default())));
@@ -123,7 +123,7 @@ pub fn insert_commands(criterion: &mut Criterion) {
         }
 
         bencher.iter(|| {
-            let mut commands = ComponentCommands::new(&mut command_queue, &world);
+            let mut commands = Commands::new(&mut command_queue, &world);
             let mut values = Vec::with_capacity(entity_count);
             for entity in &entities {
                 values.push((*entity, (Matrix::default(), Vec3::default())));
@@ -164,7 +164,7 @@ pub fn fake_commands(criterion: &mut Criterion) {
             let mut command_queue = CommandQueue::default();
 
             bencher.iter(|| {
-                let mut commands = ComponentCommands::new(&mut command_queue, &world);
+                let mut commands = Commands::new(&mut command_queue, &world);
                 for i in 0..command_count {
                     if black_box(i % 2 == 0) {
                         commands.queue(FakeCommandA);
@@ -209,7 +209,7 @@ pub fn sized_commands_impl<T: Default + Command>(criterion: &mut Criterion) {
             let mut command_queue = CommandQueue::default();
 
             bencher.iter(|| {
-                let mut commands = ComponentCommands::new(&mut command_queue, &world);
+                let mut commands = Commands::new(&mut command_queue, &world);
                 for _ in 0..command_count {
                     commands.queue(T::default());
                 }

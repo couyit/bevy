@@ -44,7 +44,7 @@ fn main() {
     //
     // Then, we'll spawn Devon, who will target Charlie,
     // creating a more complex graph with a branching structure.
-    fn spawning_entities_with_relationships(mut commands: ComponentCommands) {
+    fn spawning_entities_with_relationships(mut commands: Commands) {
         // Calling .id() after spawning an entity will return the `Entity` identifier of the spawned entity,
         // even though the entity itself is not yet instantiated in the world.
         // This works because Commands will reserve the entity ID before actually spawning the entity,
@@ -112,7 +112,7 @@ fn main() {
     // but we can insert a new `Targeting` component to replace the old one.
     // This allows the hooks on the `Targeting` component to update the `TargetedBy` component correctly.
     // The `TargetedBy` component will be updated automatically!
-    fn mutate_relationships(name_query: Query<(Entity, &Name)>, mut commands: ComponentCommands) {
+    fn mutate_relationships(name_query: Query<(Entity, &Name)>, mut commands: Commands) {
         // Let's find Devon by doing a linear scan of the entity names.
         let devon = name_query
             .iter()
@@ -190,7 +190,7 @@ fn main() {
     assert!(cycle_result.is_err());
 
     // Now, let's demonstrate removing relationships and break the cycle.
-    fn untarget(mut commands: ComponentCommands, name_query: Query<(Entity, &Name)>) {
+    fn untarget(mut commands: Commands, name_query: Query<(Entity, &Name)>) {
         // Let's find Charlie by doing a linear scan of the entity names.
         let charlie = name_query
             .iter()

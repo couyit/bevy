@@ -141,7 +141,7 @@ pub fn extract_morphs(
 // NOTE: Because morph targets require per-morph target texture bindings, they cannot
 // currently be batched.
 pub fn no_automatic_morph_batching(
-    mut commands: ComponentCommands,
+    mut commands: Commands,
     query: Query<Entity, (With<MeshMorphWeights>, Without<NoAutomaticBatching>)>,
 ) {
     for entity in &query {

@@ -97,7 +97,7 @@ const DEFAULT_RENDER_LAYER: usize = 0;
 const VIEW_MODEL_RENDER_LAYER: usize = 1;
 
 fn spawn_view_model(
-    mut commands: ComponentCommands,
+    mut commands: Commands,
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<StandardMaterial>>,
 ) {
@@ -148,7 +148,7 @@ fn spawn_view_model(
 }
 
 fn spawn_world_model(
-    mut commands: ComponentCommands,
+    mut commands: Commands,
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<StandardMaterial>>,
 ) {
@@ -174,7 +174,7 @@ fn spawn_world_model(
     ));
 }
 
-fn spawn_lights(mut commands: ComponentCommands) {
+fn spawn_lights(mut commands: Commands) {
     commands.spawn((
         PointLight {
             color: Color::from(tailwind::ROSE_300),
@@ -187,7 +187,7 @@ fn spawn_lights(mut commands: ComponentCommands) {
     ));
 }
 
-fn spawn_text(mut commands: ComponentCommands) {
+fn spawn_text(mut commands: Commands) {
     commands
         .spawn(Node {
             position_type: PositionType::Absolute,

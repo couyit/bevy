@@ -90,7 +90,7 @@ const RESET_FOCUS: [f32; 3] = [
     BOARD_SIZE_J as f32 / 2.0 - 0.5,
 ];
 
-fn setup_cameras(mut commands: ComponentCommands, mut game: ResMut<Game>) {
+fn setup_cameras(mut commands: Commands, mut game: ResMut<Game>) {
     game.camera_should_focus = Vec3::from(RESET_FOCUS);
     game.camera_is_focus = game.camera_should_focus;
     commands.spawn((
@@ -104,7 +104,7 @@ fn setup_cameras(mut commands: ComponentCommands, mut game: ResMut<Game>) {
     ));
 }
 
-fn setup(mut commands: ComponentCommands, asset_server: Res<AssetServer>, mut game: ResMut<Game>) {
+fn setup(mut commands: Commands, asset_server: Res<AssetServer>, mut game: ResMut<Game>) {
     let mut rng = if std::env::var("GITHUB_ACTIONS") == Ok("true".to_string()) {
         // We're seeding the PRNG here to make this example deterministic for testing purposes.
         // This isn't strictly required in practical use unless you need your app to be deterministic.
@@ -198,7 +198,7 @@ fn setup(mut commands: ComponentCommands, asset_server: Res<AssetServer>, mut ga
 
 // control the game character
 fn move_player(
-    mut commands: ComponentCommands,
+    mut commands: Commands,
     keyboard_input: Res<ButtonInput<KeyCode>>,
     mut game: ResMut<Game>,
     mut transforms: Query<&mut Transform>,
@@ -310,7 +310,7 @@ fn spawn_bonus(
     time: Res<Time>,
     mut timer: ResMut<BonusSpawnTimer>,
     mut next_state: ResMut<NextState<GameState>>,
-    mut commands: ComponentCommands,
+    mut commands: Commands,
     mut game: ResMut<Game>,
     mut rng: ResMut<Random>,
 ) {
@@ -388,7 +388,7 @@ fn game_over_keyboard(
 }
 
 // display the number of cake eaten before losing
-fn display_score(mut commands: ComponentCommands, game: Res<Game>) {
+fn display_score(mut commands: Commands, game: Res<Game>) {
     commands.spawn((
         StateScoped(GameState::GameOver),
         Node {

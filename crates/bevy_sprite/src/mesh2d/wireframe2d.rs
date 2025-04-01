@@ -102,7 +102,7 @@ struct GlobalWireframe2dMaterial {
 }
 
 fn setup_global_wireframe_material(
-    mut commands: ComponentCommands,
+    mut commands: Commands,
     mut materials: ResMut<Assets<Wireframe2dMaterial>>,
     config: Res<Wireframe2dConfig>,
 ) {
@@ -143,7 +143,7 @@ fn wireframe_color_changed(
 /// Applies or remove the wireframe material to any mesh with a [`Wireframe2d`] component, and removes it
 /// for any mesh with a [`NoWireframe2d`] component.
 fn apply_wireframe_material(
-    mut commands: ComponentCommands,
+    mut commands: Commands,
     mut materials: ResMut<Assets<Wireframe2dMaterial>>,
     wireframes: Query<
         (Entity, Option<&Wireframe2dColor>),
@@ -187,7 +187,7 @@ type Wireframe2dFilter = (With<Mesh2d>, Without<Wireframe2d>, Without<NoWirefram
 
 /// Applies or removes a wireframe material on any mesh without a [`Wireframe2d`] or [`NoWireframe2d`] component.
 fn apply_global_wireframe_material(
-    mut commands: ComponentCommands,
+    mut commands: Commands,
     config: Res<Wireframe2dConfig>,
     meshes_without_material: Query<
         Entity,

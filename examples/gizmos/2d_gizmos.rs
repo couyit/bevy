@@ -17,7 +17,7 @@ fn main() {
 #[derive(Default, Reflect, GizmoConfigGroup)]
 struct MyRoundGizmos {}
 
-fn setup(mut commands: ComponentCommands) {
+fn setup(mut commands: Commands) {
     commands.spawn(Camera2d);
     // text
     commands.spawn((

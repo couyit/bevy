@@ -41,7 +41,7 @@ fn main() {
         .run();
 }
 
-fn setup(mut commands: ComponentCommands) {
+fn setup(mut commands: Commands) {
     // We need to spawn a camera (2d or 3d) to see the overlay
     commands.spawn(Camera2d);
 

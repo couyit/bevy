@@ -65,7 +65,7 @@ enum SimulationSet {
 // This system randomly spawns a new entity in 60% of all frames
 // The entity will start with an age of 0 frames
 // If an entity gets spawned, we increase the counter in the EntityCounter resource
-fn spawn_entities(mut commands: ComponentCommands, mut entity_counter: ResMut<EntityCounter>) {
+fn spawn_entities(mut commands: Commands, mut entity_counter: ResMut<EntityCounter>) {
     if rand::thread_rng().gen_bool(0.6) {
         let entity_id = commands.spawn(Age::default()).id();
         println!("    spawning {entity_id:?}");
@@ -99,7 +99,7 @@ fn age_all_entities(mut entities: Query<&mut Age>) {
 }
 
 // This system iterates over all entities in every frame and despawns entities older than 2 frames
-fn remove_old_entities(mut commands: ComponentCommands, entities: Query<(Entity, &Age)>) {
+fn remove_old_entities(mut commands: Commands, entities: Query<(Entity, &Age)>) {
     for (entity, age) in &entities {
         if age.frames > 2 {
             println!("    despawning {entity} due to age > 2");

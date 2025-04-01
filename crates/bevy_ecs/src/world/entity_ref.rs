@@ -5976,7 +5976,7 @@ mod tests {
         let entity = world
             .spawn_empty()
             .observe(
-                |trigger: Trigger<TestEvent>, mut commands: ComponentCommands| {
+                |trigger: Trigger<TestEvent>, mut commands: Commands| {
                     commands.entity(trigger.target()).insert(TestComponent(0));
                 },
             )
@@ -5998,7 +5998,7 @@ mod tests {
         let mut worlds = Worlds::new();
         let world = worlds.get_world_mut(worlds.create_world());
         world.add_observer(
-            |trigger: Trigger<OnAdd, TestComponent>, mut commands: ComponentCommands| {
+            |trigger: Trigger<OnAdd, TestComponent>, mut commands: Commands| {
                 commands.entity(trigger.target()).despawn();
             },
         );
@@ -6021,12 +6021,12 @@ mod tests {
         let world = worlds.get_world_mut(worlds.create_world());
         world.insert_resource(TestFlush(0));
         world.add_observer(
-            |_: Trigger<OnAdd, TestComponent>, mut commands: ComponentCommands| {
+            |_: Trigger<OnAdd, TestComponent>, mut commands: Commands| {
                 commands.queue(count_flush);
             },
         );
         world.add_observer(
-            |_: Trigger<OnRemove, TestComponent>, mut commands: ComponentCommands| {
+            |_: Trigger<OnRemove, TestComponent>, mut commands: Commands| {
                 commands.queue(count_flush);
             },
         );

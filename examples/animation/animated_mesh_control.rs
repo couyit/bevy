@@ -27,7 +27,7 @@ struct Animations {
 }
 
 fn setup(
-    mut commands: ComponentCommands,
+    mut commands: Commands,
     asset_server: Res<AssetServer>,
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<StandardMaterial>>,
@@ -103,7 +103,7 @@ fn setup(
 // An `AnimationPlayer` is automatically added to the scene when it's ready.
 // When the player is added, start the animation.
 fn setup_scene_once_loaded(
-    mut commands: ComponentCommands,
+    mut commands: Commands,
     animations: Res<Animations>,
     mut players: Query<(Entity, &mut AnimationPlayer), Added<AnimationPlayer>>,
 ) {

@@ -120,7 +120,7 @@ struct AnimationEvent {
 }
 
 impl AnimationEvent {
-    fn trigger(&self, commands: &mut ComponentCommands, entity: Entity, time: f32, weight: f32) {
+    fn trigger(&self, commands: &mut Commands, entity: Entity, time: f32, weight: f32) {
         (self.trigger.0)(commands, entity, time, weight);
     }
 }
@@ -128,7 +128,7 @@ impl AnimationEvent {
 #[derive(Reflect, Clone)]
 #[reflect(opaque)]
 #[reflect(Clone, Default, Debug)]
-struct AnimationEventFn(Arc<dyn Fn(&mut ComponentCommands, Entity, f32, f32) + Send + Sync>);
+struct AnimationEventFn(Arc<dyn Fn(&mut Commands, Entity, f32, f32) + Send + Sync>);
 
 impl Default for AnimationEventFn {
     fn default() -> Self {
@@ -333,7 +333,7 @@ impl AnimationClip {
     pub fn add_event(&mut self, time: f32, event: impl Event + Clone) {
         self.add_event_fn(
             time,
-            move |commands: &mut ComponentCommands, entity: Entity, _time: f32, _weight: f32| {
+            move |commands: &mut Commands, entity: Entity, _time: f32, _weight: f32| {
                 commands.entity(entity).trigger(event.clone());
             },
         );
@@ -354,7 +354,7 @@ impl AnimationClip {
         self.add_event_fn_to_target(
             target_id,
             time,
-            move |commands: &mut ComponentCommands, entity: Entity, _time: f32, _weight: f32| {
+            move |commands: &mut Commands, entity: Entity, _time: f32, _weight: f32| {
                 commands.entity(entity).trigger(event.clone());
             },
         );
@@ -378,7 +378,7 @@ impl AnimationClip {
     pub fn add_event_fn(
         &mut self,
         time: f32,
-        func: impl Fn(&mut ComponentCommands, Entity, f32, f32) + Send + Sync + 'static,
+        func: impl Fn(&mut Commands, Entity, f32, f32) + Send + Sync + 'static,
     ) {
         self.add_event_internal(AnimationEventTarget::Root, time, func);
     }
@@ -402,7 +402,7 @@ impl AnimationClip {
         &mut self,
         target_id: AnimationTargetId,
         time: f32,
-        func: impl Fn(&mut ComponentCommands, Entity, f32, f32) + Send + Sync + 'static,
+        func: impl Fn(&mut Commands, Entity, f32, f32) + Send + Sync + 'static,
     ) {
         self.add_event_internal(AnimationEventTarget::Node(target_id), time, func);
     }
@@ -411,7 +411,7 @@ impl AnimationClip {
         &mut self,
         target: AnimationEventTarget,
         time: f32,
-        trigger_fn: impl Fn(&mut ComponentCommands, Entity, f32, f32) + Send + Sync + 'static,
+        trigger_fn: impl Fn(&mut Commands, Entity, f32, f32) + Send + Sync + 'static,
     ) {
         self.duration = self.duration.max(time);
         let triggers = self.events.entry(target).or_default();
@@ -941,7 +941,7 @@ impl AnimationPlayer {
 
 /// A system that triggers untargeted animation events for the currently-playing animations.
 fn trigger_untargeted_animation_events(
-    mut commands: ComponentCommands,
+    mut commands: Commands,
     clips: Res<Assets<AnimationClip>>,
     graphs: Res<Assets<AnimationGraph>>,
     players: Query<(Entity, &AnimationPlayer, &AnimationGraphHandle)>,

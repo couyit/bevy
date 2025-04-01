@@ -23,7 +23,7 @@ fn main() {
 const X_EXTENT: f32 = 900.;
 
 fn setup(
-    mut commands: ComponentCommands,
+    mut commands: Commands,
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<ColorMaterial>>,
 ) {

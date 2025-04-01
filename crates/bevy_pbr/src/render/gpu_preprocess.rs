@@ -23,7 +23,7 @@ use bevy_ecs::{
     query::{Has, Or, QueryState, With, Without},
     resource::Resource,
     schedule::IntoScheduleConfigs as _,
-    system::{lifetimeless::Read, ComponentCommands, Query, Res, ResMut},
+    system::{lifetimeless::Read, Commands, Query, Res, ResMut},
     world::{FromWorld, World},
 };
 use bevy_render::batching::gpu_preprocessing::{
@@ -1734,7 +1734,7 @@ impl BuildIndirectParametersPipeline {
     reason = "it's a system that needs a lot of arguments"
 )]
 pub fn prepare_preprocess_bind_groups(
-    mut commands: ComponentCommands,
+    mut commands: Commands,
     views: Query<(Entity, &ExtractedView)>,
     view_depth_pyramids: Query<(&ViewDepthPyramid, &PreviousViewUniformOffset)>,
     render_device: Res<RenderDevice>,
@@ -2511,7 +2511,7 @@ impl<'a> PreprocessBindGroupBuilder<'a> {
 /// data buffers for the indirect batch set reset shader and the indirect
 /// parameter building shader.
 fn create_build_indirect_parameters_bind_groups(
-    commands: &mut ComponentCommands,
+    commands: &mut Commands,
     render_device: &RenderDevice,
     pipelines: &PreprocessPipelines,
     current_input_buffer: &Buffer,

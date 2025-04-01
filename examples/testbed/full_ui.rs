@@ -24,7 +24,7 @@ fn main() {
     app.run();
 }
 
-fn setup(mut commands: ComponentCommands, asset_server: Res<AssetServer>) {
+fn setup(mut commands: Commands, asset_server: Res<AssetServer>) {
     // Camera
     commands.spawn((Camera2d, IsDefaultUiCamera, BoxShadowSamples(6)));
 

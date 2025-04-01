@@ -63,7 +63,7 @@ use crate::{
     removal_detection::RemovedComponentEvents,
     resource::Resource,
     schedule::{Schedule, ScheduleLabel, Schedules},
-    system::ComponentCommands,
+    system::Commands,
     world::{
         command_queue::RawCommandQueue,
         error::{
@@ -928,10 +928,10 @@ impl World {
     /// Creates a new [`Commands`] instance that writes to the world's command queue
     /// Use [`World::flush`] to apply all queued commands
     #[inline]
-    pub fn commands(&mut self) -> ComponentCommands {
+    pub fn commands(&mut self) -> Commands {
         // SAFETY: command_queue is stored on world and always valid while the world exists
         unsafe {
-            ComponentCommands::new_raw_from_entities(self.command_queue.clone(), self.entities())
+            Commands::new_raw_from_entities(self.command_queue.clone(), self.entities())
         }
     }
 
@@ -1368,7 +1368,7 @@ impl World {
     /// # assert_eq!(world.get::<TargetedBy>(e1).unwrap().0, eid);
     /// # assert_eq!(world.get::<TargetedBy>(e2).unwrap().0, eid);
     /// ```
-    pub fn entities_and_commands(&mut self) -> (EntityFetcher, ComponentCommands) {
+    pub fn entities_and_commands(&mut self) -> (EntityFetcher, Commands) {
         let cell = self.as_unsafe_world_cell();
         // SAFETY: `&mut self` gives mutable access to the entire world, and prevents simultaneous access.
         let fetcher = unsafe { EntityFetcher::new(cell) };
@@ -1378,7 +1378,7 @@ impl World {
         let raw_queue = unsafe { cell.get_raw_command_queue() };
         // SAFETY: `&mut self` ensures the commands does not outlive the world.
         let commands =
-            unsafe { ComponentCommands::new_raw_from_entities(raw_queue, cell.entities()) };
+            unsafe { Commands::new_raw_from_entities(raw_queue, cell.entities()) };
 
         (fetcher, commands)
     }

@@ -120,7 +120,7 @@ impl ViewNode for MsaaWritebackNode {
 pub struct MsaaWritebackBlitPipeline(CachedRenderPipelineId);
 
 fn prepare_msaa_writeback_pipelines(
-    mut commands: ComponentCommands,
+    mut commands: Commands,
     pipeline_cache: Res<PipelineCache>,
     mut pipelines: ResMut<SpecializedRenderPipelines<BlitPipeline>>,
     blit_pipeline: Res<BlitPipeline>,

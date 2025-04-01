@@ -26,7 +26,7 @@ pub(super) struct ExtractedStateBuffers {
 }
 
 pub(super) fn extract_buffers(
-    mut commands: ComponentCommands,
+    mut commands: Commands,
     changed: Extract<Query<(RenderEntity, &AutoExposure), Changed<AutoExposure>>>,
     mut removed: Extract<RemovedComponents<AutoExposure>>,
 ) {

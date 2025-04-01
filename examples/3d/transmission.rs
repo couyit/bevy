@@ -63,7 +63,7 @@ fn main() {
 
 /// set up a simple 3D scene
 fn setup(
-    mut commands: ComponentCommands,
+    mut commands: Commands,
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<StandardMaterial>>,
     asset_server: Res<AssetServer>,
@@ -381,7 +381,7 @@ impl Default for ExampleState {
 }
 
 fn example_control_system(
-    mut commands: ComponentCommands,
+    mut commands: Commands,
     mut materials: ResMut<Assets<StandardMaterial>>,
     controllable: Query<(&MeshMaterial3d<StandardMaterial>, &ExampleControls)>,
     camera: Single<

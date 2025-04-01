@@ -3,7 +3,7 @@
 use bevy_ecs::{
     entity::Entity,
     query::{Has, With},
-    system::{ComponentCommands, Local, Query, Res, ResMut},
+    system::{Commands, Local, Query, Res, ResMut},
 };
 use bevy_math::{
     ops::{self, sin_cos},
@@ -144,7 +144,7 @@ impl ClusterableObjectType {
 
 // NOTE: Run this before update_point_light_frusta!
 pub(crate) fn assign_objects_to_clusters(
-    mut commands: ComponentCommands,
+    mut commands: Commands,
     mut global_clusterable_objects: ResMut<GlobalVisibleClusterableObjects>,
     mut views: Query<(
         Entity,

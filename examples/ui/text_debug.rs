@@ -30,7 +30,7 @@ fn main() {
 #[derive(Component)]
 struct TextChanges;
 
-fn infotext_system(mut commands: ComponentCommands, asset_server: Res<AssetServer>) {
+fn infotext_system(mut commands: Commands, asset_server: Res<AssetServer>) {
     let font = asset_server.load("fonts/FiraSans-Bold.ttf");
     let background_color = MAROON.into();
     commands.spawn(Camera2d);

@@ -1434,7 +1434,7 @@ mod tests {
         removal_detection::RemovedComponents,
         resource::Resource,
         schedule::{IntoScheduleConfigs, ScheduleLabel},
-        system::{ComponentCommands, Query},
+        system::{Commands, Query},
         world::{FromWorld, World},
     };
 
@@ -1512,11 +1512,11 @@ mod tests {
     #[derive(ScheduleLabel, Hash, Clone, PartialEq, Eq, Debug)]
     struct EnterMainMenu;
 
-    fn bar(mut commands: ComponentCommands) {
+    fn bar(mut commands: Commands) {
         commands.spawn_empty();
     }
 
-    fn foo(mut commands: ComponentCommands) {
+    fn foo(mut commands: Commands) {
         commands.spawn_empty();
     }
 
@@ -1648,7 +1648,7 @@ mod tests {
         let mut app = App::new();
         app.world_mut().spawn_batch(core::iter::repeat_n(Foo, 5));
 
-        fn despawn_one_foo(mut commands: ComponentCommands, foos: Query<Entity, With<Foo>>) {
+        fn despawn_one_foo(mut commands: Commands, foos: Query<Entity, With<Foo>>) {
             if let Some(e) = foos.iter().next() {
                 commands.entity(e).despawn();
             };

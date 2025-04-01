@@ -7,7 +7,7 @@ use bevy_app::{App, Plugin};
 use bevy_ecs::{
     prelude::{Component, Entity},
     schedule::IntoScheduleConfigs,
-    system::{ComponentCommands, Query, Res, ResMut},
+    system::{Commands, Query, Res, ResMut},
 };
 use core::marker::PhantomData;
 
@@ -41,7 +41,7 @@ impl<C: Component + GpuArrayBufferable> Default for GpuComponentArrayBufferPlugi
 }
 
 fn prepare_gpu_component_array_buffers<C: Component + GpuArrayBufferable>(
-    mut commands: ComponentCommands,
+    mut commands: Commands,
     render_device: Res<RenderDevice>,
     render_queue: Res<RenderQueue>,
     mut gpu_array_buffer: ResMut<GpuArrayBuffer<C>>,

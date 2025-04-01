@@ -217,7 +217,7 @@ impl FromWorld for ShadowSamplers {
 }
 
 pub fn extract_lights(
-    mut commands: ComponentCommands,
+    mut commands: Commands,
     point_light_shadow_map: Extract<Res<PointLightShadowMap>>,
     directional_light_shadow_map: Extract<Res<DirectionalLightShadowMap>>,
     global_point_lights: Extract<Res<GlobalVisibleClusterableObjects>>,
@@ -523,7 +523,7 @@ pub struct LightViewEntities(EntityHashMap<Vec<Entity>>);
 // TODO: using required component
 pub(crate) fn add_light_view_entities(
     trigger: Trigger<OnAdd, (ExtractedDirectionalLight, ExtractedPointLight)>,
-    mut commands: ComponentCommands,
+    mut commands: Commands,
 ) {
     if let Ok(mut v) = commands.get_entity(trigger.target()) {
         v.insert(LightViewEntities::default());
@@ -533,7 +533,7 @@ pub(crate) fn add_light_view_entities(
 /// Removes [`LightViewEntities`] when light is removed. See [`add_light_view_entities`].
 pub(crate) fn extracted_light_removed(
     trigger: Trigger<OnRemove, (ExtractedDirectionalLight, ExtractedPointLight)>,
-    mut commands: ComponentCommands,
+    mut commands: Commands,
 ) {
     if let Ok(mut v) = commands.get_entity(trigger.target()) {
         v.try_remove::<LightViewEntities>();
@@ -543,7 +543,7 @@ pub(crate) fn extracted_light_removed(
 pub(crate) fn remove_light_view_entities(
     trigger: Trigger<OnRemove, LightViewEntities>,
     query: Query<&LightViewEntities>,
-    mut commands: ComponentCommands,
+    mut commands: Commands,
 ) {
     if let Ok(entities) = query.get(trigger.target()) {
         for v in entities.0.values() {
@@ -716,7 +716,7 @@ pub(crate) fn spot_light_clip_from_view(angle: f32, near_z: f32) -> Mat4 {
 }
 
 pub fn prepare_lights(
-    mut commands: ComponentCommands,
+    mut commands: Commands,
     mut texture_cache: ResMut<TextureCache>,
     (render_device, render_queue): (Res<RenderDevice>, Res<RenderQueue>),
     mut global_light_meta: ResMut<GlobalClusterableObjectMeta>,
@@ -1612,7 +1612,7 @@ pub fn prepare_lights(
     shadow_render_phases.retain(|entity, _| live_shadow_mapping_lights.contains(entity));
 }
 
-fn despawn_entities(commands: &mut ComponentCommands, entities: Vec<Entity>) {
+fn despawn_entities(commands: &mut Commands, entities: Vec<Entity>) {
     if entities.is_empty() {
         return;
     }

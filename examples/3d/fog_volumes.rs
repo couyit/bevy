@@ -28,7 +28,7 @@ fn main() {
 }
 
 /// Spawns all the objects in the scene.
-fn setup(mut commands: ComponentCommands, asset_server: Res<AssetServer>) {
+fn setup(mut commands: Commands, asset_server: Res<AssetServer>) {
     // Spawn a fog volume with a voxelized version of the Stanford bunny.
     commands.spawn((
         Transform::from_xyz(0.0, 0.5, 0.0),

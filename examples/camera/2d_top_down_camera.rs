@@ -29,7 +29,7 @@ fn main() {
 }
 
 fn setup_scene(
-    mut commands: ComponentCommands,
+    mut commands: Commands,
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<ColorMaterial>>,
 ) {
@@ -48,7 +48,7 @@ fn setup_scene(
     ));
 }
 
-fn setup_instructions(mut commands: ComponentCommands) {
+fn setup_instructions(mut commands: Commands) {
     commands.spawn((
         Text::new("Move the light with WASD.\nThe camera will smoothly track the light."),
         Node {
@@ -60,7 +60,7 @@ fn setup_instructions(mut commands: ComponentCommands) {
     ));
 }
 
-fn setup_camera(mut commands: ComponentCommands) {
+fn setup_camera(mut commands: Commands) {
     commands.spawn((
         Camera2d,
         Camera {

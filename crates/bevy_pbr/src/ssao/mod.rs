@@ -12,7 +12,7 @@ use bevy_ecs::{
     reflect::ReflectComponent,
     resource::Resource,
     schedule::IntoScheduleConfigs,
-    system::{ComponentCommands, Query, Res, ResMut},
+    system::{Commands, Query, Res, ResMut},
     world::{FromWorld, World},
 };
 use bevy_reflect::{std_traits::ReflectDefault, Reflect};
@@ -507,7 +507,7 @@ impl SpecializedComputePipeline for SsaoPipelines {
 }
 
 fn extract_ssao_settings(
-    mut commands: ComponentCommands,
+    mut commands: Commands,
     cameras: Extract<
         Query<
             (RenderEntity, &Camera, &ScreenSpaceAmbientOcclusion, &Msaa),
@@ -544,7 +544,7 @@ pub struct ScreenSpaceAmbientOcclusionResources {
 }
 
 fn prepare_ssao_textures(
-    mut commands: ComponentCommands,
+    mut commands: Commands,
     mut texture_cache: ResMut<TextureCache>,
     render_device: Res<RenderDevice>,
     views: Query<(Entity, &ExtractedCamera, &ScreenSpaceAmbientOcclusion)>,
@@ -637,7 +637,7 @@ fn prepare_ssao_textures(
 struct SsaoPipelineId(CachedComputePipelineId);
 
 fn prepare_ssao_pipelines(
-    mut commands: ComponentCommands,
+    mut commands: Commands,
     pipeline_cache: Res<PipelineCache>,
     mut pipelines: ResMut<SpecializedComputePipelines<SsaoPipelines>>,
     pipeline: Res<SsaoPipelines>,
@@ -666,7 +666,7 @@ struct SsaoBindGroups {
 }
 
 fn prepare_ssao_bind_groups(
-    mut commands: ComponentCommands,
+    mut commands: Commands,
     render_device: Res<RenderDevice>,
     pipelines: Res<SsaoPipelines>,
     view_uniforms: Res<ViewUniforms>,

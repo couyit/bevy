@@ -441,7 +441,7 @@ pub fn pointer_events(
     previous_hover_map: Res<PreviousHoverMap>,
     mut pointer_state: ResMut<PointerState>,
     // Output
-    mut commands: ComponentCommands,
+    mut commands: Commands,
     mut event_writers: PickingEventWriters,
 ) {
     // Setup utilities

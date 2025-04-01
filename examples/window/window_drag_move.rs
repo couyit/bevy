@@ -55,7 +55,7 @@ fn main() {
         .run();
 }
 
-fn setup(mut commands: ComponentCommands) {
+fn setup(mut commands: Commands) {
     // Camera
     commands.spawn(Camera3d::default());
 

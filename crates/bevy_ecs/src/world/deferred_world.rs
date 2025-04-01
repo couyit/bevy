@@ -11,7 +11,7 @@ use crate::{
     query::{QueryData, QueryFilter},
     relationship::RelationshipHookMode,
     resource::Resource,
-    system::{ComponentCommands, Query},
+    system::{Commands, Query},
     traversal::Traversal,
     world::{error::EntityMutableFetchError, EntityFetcher, WorldEntityFetch},
 };
@@ -437,7 +437,7 @@ impl<'w> DeferredWorld<'w> {
     /// # assert_eq!(_world.get::<TargetedBy>(e1).unwrap().0, eid);
     /// # assert_eq!(_world.get::<TargetedBy>(e2).unwrap().0, eid);
     /// ```
-    pub fn entities_and_commands(&mut self) -> (EntityFetcher, ComponentCommands) {
+    pub fn entities_and_commands(&mut self) -> (EntityFetcher, Commands) {
         // SAFETY: `&mut self` gives mutable access to the entire world, and prevents simultaneous access.
         let fetcher = unsafe { EntityFetcher::new(self.world.as_unsafe_world_cell()) };
         // SAFETY:
@@ -446,7 +446,7 @@ impl<'w> DeferredWorld<'w> {
         let raw_queue = unsafe { self.worlds.get_raw_command_queue() };
         // SAFETY: `&mut self` ensures the commands does not outlive the world.
         let commands =
-            unsafe { ComponentCommands::new_raw_from_entities(raw_queue, self.entities()) };
+            unsafe { Commands::new_raw_from_entities(raw_queue, self.entities()) };
 
         (fetcher, commands)
     }

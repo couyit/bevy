@@ -10,7 +10,7 @@ fn main() {
 }
 
 fn setup(
-    mut commands: ComponentCommands,
+    mut commands: Commands,
     asset_server: Res<AssetServer>,
     meshes: Res<Assets<Mesh>>,
     mut materials: ResMut<Assets<StandardMaterial>>,

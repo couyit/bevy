@@ -108,7 +108,7 @@ pub(crate) fn play_queued_audio_system<Source: Asset + Decodable>(
     >,
     ear_positions: EarPositions,
     default_spatial_scale: Res<DefaultSpatialScale>,
-    mut commands: ComponentCommands,
+    mut commands: Commands,
 ) where
     f32: rodio::cpal::FromSample<Source::DecoderItem>,
 {
@@ -232,7 +232,7 @@ pub(crate) fn play_queued_audio_system<Source: Asset + Decodable>(
 }
 
 pub(crate) fn cleanup_finished_audio<T: Decodable + Asset>(
-    mut commands: ComponentCommands,
+    mut commands: Commands,
     query_nonspatial_despawn: Query<
         (Entity, &AudioSink),
         (With<PlaybackDespawnMarker>, With<AudioPlayer<T>>),

@@ -176,7 +176,7 @@ struct ScoreboardUi;
 
 // Add the game's entities to our world
 fn setup(
-    mut commands: ComponentCommands,
+    mut commands: Commands,
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<ColorMaterial>>,
     asset_server: Res<AssetServer>,
@@ -338,7 +338,7 @@ fn update_scoreboard(
 }
 
 fn check_for_collisions(
-    mut commands: ComponentCommands,
+    mut commands: Commands,
     mut score: ResMut<Score>,
     ball_query: Single<(&mut Velocity, &Transform), With<Ball>>,
     collider_query: Query<(Entity, &Transform, Option<&Brick>), With<Collider>>,
@@ -392,7 +392,7 @@ fn check_for_collisions(
 }
 
 fn play_collision_sound(
-    mut commands: ComponentCommands,
+    mut commands: Commands,
     mut collision_events: EventReader<CollisionEvent>,
     sound: Res<CollisionSound>,
 ) {

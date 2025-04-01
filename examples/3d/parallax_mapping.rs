@@ -196,7 +196,7 @@ fn move_camera(
 }
 
 fn setup(
-    mut commands: ComponentCommands,
+    mut commands: Commands,
     mut materials: ResMut<Assets<StandardMaterial>>,
     mut meshes: ResMut<Assets<Mesh>>,
     asset_server: Res<AssetServer>,

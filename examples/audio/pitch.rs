@@ -18,7 +18,7 @@ struct PlayPitch;
 #[derive(Resource)]
 struct PitchFrequency(f32);
 
-fn setup(mut commands: ComponentCommands) {
+fn setup(mut commands: Commands) {
     commands.insert_resource(PitchFrequency(220.0));
 }
 
@@ -26,7 +26,7 @@ fn play_pitch(
     mut pitch_assets: ResMut<Assets<Pitch>>,
     frequency: Res<PitchFrequency>,
     mut events: EventReader<PlayPitch>,
-    mut commands: ComponentCommands,
+    mut commands: Commands,
 ) {
     for _ in events.read() {
         info!("playing pitch with frequency: {}", frequency.0);

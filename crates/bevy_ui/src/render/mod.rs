@@ -323,7 +323,7 @@ impl RenderGraphNode for RunUiSubgraphOnUiViewNode {
 }
 
 pub fn extract_uinode_background_colors(
-    mut commands: ComponentCommands,
+    mut commands: Commands,
     mut extracted_uinodes: ResMut<ExtractedUiNodes>,
     uinode_query: Extract<
         Query<(
@@ -381,7 +381,7 @@ pub fn extract_uinode_background_colors(
 }
 
 pub fn extract_uinode_images(
-    mut commands: ComponentCommands,
+    mut commands: Commands,
     mut extracted_uinodes: ResMut<ExtractedUiNodes>,
     texture_atlases: Extract<Res<Assets<TextureAtlasLayout>>>,
     uinode_query: Extract<
@@ -465,7 +465,7 @@ pub fn extract_uinode_images(
 }
 
 pub fn extract_uinode_borders(
-    mut commands: ComponentCommands,
+    mut commands: Commands,
     mut extracted_uinodes: ResMut<ExtractedUiNodes>,
     uinode_query: Extract<
         Query<(
@@ -605,7 +605,7 @@ pub struct UiViewTarget(pub Entity);
 
 /// Extracts all UI elements associated with a camera into the render world.
 pub fn extract_ui_camera_view(
-    mut commands: ComponentCommands,
+    mut commands: Commands,
     mut transparent_render_phases: ResMut<ViewSortedRenderPhases<TransparentUi>>,
     query: Extract<
         Query<
@@ -693,7 +693,7 @@ pub fn extract_ui_camera_view(
 }
 
 pub fn extract_text_sections(
-    mut commands: ComponentCommands,
+    mut commands: Commands,
     mut extracted_uinodes: ResMut<ExtractedUiNodes>,
     texture_atlases: Extract<Res<Assets<TextureAtlasLayout>>>,
     uinode_query: Extract<
@@ -791,7 +791,7 @@ pub fn extract_text_sections(
 }
 
 pub fn extract_text_shadows(
-    mut commands: ComponentCommands,
+    mut commands: Commands,
     mut extracted_uinodes: ResMut<ExtractedUiNodes>,
     texture_atlases: Extract<Res<Assets<TextureAtlasLayout>>>,
     uinode_query: Extract<
@@ -1006,7 +1006,7 @@ pub struct ImageNodeBindGroups {
 }
 
 pub fn prepare_uinodes(
-    mut commands: ComponentCommands,
+    mut commands: Commands,
     render_device: Res<RenderDevice>,
     render_queue: Res<RenderQueue>,
     mut ui_meta: ResMut<UiMeta>,

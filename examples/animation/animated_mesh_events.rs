@@ -43,7 +43,7 @@ struct OnStep;
 fn observe_on_step(
     trigger: Trigger<OnStep>,
     particle: Res<ParticleAssets>,
-    mut commands: ComponentCommands,
+    mut commands: Commands,
     transforms: Query<&GlobalTransform>,
     mut seeded_rng: ResMut<SeededRng>,
 ) {
@@ -75,7 +75,7 @@ fn observe_on_step(
 }
 
 fn setup(
-    mut commands: ComponentCommands,
+    mut commands: Commands,
     asset_server: Res<AssetServer>,
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<StandardMaterial>>,
@@ -135,7 +135,7 @@ fn setup(
 // An `AnimationPlayer` is automatically added to the scene when it's ready.
 // When the player is added, start the animation.
 fn setup_scene_once_loaded(
-    mut commands: ComponentCommands,
+    mut commands: Commands,
     animations: Res<Animations>,
     feet: Res<FoxFeetTargets>,
     graphs: Res<Assets<AnimationGraph>>,
@@ -189,7 +189,7 @@ fn setup_scene_once_loaded(
 }
 
 fn simulate_particles(
-    mut commands: ComponentCommands,
+    mut commands: Commands,
     mut query: Query<(Entity, &mut Transform, &mut Particle)>,
     time: Res<Time>,
 ) {

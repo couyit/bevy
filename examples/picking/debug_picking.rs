@@ -31,7 +31,7 @@ fn main() {
 }
 
 fn setup_scene(
-    mut commands: ComponentCommands,
+    mut commands: Commands,
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<StandardMaterial>>,
 ) {
@@ -85,7 +85,7 @@ fn setup_scene(
 
 fn on_click_spawn_cube(
     _click: Trigger<Pointer<Click>>,
-    mut commands: ComponentCommands,
+    mut commands: Commands,
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<StandardMaterial>>,
     mut num: Local<usize>,

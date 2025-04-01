@@ -59,13 +59,13 @@ fn update(
     }
 }
 
-fn setup(mut commands: ComponentCommands) {
+fn setup(mut commands: Commands) {
     commands.spawn(Camera2d);
     spawn_with_viewport_coords(&mut commands);
     spawn_with_pixel_coords(&mut commands);
 }
 
-fn spawn_with_viewport_coords(commands: &mut ComponentCommands) {
+fn spawn_with_viewport_coords(commands: &mut Commands) {
     commands
         .spawn((
             Node {
@@ -143,7 +143,7 @@ fn spawn_with_viewport_coords(commands: &mut ComponentCommands) {
         });
 }
 
-fn spawn_with_pixel_coords(commands: &mut ComponentCommands) {
+fn spawn_with_pixel_coords(commands: &mut Commands) {
     commands
         .spawn((
             Node {

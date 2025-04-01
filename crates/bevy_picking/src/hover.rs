@@ -206,7 +206,7 @@ pub fn update_interactions(
     hover_map: Res<HoverMap>,
     previous_hover_map: Res<PreviousHoverMap>,
     // Outputs
-    mut commands: ComponentCommands,
+    mut commands: Commands,
     mut pointers: Query<(&PointerId, &PointerPress, &mut PointerInteraction)>,
     mut interact: Query<&mut PickingInteraction>,
 ) {

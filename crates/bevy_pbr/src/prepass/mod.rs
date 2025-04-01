@@ -244,7 +244,7 @@ where
 struct AnyPrepassPluginLoaded;
 
 pub fn update_previous_view_data(
-    mut commands: ComponentCommands,
+    mut commands: Commands,
     query: Query<(Entity, &Camera, &GlobalTransform), Or<(With<Camera3d>, With<ShadowView>)>>,
 ) {
     for (entity, camera, camera_transform) in &query {
@@ -266,7 +266,7 @@ type PreviousMeshFilter = With<Mesh3d>;
 type PreviousMeshFilter = Or<(With<Mesh3d>, With<MeshletMesh3d>)>;
 
 pub fn update_mesh_previous_global_transforms(
-    mut commands: ComponentCommands,
+    mut commands: Commands,
     views: Query<&Camera, Or<(With<Camera3d>, With<ShadowView>)>>,
     meshes: Query<(Entity, &GlobalTransform, Option<&PreviousGlobalTransform>), PreviousMeshFilter>,
 ) {
@@ -685,7 +685,7 @@ impl PrepassPipelineInternal {
 
 // Extract the render phases for the prepass
 pub fn extract_camera_previous_view_data(
-    mut commands: ComponentCommands,
+    mut commands: Commands,
     cameras_3d: Extract<Query<(RenderEntity, &Camera, Option<&PreviousViewData>), With<Camera3d>>>,
 ) {
     for (entity, camera, maybe_previous_view_data) in cameras_3d.iter() {
@@ -703,7 +703,7 @@ pub fn extract_camera_previous_view_data(
 }
 
 pub fn prepare_previous_view_uniforms(
-    mut commands: ComponentCommands,
+    mut commands: Commands,
     render_device: Res<RenderDevice>,
     render_queue: Res<RenderQueue>,
     mut previous_view_uniforms: ResMut<PreviousViewUniforms>,

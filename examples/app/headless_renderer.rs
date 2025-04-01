@@ -138,7 +138,7 @@ enum SceneState {
 }
 
 fn setup(
-    mut commands: ComponentCommands,
+    mut commands: Commands,
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<StandardMaterial>>,
     mut images: ResMut<Assets<Image>>,
@@ -223,7 +223,7 @@ impl Plugin for ImageCopyPlugin {
 
 /// Setups render target and cpu image for saving, changes scene state into render mode
 fn setup_render_target(
-    commands: &mut ComponentCommands,
+    commands: &mut Commands,
     images: &mut ResMut<Assets<Image>>,
     render_device: &Res<RenderDevice>,
     scene_controller: &mut ResMut<SceneController>,
@@ -321,7 +321,7 @@ impl ImageCopier {
 }
 
 /// Extracting `ImageCopier`s into render world, because `ImageCopyDriver` accesses them
-fn image_copy_extract(mut commands: ComponentCommands, image_copiers: Extract<Query<&ImageCopier>>) {
+fn image_copy_extract(mut commands: Commands, image_copiers: Extract<Query<&ImageCopier>>) {
     commands.insert_resource(ImageCopiers(
         image_copiers.iter().cloned().collect::<Vec<ImageCopier>>(),
     ));

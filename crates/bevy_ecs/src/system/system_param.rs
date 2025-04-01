@@ -193,9 +193,9 @@ pub unsafe trait SystemParam: Sized {
     /// The value of this associated type should be `Self`, instantiated with new lifetimes.
     ///
     /// You could think of [`SystemParam::Item<'w, 's>`] as being an *operation* that changes the lifetimes bound to `Self`.
-    type Item<'world, 'state>: SystemParam<State = Self::State, World<'world> = Self::World<'world>>;
+    type Item<'world, 'state>: for<'w> SystemParam<State = Self::State, World<'w> = Self::World<'w>>;
 
-    type World<'w>: FromIds<'w>;
+    type World<'w>: FromIds<'w> + From<UnsafeWorldCell<'w>>;
 
     fn init_world_access<'w>(world: &Self::World<'w>, system_meta: &mut SystemMeta);
 
@@ -309,23 +309,35 @@ pub unsafe trait ReadOnlySystemParam: SystemParam {}
 pub type SystemParamItem<'w, 's, P> = <P as SystemParam>::Item<'w, 's>;
 
 pub trait FromIds<'w>: Clone {
-    type Ids: Sync + Send + Clone + 'static;
+    type Shrunk<'world>: FromIds<'world, Ids = Self::Ids>;
+    type Ids: Clone + 'static;
     fn from_ids(worlds: UnsafeWorldsCell<'w>, ids: &Self::Ids) -> Self;
+    fn shrink<'world>(ids: Self::Ids) -> <Self::Shrunk<'world> as FromIds<'world>>::Ids;
 }
 
 impl<'w> FromIds<'w> for UnsafeWorldCell<'w> {
+    type Shrunk<'world> = UnsafeWorldCell<'world>;
     type Ids = WorldId;
 
     fn from_ids(worlds: UnsafeWorldsCell<'w>, id: &WorldId) -> Self {
         unsafe { worlds.get_unsafe_world_cell_mut(*id) }
     }
+
+    fn shrink<'world>(ids: Self::Ids) -> <Self::Shrunk<'world> as FromIds<'world>>::Ids {
+        ids
+    }
 }
 
 impl<'w> FromIds<'w> for UnsafeWorldsCell<'w> {
+    type Shrunk<'world> = UnsafeWorldsCell<'world>;
     type Ids = ();
 
     fn from_ids(worlds: UnsafeWorldsCell<'w>, _ids: &()) -> Self {
         worlds
+    }
+
+    fn shrink<'world>(ids: Self::Ids) -> <Self::Shrunk<'world> as FromIds<'world>>::Ids {
+        ids
     }
 }
 
@@ -335,15 +347,28 @@ macro_rules! impl_from_ids {
             clippy::allow_attributes,
             reason = "This is in a macro, and as such, the below lints may not always apply."
         )]
+        #[allow(
+            unused_variables,
+            reason =  "Zero-length tuples won't use variables."
+        )]
+        #[allow(
+            clippy::unused_unit,
+            reason = "Zero-length tuples won't have any params to get."
+        )]
         impl<'w, $($param: FromIds<'w>),*> FromIds<'w> for ($($param,)*) {
+            type Shrunk<'world> = ($($param::Shrunk<'world>,)*);
             type Ids = ($($param::Ids,)*);
 
             fn from_ids(worlds: UnsafeWorldsCell<'w>, ids: &Self::Ids) -> Self {
-                #[allow(
-                    clippy::unused_unit,
-                    reason = "Zero-length tuples won't have any params to get."
-                )]
                 ($($param::from_ids(worlds, &ids.$index), )*)
+            }
+
+            #[allow(
+                non_snake_case,
+                reason = "Certain variable names are provided by the caller, not by us."
+            )]
+            fn shrink<'world>(($($param,)*): Self::Ids) -> <Self::Shrunk<'world> as FromIds<'world>>::Ids {
+                ($($param::shrink($param),)*)
             }
         }
     };
@@ -356,6 +381,10 @@ macro_rules! impl_from_world {
         #[expect(
             clippy::allow_attributes,
             reason = "This is in a macro, and as such, the below lints may not always apply."
+        )]
+        #[allow(
+            unused_variables,
+            reason =  "Zero-length tuples won't use variables."
         )]
         impl<'w, $($param: From<UnsafeWorldCell<'w>>),*> From<UnsafeWorldCell<'w>> for ($($param,)*) {
             fn from(world: UnsafeWorldCell<'w>) -> Self {
@@ -370,6 +399,12 @@ macro_rules! impl_from_world {
 }
 
 all_tuples!(impl_from_world, 0, 16, P);
+
+impl<'w> From<UnsafeWorldCell<'w>> for UnsafeWorldsCell<'w> {
+    fn from(_value: UnsafeWorldCell<'w>) -> Self {
+        panic!("GlobalSystemParam was initialized as LocalSystemParam")
+    }
+}
 
 // SAFETY: QueryState is constrained to read-only fetches, so it only reads World.
 unsafe impl<'w, 's, D: ReadOnlyQueryData + 'static, F: QueryFilter + 'static> ReadOnlySystemParam
@@ -2341,7 +2376,7 @@ pub mod lifetimeless {
     /// A [`ResMut`](super::ResMut) with `'static` lifetimes.
     pub type SResMut<T> = super::ResMut<'static, T>;
     /// [`Commands`](crate::system::Commands) with `'static` lifetimes.
-    pub type SCommands = crate::system::ComponentCommands<'static, 'static>;
+    pub type SCommands = crate::system::Commands<'static, 'static>;
 }
 
 /// A helper for using system parameters in generic contexts
@@ -2593,9 +2628,10 @@ impl<'w, 's> DynSystemParam<'w, 's> {
 
     /// Returns the inner system param if it is the correct type.
     /// This consumes the dyn param, so the returned param can have its original world and state lifetimes.
-    pub fn downcast<T: SystemParam>(self) -> Option<T>
+    pub fn downcast<T>(self) -> Option<T>
     // See downcast() function for an explanation of the where clause
     where
+        T: SystemParam<World<'w> = UnsafeWorldCell<'w>>,
         T::Item<'static, 'static>: SystemParam<Item<'w, 's> = T> + 'static,
     {
         // SAFETY:
@@ -2607,9 +2643,10 @@ impl<'w, 's> DynSystemParam<'w, 's> {
 
     /// Returns the inner system parameter if it is the correct type.
     /// This borrows the dyn param, so the returned param is only valid for the duration of that borrow.
-    pub fn downcast_mut<'a, T: SystemParam>(&'a mut self) -> Option<T>
+    pub fn downcast_mut<'a, T>(&'a mut self) -> Option<T>
     // See downcast() function for an explanation of the where clause
     where
+        T: SystemParam<World<'a> = UnsafeWorldCell<'a>>,
         T::Item<'static, 'static>: SystemParam<Item<'a, 'a> = T> + 'static,
     {
         // SAFETY:
@@ -2624,9 +2661,10 @@ impl<'w, 's> DynSystemParam<'w, 's> {
     /// but since it only performs read access it can keep the original world lifetime.
     /// This can be useful with methods like [`Query::iter_inner()`] or [`Res::into_inner()`]
     /// to obtain references with the original world lifetime.
-    pub fn downcast_mut_inner<'a, T: ReadOnlySystemParam>(&'a mut self) -> Option<T>
+    pub fn downcast_mut_inner<'a, T>(&'a mut self) -> Option<T>
     // See downcast() function for an explanation of the where clause
     where
+        T: ReadOnlySystemParam<World<'w> = UnsafeWorldCell<'w>>,
         T::Item<'static, 'static>: SystemParam<Item<'w, 'a> = T> + 'static,
     {
         // SAFETY:
@@ -2643,7 +2681,7 @@ impl<'w, 's> DynSystemParam<'w, 's> {
 ///   in [`init_state`](SystemParam::init_state) for the inner system param.
 /// - `world` must be the same `World` that was used to initialize
 ///   [`state`](SystemParam::init_state) for the inner system param.
-unsafe fn downcast<'w, 's, T: SystemParam<World<'w> = UnsafeWorldCell<'w>>>(
+unsafe fn downcast<'w, 's, T>(
     state: &'s mut dyn Any,
     system_meta: &SystemMeta,
     world: UnsafeWorldCell<'w>,
@@ -2657,11 +2695,12 @@ unsafe fn downcast<'w, 's, T: SystemParam<World<'w> = UnsafeWorldCell<'w>>>(
 // Every actual `SystemParam` implementation has `T::Item == T` up to lifetimes,
 // so they should all work with this constraint.
 where
+    T: SystemParam<World<'w> = UnsafeWorldCell<'w>>,
     T::Item<'static, 'static>: SystemParam<Item<'w, 's> = T> + 'static,
 {
     state
         .downcast_mut::<ParamState<T::Item<'static, 'static>>>()
-        .map(|state| {
+        .map(move |state: &mut ParamState<T::Item<'static, 'static>>| {
             // SAFETY:
             // - The caller ensures the world has access for the underlying system param,
             //   and since the downcast succeeded, the underlying system param is T.
@@ -2674,7 +2713,10 @@ where
 pub struct DynSystemParamState(Box<dyn DynParamState>);
 
 impl DynSystemParamState {
-    pub(crate) fn new<T: SystemParam + 'static>(state: T::State) -> Self {
+    pub(crate) fn new<T>(state: T::State) -> Self
+    where
+        T: for<'w> SystemParam<World<'w> = UnsafeWorldCell<'w>> + 'static,
+    {
         Self(Box::new(ParamState::<T>(state)))
     }
 }
@@ -2769,7 +2811,7 @@ unsafe impl SystemParam for DynSystemParam<'_, '_> {
         system_meta: &SystemMeta,
         world: &Self::World<'w>,
     ) -> Result<(), SystemParamValidationError> {
-        state.0.validate_param(system_meta, *world)
+        state.0.validate_param(system_meta, world)
     }
 
     #[inline]
@@ -2796,11 +2838,11 @@ unsafe impl SystemParam for DynSystemParam<'_, '_> {
     }
 
     fn apply<'w>(state: &mut Self::State, system_meta: &SystemMeta, world: &Self::World<'w>) {
-        state.0.apply(system_meta, *world);
+        state.0.apply(system_meta, world);
     }
 
     fn queue<'w>(state: &mut Self::State, system_meta: &SystemMeta, world: &Self::World<'w>) {
-        state.0.queue(system_meta, *world);
+        state.0.queue(system_meta, world);
     }
 }
 

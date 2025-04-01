@@ -365,7 +365,7 @@ impl<M: UiMaterial> Default for ExtractedUiMaterialNodes<M> {
 }
 
 pub fn extract_ui_material_nodes<M: UiMaterial>(
-    mut commands: ComponentCommands,
+    mut commands: Commands,
     mut extracted_uinodes: ResMut<ExtractedUiMaterialNodes<M>>,
     materials: Extract<Res<Assets<M>>>,
     uinode_query: Extract<
@@ -419,7 +419,7 @@ pub fn extract_ui_material_nodes<M: UiMaterial>(
 }
 
 pub fn prepare_uimaterial_nodes<M: UiMaterial>(
-    mut commands: ComponentCommands,
+    mut commands: Commands,
     render_device: Res<RenderDevice>,
     render_queue: Res<RenderQueue>,
     mut ui_meta: ResMut<UiMaterialMeta<M>>,

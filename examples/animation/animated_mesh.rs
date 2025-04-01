@@ -30,7 +30,7 @@ struct AnimationToPlay {
 }
 
 fn setup_mesh_and_animation(
-    mut commands: ComponentCommands,
+    mut commands: Commands,
     asset_server: Res<AssetServer>,
     mut graphs: ResMut<Assets<AnimationGraph>>,
 ) {
@@ -63,7 +63,7 @@ fn setup_mesh_and_animation(
 
 fn play_animation_when_ready(
     trigger: Trigger<SceneInstanceReady>,
-    mut commands: ComponentCommands,
+    mut commands: Commands,
     children: Query<&Children>,
     animations_to_play: Query<&AnimationToPlay>,
     mut players: Query<&mut AnimationPlayer>,
@@ -96,7 +96,7 @@ fn play_animation_when_ready(
 
 // Spawn a camera and a simple environment with a ground plane and light.
 fn setup_camera_and_environment(
-    mut commands: ComponentCommands,
+    mut commands: Commands,
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<StandardMaterial>>,
 ) {

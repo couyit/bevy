@@ -641,7 +641,7 @@ mod tests {
         #[derive(Component)]
         struct Callback(SystemId);
 
-        fn nested(query: Query<&Callback>, mut commands: ComponentCommands) {
+        fn nested(query: Query<&Callback>, mut commands: Commands) {
             for callback in query.iter() {
                 commands.run_system(callback.0);
             }
@@ -671,7 +671,7 @@ mod tests {
         #[derive(Component)]
         struct Callback(SystemId<In<u8>>, u8);
 
-        fn nested(query: Query<&Callback>, mut commands: ComponentCommands) {
+        fn nested(query: Query<&Callback>, mut commands: Commands) {
             for callback in query.iter() {
                 commands.run_system_with(callback.0, callback.1);
             }
@@ -860,7 +860,7 @@ mod tests {
             static SYSTEM_ID: Cell<Option<SystemId>> = default();
         }
 
-        fn system(mut commands: ComponentCommands) {
+        fn system(mut commands: Commands) {
             let count = INVOCATIONS_LEFT.get() - 1;
             INVOCATIONS_LEFT.set(count);
             if count > 0 {

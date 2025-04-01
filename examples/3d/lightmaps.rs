@@ -38,7 +38,7 @@ fn main() {
         .run();
 }
 
-fn setup(mut commands: ComponentCommands, asset_server: Res<AssetServer>, args: Res<Args>) {
+fn setup(mut commands: Commands, asset_server: Res<AssetServer>, args: Res<Args>) {
     commands.spawn(SceneRoot(asset_server.load(
         GltfAssetLabel::Scene(0).from_asset("models/CornellBox/CornellBox.glb"),
     )));
@@ -59,7 +59,7 @@ fn setup(mut commands: ComponentCommands, asset_server: Res<AssetServer>, args: 
 }
 
 fn add_lightmaps_to_meshes(
-    mut commands: ComponentCommands,
+    mut commands: Commands,
     asset_server: Res<AssetServer>,
     mut materials: ResMut<Assets<StandardMaterial>>,
     meshes: Query<

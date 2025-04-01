@@ -20,7 +20,7 @@ pub fn main() {
 
 /// Initializes the scene.
 fn setup(
-    mut commands: ComponentCommands,
+    mut commands: Commands,
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<StandardMaterial>>,
     asset_server: Res<AssetServer>,
@@ -58,7 +58,7 @@ fn create_sphere_mesh(meshes: &mut Assets<Mesh>) -> Handle<Mesh> {
 
 /// Spawn a regular object with a clearcoat layer. This looks like car paint.
 fn spawn_sphere(
-    commands: &mut ComponentCommands,
+    commands: &mut Commands,
     materials: &mut Assets<StandardMaterial>,
     asset_server: &AssetServer,
     sphere_mesh: &Handle<Mesh>,
@@ -82,7 +82,7 @@ fn spawn_sphere(
 }
 
 /// Spawns a light.
-fn spawn_light(commands: &mut ComponentCommands) {
+fn spawn_light(commands: &mut Commands) {
     commands.spawn(PointLight {
         color: WHITE.into(),
         intensity: 100000.0,
@@ -91,7 +91,7 @@ fn spawn_light(commands: &mut ComponentCommands) {
 }
 
 /// Spawns a camera with associated skybox and environment map.
-fn spawn_camera(commands: &mut ComponentCommands, asset_server: &AssetServer) {
+fn spawn_camera(commands: &mut Commands, asset_server: &AssetServer) {
     commands
         .spawn((
             Camera3d::default(),

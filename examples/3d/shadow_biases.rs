@@ -29,7 +29,7 @@ struct Lights;
 
 /// set up a 3D scene to test shadow biases and perspective projections
 fn setup(
-    mut commands: ComponentCommands,
+    mut commands: Commands,
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<StandardMaterial>>,
 ) {

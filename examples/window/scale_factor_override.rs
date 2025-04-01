@@ -23,7 +23,7 @@ fn main() {
         .run();
 }
 
-fn setup(mut commands: ComponentCommands) {
+fn setup(mut commands: Commands) {
     // camera
     commands.spawn(Camera2d);
     // root node
