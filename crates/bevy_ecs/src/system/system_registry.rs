@@ -292,14 +292,6 @@ impl Worlds {
                     Err(RegisteredSystemError::InvalidParams(id))
                 };
 
-                // Return ownership of system trait object (if entity still exists)
-                if let Ok(mut entity) = self.get_entity_mut(id.entity) {
-                    entity.insert::<RegisteredSystem<I, O>>(RegisteredSystem {
-                        initialized,
-                        system,
-                    });
-                }
-
                 // Run any commands enqueued by the system
                 self.flush();
                 result

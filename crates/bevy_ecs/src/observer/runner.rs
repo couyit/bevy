@@ -95,7 +95,7 @@ impl Component for ObserverState {
 ///
 /// Typically refers to the default runner that runs the system stored in the associated [`Observer`] component,
 /// but can be overridden for custom behavior.
-pub type ObserverRunner = fn(UnsafeWorldsCell, ObserverTrigger, PtrMut, propagate: &mut bool);
+pub type ObserverRunner = fn(DeferredWorld, ObserverTrigger, PtrMut, propagate: &mut bool);
 
 /// An [`Observer`] system. Add this [`Component`] to an [`Entity`] to turn it into an "observer".
 ///

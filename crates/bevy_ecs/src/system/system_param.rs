@@ -195,7 +195,7 @@ pub unsafe trait SystemParam: Sized {
     /// You could think of [`SystemParam::Item<'w, 's>`] as being an *operation* that changes the lifetimes bound to `Self`.
     type Item<'world, 'state>: for<'w> SystemParam<State = Self::State, World<'w> = Self::World<'w>>;
 
-    type World<'w>: FromIds<'w> + From<UnsafeWorldCell<'w>>;
+    type World<'w>: FromIds<'w>;
 
     fn init_world_access<'w>(world: &Self::World<'w>, system_meta: &mut SystemMeta);
 
@@ -308,11 +308,11 @@ pub unsafe trait ReadOnlySystemParam: SystemParam {}
 /// Shorthand way of accessing the associated type [`SystemParam::Item`] for a given [`SystemParam`].
 pub type SystemParamItem<'w, 's, P> = <P as SystemParam>::Item<'w, 's>;
 
-pub trait FromIds<'w>: Clone {
+pub trait FromIds<'w>: 'w + Clone {
     type Shrunk<'world>: FromIds<'world, Ids = Self::Ids>;
-    type Ids: Clone + 'static;
+    type Ids: Send + Sync + Clone + 'static;
     fn from_ids(worlds: UnsafeWorldsCell<'w>, ids: &Self::Ids) -> Self;
-    fn shrink<'world>(ids: Self::Ids) -> <Self::Shrunk<'world> as FromIds<'world>>::Ids;
+    fn shrink<'world>(ids: &Self::Ids) -> <Self::Shrunk<'world> as FromIds<'world>>::Ids;
 }
 
 impl<'w> FromIds<'w> for UnsafeWorldCell<'w> {
@@ -323,8 +323,8 @@ impl<'w> FromIds<'w> for UnsafeWorldCell<'w> {
         unsafe { worlds.get_unsafe_world_cell_mut(*id) }
     }
 
-    fn shrink<'world>(ids: Self::Ids) -> <Self::Shrunk<'world> as FromIds<'world>>::Ids {
-        ids
+    fn shrink<'world>(ids: &Self::Ids) -> <Self::Shrunk<'world> as FromIds<'world>>::Ids {
+        *ids
     }
 }
 
@@ -336,8 +336,8 @@ impl<'w> FromIds<'w> for UnsafeWorldsCell<'w> {
         worlds
     }
 
-    fn shrink<'world>(ids: Self::Ids) -> <Self::Shrunk<'world> as FromIds<'world>>::Ids {
-        ids
+    fn shrink<'world>(ids: &Self::Ids) -> <Self::Shrunk<'world> as FromIds<'world>>::Ids {
+        *ids
     }
 }
 
@@ -367,8 +367,8 @@ macro_rules! impl_from_ids {
                 non_snake_case,
                 reason = "Certain variable names are provided by the caller, not by us."
             )]
-            fn shrink<'world>(($($param,)*): Self::Ids) -> <Self::Shrunk<'world> as FromIds<'world>>::Ids {
-                ($($param::shrink($param),)*)
+            fn shrink<'world>(ids: &Self::Ids) -> <Self::Shrunk<'world> as FromIds<'world>>::Ids {
+                ($($param::shrink(&ids.$index),)*)
             }
         }
     };
@@ -2955,7 +2955,7 @@ mod tests {
     // Compile test for https://github.com/bevyengine/bevy/pull/2838.
     #[test]
     fn system_param_generic_bounds() {
-        // #[derive(SystemParam)]
+        #[derive(SystemParam)]
         pub struct SpecialQuery<
             'w,
             's,

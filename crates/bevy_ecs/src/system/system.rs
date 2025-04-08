@@ -92,7 +92,7 @@ pub trait System: Send + Sync + 'static {
     /// [`run_readonly`]: ReadOnlySystem::run_readonly
     fn run(&mut self, input: SystemIn<'_, Self>, worlds: &mut Worlds) -> Self::Out {
         let ret = self.run_without_applying_deferred(input, worlds);
-        self.apply_deferred(worlds);
+        self.apply_deferred(worlds.as_unsafe_cell());
         ret
     }
 
@@ -148,7 +148,7 @@ pub trait System: Send + Sync + 'static {
     /// Safe version of [`System::validate_param_unsafe`].
     /// that runs on exclusive, single-threaded `world` pointer.
     fn validate_param(&mut self, worlds: &Worlds) -> Result<(), SystemParamValidationError> {
-        let world_cell = worlds.as_unsafe_cell();
+        let world_cell = worlds.as_unsafe_cell_readonly();
         self.update_archetype_component_access(world_cell);
         // SAFETY:
         // - We have exclusive access to the entire world.
@@ -412,7 +412,7 @@ impl Debug for RunSystemError {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::{prelude::*, world::Worlds};
+    use crate::{prelude::*, system::LocalSystemBuilder, world::Worlds};
 
     #[test]
     fn run_system_once() {
@@ -425,10 +425,11 @@ mod tests {
             n + 1
         }
 
-        let mut world = World::default();
-        let n = world.run_system_once_with(system, 1).unwrap();
+        let mut worlds = Worlds::new();
+        let id = worlds.create_resource_world();
+        let n = worlds.run_system_once_with(system.build(id), 1).unwrap();
         assert_eq!(n, 2);
-        assert_eq!(world.resource::<T>().0, 1);
+        assert_eq!(worlds.get_world_mut(id).resource::<T>().0, 1);
     }
 
     #[derive(Resource, Default, PartialEq, Debug)]
@@ -441,13 +442,13 @@ mod tests {
     #[test]
     fn run_two_systems() {
         let mut worlds = Worlds::new();
-        let world = worlds.get_resource_world_mut();
-        world.init_resource::<Counter>();
-        assert_eq!(*world.resource::<Counter>(), Counter(0));
-        world.run_system_once(count_up).unwrap();
-        assert_eq!(*world.resource::<Counter>(), Counter(1));
-        world.run_system_once(count_up).unwrap();
-        assert_eq!(*world.resource::<Counter>(), Counter(2));
+        let id = worlds.create_resource_world();
+        worlds.get_world_mut(id).init_resource::<Counter>();
+        assert_eq!(*worlds.get_world(id).resource::<Counter>(), Counter(0));
+        worlds.run_system_once(count_up.build(id)).unwrap();
+        assert_eq!(*worlds.get_world(id).resource::<Counter>(), Counter(1));
+        worlds.run_system_once(count_up.build(id)).unwrap();
+        assert_eq!(*worlds.get_world(id).resource::<Counter>(), Counter(2));
     }
 
     fn spawn_entity(mut commands: Commands) {
@@ -457,10 +458,10 @@ mod tests {
     #[test]
     fn command_processing() {
         let mut worlds = Worlds::new();
-        let world = worlds.get_main_world_mut();
-        assert_eq!(world.entities().len(), 0);
-        world.run_system_once(spawn_entity).unwrap();
-        assert_eq!(world.entities().len(), 1);
+        let id = worlds.create_world();
+        assert_eq!(worlds.get_world(id).entities().len(), 0);
+        worlds.run_system_once(spawn_entity.build(id)).unwrap();
+        assert_eq!(worlds.get_world(id).entities().len(), 1);
     }
 
     #[test]
@@ -470,11 +471,21 @@ mod tests {
         }
 
         let mut worlds = Worlds::new();
-        let world = worlds.get_resource_world();
-        world.insert_non_send_resource(Counter(10));
-        assert_eq!(*world.non_send_resource::<Counter>(), Counter(10));
-        world.run_system_once(non_send_count_down).unwrap();
-        assert_eq!(*world.non_send_resource::<Counter>(), Counter(9));
+        let id = worlds.create_resource_world();
+        worlds
+            .get_world_mut(id)
+            .insert_non_send_resource(Counter(10));
+        assert_eq!(
+            *worlds.get_world(id).non_send_resource::<Counter>(),
+            Counter(10)
+        );
+        worlds
+            .run_system_once(non_send_count_down.build(id))
+            .unwrap();
+        assert_eq!(
+            *worlds.get_world(id).non_send_resource::<Counter>(),
+            Counter(9)
+        );
     }
 
     #[test]
@@ -483,9 +494,10 @@ mod tests {
         impl Resource for T {}
         fn system(_: Res<T>) {}
 
-        let mut world = World::default();
+        let mut worlds = Worlds::new();
+        let id = worlds.create_resource_world();
         // This fails because `T` has not been added to the world yet.
-        let result = world.run_system_once(system);
+        let result = worlds.run_system_once(system.build(id));
 
         assert!(matches!(result, Err(RunSystemError::InvalidParams(_))));
     }

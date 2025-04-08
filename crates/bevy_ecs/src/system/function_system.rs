@@ -23,7 +23,7 @@ use variadics_please::all_tuples;
 use tracing::{info_span, Span};
 
 use super::{
-    FromIds, IdsType, IntoSystem, LocalSystem, ReadOnlySystem, SystemParamBuilder,
+    FromIds, IntoSystem, LocalSystem, ReadOnlySystem, SystemParamBuilder,
     SystemParamValidationError,
 };
 
@@ -440,8 +440,10 @@ impl<Param: SystemParam> SystemState<Param> {
         ids: <Param::World<'w> as FromIds<'w>>::Ids,
     ) -> Self {
         let mut meta = SystemMeta::new::<Param>();
-        let world_param = Param::World::from_ids(worlds.as_unsafe_cell_readonly(), &ids);
-        Param::init_world_access(&world_param, &mut meta);
+        Param::init_world_access(
+            &Param::World::from_ids(worlds.as_unsafe_cell_readonly(), &ids),
+            &mut meta,
+        );
         meta.world_access
             .try_iter_component_access()
             .unwrap()
@@ -449,10 +451,16 @@ impl<Param: SystemParam> SystemState<Param> {
                 let &id = component_access_kind.index();
                 meta.change_ticks[0].insert(
                     id,
-                    worlds.get_world(id).change_tick().relative_to(Tick::MAX),
+                    worlds
+                        .get_world_mut(id)
+                        .change_tick()
+                        .relative_to(Tick::MAX),
                 );
             });
-        let param_state = Param::init_state(&world_param, &mut meta);
+        let param_state = Param::init_state(
+            &Param::World::from_ids(worlds.as_unsafe_cell(), &ids),
+            &mut meta,
+        );
         Self {
             meta,
             param_state,
@@ -845,11 +853,8 @@ where
         #[cfg(feature = "trace")]
         let _span_guard = self.system_meta.system_span.enter();
 
-        match self.ids {
+        match &self.ids {
             Ids::Tuple(ids) => {
-                let ids = <<F::Param as SystemParam>::World<'static> as FromIds<'static>>::shrink::<
-                    'w,
-                >(ids);
                 self.system_meta
                     .world_access
                     .try_iter_component_access()
@@ -864,16 +869,24 @@ where
 
                 let param_state = &mut self.state.as_mut().expect(Self::ERROR_UNINITIALIZED).param;
 
+                let ids = <<F::Param as SystemParam>::World<'static> as FromIds<'static>>::shrink::<
+                    'w,
+                >(ids);
                 // SAFETY:
                 // - The caller has invoked `update_archetype_component_access`, which will panic
                 //   if the world does not match.
                 // - All world accesses used by `F::Param` have been registered, so the caller
                 //   will ensure that there are no data access conflicts.
-                let params = unsafe {
+                let params: <<F as SystemParamFunction<Marker>>::Param as SystemParam>::Item<
+                    'w,
+                    '_,
+                > = unsafe {
                     F::Param::get_param(
                         param_state,
                         &self.system_meta,
-                        &<F::Param as SystemParam>::World::from_ids(worlds, &ids),
+                        &<<F::Param as SystemParam>::World<'w> as FromIds<'w>>::from_ids(
+                            worlds, &ids,
+                        ),
                     )
                 };
                 let out = self.func.run(input, params);
@@ -927,14 +940,16 @@ where
     }
 
     #[inline]
-    fn initialize(&mut self, worlds: &mut Worlds) {
+    fn initialize<'w>(&mut self, worlds: &'w mut Worlds) {
         match &self.ids {
             Ids::Tuple(ids) => {
-                if let Some(_) = &self.state {
-                } else {
+                let ids =
+                    &<<F::Param as SystemParam>::World<'static> as FromIds<'static>>::shrink(ids);
+
+                if self.state.is_some() {
                     self.state = Some(FunctionSystemState {
                         param: F::Param::init_state(
-                            &<F::Param as SystemParam>::World::from_ids(
+                            &<<F::Param as SystemParam>::World>::from_ids(
                                 worlds.as_unsafe_cell(),
                                 ids,
                             ),

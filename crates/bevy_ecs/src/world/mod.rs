@@ -116,7 +116,7 @@ impl Worlds {
         Self::default()
     }
 
-    pub fn as_unsafe_cell(&mut self) -> UnsafeWorldsCell<'_> {
+    pub fn as_unsafe_cell<'w>(&'w mut self) -> UnsafeWorldsCell<'w> {
         UnsafeWorldsCell::new_mutable(self)
     }
 
@@ -930,9 +930,7 @@ impl World {
     #[inline]
     pub fn commands(&mut self) -> Commands {
         // SAFETY: command_queue is stored on world and always valid while the world exists
-        unsafe {
-            Commands::new_raw_from_entities(self.command_queue.clone(), self.entities())
-        }
+        unsafe { Commands::new_raw_from_entities(self.command_queue.clone(), self.entities()) }
     }
 
     /// Returns [`EntityRef`]s that expose read-only operations for the given
@@ -1377,8 +1375,7 @@ impl World {
         // - Command queue access does not conflict with entity access.
         let raw_queue = unsafe { cell.get_raw_command_queue() };
         // SAFETY: `&mut self` ensures the commands does not outlive the world.
-        let commands =
-            unsafe { Commands::new_raw_from_entities(raw_queue, cell.entities()) };
+        let commands = unsafe { Commands::new_raw_from_entities(raw_queue, cell.entities()) };
 
         (fetcher, commands)
     }

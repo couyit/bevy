@@ -29,7 +29,10 @@ use crate::{
         Deferred, IntoObserverSystem, IntoSystem, RegisteredSystem, SystemId, SystemInput,
         SystemParam, SystemParamValidationError,
     },
-    world::{command_queue::RawCommandQueue, CommandQueue, EntityWorldMut, FromWorld, World},
+    world::{
+        command_queue::RawCommandQueue, unsafe_world_cell::UnsafeWorldCell, CommandQueue,
+        EntityWorldMut, FromWorld, World,
+    },
 };
 
 /// A [`Command`] queue to perform structural changes to the [`World`].
@@ -115,16 +118,16 @@ const _: () = {
     type __StructFieldsAlias<'w, 's> = (Deferred<'s, CommandQueue>, &'w Entities);
     #[doc(hidden)]
     pub struct FetchState {
-        state: <__StructFieldsAlias<'static, 'static> as SystemParam>::State,
+        state: <Deferred<'static, CommandQueue> as SystemParam>::State,
     }
     // SAFETY: Only reads Entities
     unsafe impl SystemParam for Commands<'_, '_> {
         type State = FetchState;
         type Item<'w, 's> = Commands<'w, 's>;
-        type World<'w> = <__StructFieldsAlias<'static, 'static> as SystemParam>::World<'w>;
+        type World<'w> = UnsafeWorldCell<'w>;
 
         fn init_world_access<'w>(world: &Self::World<'w>, system_meta: &mut super::SystemMeta) {
-            <__StructFieldsAlias<'_, '_> as SystemParam>::init_world_access(world, system_meta)
+            system_meta.world_access.add_read(world.id());
         }
 
         fn init_state<'w>(
@@ -132,7 +135,7 @@ const _: () = {
             system_meta: &mut bevy_ecs::system::SystemMeta,
         ) -> Self::State {
             FetchState {
-                state: <__StructFieldsAlias<'_, '_> as SystemParam>::init_state(world, system_meta),
+                state: Deferred::<CommandQueue>::init_state(world, system_meta),
             }
         }
 

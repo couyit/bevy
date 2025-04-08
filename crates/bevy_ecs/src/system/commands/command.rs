@@ -64,7 +64,7 @@ where
 }
 
 pub trait LocalCommand<Out = ()>: Send + 'static {
-    fn apply(self, world: &World) -> Out;
+    fn apply(self, world: &mut World) -> Out;
 }
 
 impl<F, Out> LocalCommand<Out> for F
@@ -80,14 +80,14 @@ where
 ///
 /// This is more efficient than spawning the entities individually.
 #[track_caller]
-pub fn spawn_batch<I>(bundles_iter: I) -> impl Command
+pub fn spawn_batch<I>(bundles_iter: I) -> impl LocalCommand
 where
     I: IntoIterator + Send + Sync + 'static,
     I::Item: Bundle<Effect: NoBundleEffect>,
 {
     let caller = MaybeLocation::caller();
-    move |worlds: &mut Worlds| {
-        SpawnBatchIter::new(worlds, bundles_iter.into_iter(), caller);
+    move |world: &mut World| {
+        SpawnBatchIter::new(world, bundles_iter.into_iter(), caller);
     }
 }
 
