@@ -309,35 +309,30 @@ pub unsafe trait ReadOnlySystemParam: SystemParam {}
 pub type SystemParamItem<'w, 's, P> = <P as SystemParam>::Item<'w, 's>;
 
 pub trait FromIds<'w>: 'w + Clone {
-    type Shrunk<'world>: FromIds<'world, Ids = Self::Ids>;
     type Ids: Send + Sync + Clone + 'static;
     fn from_ids(worlds: UnsafeWorldsCell<'w>, ids: &Self::Ids) -> Self;
-    fn shrink<'world>(ids: &Self::Ids) -> <Self::Shrunk<'world> as FromIds<'world>>::Ids;
 }
 
 impl<'w> FromIds<'w> for UnsafeWorldCell<'w> {
-    type Shrunk<'world> = UnsafeWorldCell<'world>;
     type Ids = WorldId;
 
     fn from_ids(worlds: UnsafeWorldsCell<'w>, id: &WorldId) -> Self {
         unsafe { worlds.get_unsafe_world_cell_mut(*id) }
     }
+}
 
-    fn shrink<'world>(ids: &Self::Ids) -> <Self::Shrunk<'world> as FromIds<'world>>::Ids {
-        *ids
-    }
+fn shrink<'a, 'b, T>(ids: <T as FromIds<'b>>::Ids) -> <T as FromIds<'b>>::Ids
+where
+    for<'w> T: FromIds<'w>,
+{
+    ids
 }
 
 impl<'w> FromIds<'w> for UnsafeWorldsCell<'w> {
-    type Shrunk<'world> = UnsafeWorldsCell<'world>;
     type Ids = ();
 
     fn from_ids(worlds: UnsafeWorldsCell<'w>, _ids: &()) -> Self {
         worlds
-    }
-
-    fn shrink<'world>(ids: &Self::Ids) -> <Self::Shrunk<'world> as FromIds<'world>>::Ids {
-        *ids
     }
 }
 
@@ -356,19 +351,10 @@ macro_rules! impl_from_ids {
             reason = "Zero-length tuples won't have any params to get."
         )]
         impl<'w, $($param: FromIds<'w>),*> FromIds<'w> for ($($param,)*) {
-            type Shrunk<'world> = ($($param::Shrunk<'world>,)*);
             type Ids = ($($param::Ids,)*);
 
             fn from_ids(worlds: UnsafeWorldsCell<'w>, ids: &Self::Ids) -> Self {
                 ($($param::from_ids(worlds, &ids.$index), )*)
-            }
-
-            #[allow(
-                non_snake_case,
-                reason = "Certain variable names are provided by the caller, not by us."
-            )]
-            fn shrink<'world>(ids: &Self::Ids) -> <Self::Shrunk<'world> as FromIds<'world>>::Ids {
-                ($($param::shrink(&ids.$index),)*)
             }
         }
     };

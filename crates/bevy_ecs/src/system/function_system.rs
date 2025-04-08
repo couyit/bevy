@@ -949,7 +949,7 @@ where
                 if self.state.is_some() {
                     self.state = Some(FunctionSystemState {
                         param: F::Param::init_state(
-                            &<<F::Param as SystemParam>::World>::from_ids(
+                            &<F::Param as SystemParam>::World::from_ids(
                                 worlds.as_unsafe_cell(),
                                 ids,
                             ),
