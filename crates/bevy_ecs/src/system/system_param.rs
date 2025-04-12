@@ -308,19 +308,19 @@ pub unsafe trait ReadOnlySystemParam: SystemParam {}
 /// Shorthand way of accessing the associated type [`SystemParam::Item`] for a given [`SystemParam`].
 pub type SystemParamItem<'w, 's, P> = <P as SystemParam>::Item<'w, 's>;
 
-pub trait IdType {
+pub trait FromIds<'w>: 'w {
     type Ids: Send + Sync;
-}
-
-pub trait FromIds<'w>: 'w + IdType {
-    fn from_ids(worlds: UnsafeWorldsCell<'w>, ids: &Self::Ids) -> Self;
-}
-
-impl<'w> IdType for UnsafeWorldCell<'w> {
-    type Ids = WorldId;
+    type L<'a>: FromIds<'a>;
+    fn from_ids(
+        worlds: UnsafeWorldsCell<'w>,
+        ids: &<Self::L<'static> as FromIds<'static>>::Ids,
+    ) -> Self;
 }
 
 impl<'w> FromIds<'w> for UnsafeWorldCell<'w> {
+    type Ids = WorldId;
+    type L<'a> = UnsafeWorldCell<'a>;
+
     fn from_ids(worlds: UnsafeWorldsCell<'w>, id: &Self::Ids) -> Self {
         unsafe { worlds.get_unsafe_world_cell_mut(*id) }
     }
@@ -328,6 +328,7 @@ impl<'w> FromIds<'w> for UnsafeWorldCell<'w> {
 
 impl<'w> FromIds<'w> for UnsafeWorldsCell<'w> {
     type Ids = ();
+    type L<'a> = UnsafeWorldsCell<'a>;
 
     fn from_ids(worlds: UnsafeWorldsCell<'w>, _ids: &()) -> Self {
         worlds
@@ -349,9 +350,10 @@ macro_rules! impl_from_ids {
             reason = "Zero-length tuples won't have any params to get."
         )]
         impl<'w, $($param: FromIds<'w>),*> FromIds<'w> for ($($param,)*) {
+            type L<'a> = ($($param::L<'a>,)*);
             type Ids = ($($param::Ids,)*);
 
-            fn from_ids(worlds: UnsafeWorldsCell<'w>, ids: &Self::Ids) -> Self {
+            fn from_ids(worlds: UnsafeWorldsCell<'w>, ids: &<Self::L<'static> as FromIds<'static>>::Ids) -> Self {
                 ($($param::from_ids(worlds, &ids.$index), )*)
             }
         }
