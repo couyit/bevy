@@ -193,7 +193,7 @@ pub unsafe trait SystemParam: Sized {
     /// The value of this associated type should be `Self`, instantiated with new lifetimes.
     ///
     /// You could think of [`SystemParam::Item<'w, 's>`] as being an *operation* that changes the lifetimes bound to `Self`.
-    type Item<'world, 'state>: for<'w> SystemParam<State = Self::State, World<'w> = Self::World<'w>>;
+    type Item<'world, 'state>: SystemParam<State = Self::State>;
 
     type World<'w>: FromIds<'w>;
 
@@ -308,24 +308,22 @@ pub unsafe trait ReadOnlySystemParam: SystemParam {}
 /// Shorthand way of accessing the associated type [`SystemParam::Item`] for a given [`SystemParam`].
 pub type SystemParamItem<'w, 's, P> = <P as SystemParam>::Item<'w, 's>;
 
-pub trait FromIds<'w>: 'w + Clone {
-    type Ids: Send + Sync + Clone + 'static;
+pub trait IdType {
+    type Ids: Send + Sync;
+}
+
+pub trait FromIds<'w>: 'w + IdType {
     fn from_ids(worlds: UnsafeWorldsCell<'w>, ids: &Self::Ids) -> Self;
 }
 
-impl<'w> FromIds<'w> for UnsafeWorldCell<'w> {
+impl<'w> IdType for UnsafeWorldCell<'w> {
     type Ids = WorldId;
-
-    fn from_ids(worlds: UnsafeWorldsCell<'w>, id: &WorldId) -> Self {
-        unsafe { worlds.get_unsafe_world_cell_mut(*id) }
-    }
 }
 
-fn shrink<'a, 'b, T>(ids: <T as FromIds<'b>>::Ids) -> <T as FromIds<'b>>::Ids
-where
-    for<'w> T: FromIds<'w>,
-{
-    ids
+impl<'w> FromIds<'w> for UnsafeWorldCell<'w> {
+    fn from_ids(worlds: UnsafeWorldsCell<'w>, id: &Self::Ids) -> Self {
+        unsafe { worlds.get_unsafe_world_cell_mut(*id) }
+    }
 }
 
 impl<'w> FromIds<'w> for UnsafeWorldsCell<'w> {

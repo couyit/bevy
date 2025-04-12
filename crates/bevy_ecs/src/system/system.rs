@@ -7,9 +7,7 @@ use log::warn;
 use thiserror::Error;
 
 use crate::{
-    archetype::ArchetypeComponentId,
-    component::{ComponentId, Tick},
-    query::Access,
+    component::Tick,
     schedule::InternedSystemSet,
     system::{input::SystemInput, SystemIn},
     world::{
@@ -47,10 +45,6 @@ pub trait System: Send + Sync + 'static {
     fn type_id(&self) -> TypeId {
         TypeId::of::<Self>()
     }
-    /// Returns the system's component [`Access`].
-    fn component_access(&self) -> &Access<ComponentId>;
-    /// Returns the system's archetype component [`Access`].
-    fn archetype_component_access(&self) -> &Access<ArchetypeComponentId>;
     /// Returns true if the system is [`Send`].
     fn is_send(&self) -> bool;
 

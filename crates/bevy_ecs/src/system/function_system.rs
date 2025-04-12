@@ -23,7 +23,7 @@ use variadics_please::all_tuples;
 use tracing::{info_span, Span};
 
 use super::{
-    FromIds, IntoSystem, LocalSystem, ReadOnlySystem, SystemParamBuilder,
+    FromIds, IdType, IntoSystem, LocalSystem, ReadOnlySystem, SystemParamBuilder,
     SystemParamValidationError,
 };
 
@@ -672,9 +672,8 @@ impl<Param: SystemParam> FromWorld for SystemState<Param> {
     }
 }
 
-#[derive(Clone)]
 enum Ids<Param: SystemParam> {
-    Tuple(<Param::World<'static> as FromIds<'static>>::Ids),
+    Tuple(<Param::World<'static> as IdType>::Ids),
     Duplicated(WorldId),
 }
 
@@ -820,16 +819,6 @@ where
     }
 
     #[inline]
-    fn component_access(&self) -> &Access<ComponentId> {
-        self.system_meta.component_access_set.combined_access()
-    }
-
-    #[inline]
-    fn archetype_component_access(&self) -> &Access<ArchetypeComponentId> {
-        &self.system_meta.archetype_component_access
-    }
-
-    #[inline]
     fn is_send(&self) -> bool {
         self.system_meta.is_send
     }
@@ -869,24 +858,16 @@ where
 
                 let param_state = &mut self.state.as_mut().expect(Self::ERROR_UNINITIALIZED).param;
 
-                let ids = <<F::Param as SystemParam>::World<'static> as FromIds<'static>>::shrink::<
-                    'w,
-                >(ids);
                 // SAFETY:
                 // - The caller has invoked `update_archetype_component_access`, which will panic
                 //   if the world does not match.
                 // - All world accesses used by `F::Param` have been registered, so the caller
                 //   will ensure that there are no data access conflicts.
-                let params: <<F as SystemParamFunction<Marker>>::Param as SystemParam>::Item<
-                    'w,
-                    '_,
-                > = unsafe {
+                let params = unsafe {
                     F::Param::get_param(
                         param_state,
                         &self.system_meta,
-                        &<<F::Param as SystemParam>::World<'w> as FromIds<'w>>::from_ids(
-                            worlds, &ids,
-                        ),
+                        &<F::Param as SystemParam>::World::from_ids(worlds, &ids),
                     )
                 };
                 let out = self.func.run(input, params);
@@ -944,7 +925,9 @@ where
         match &self.ids {
             Ids::Tuple(ids) => {
                 let ids =
-                    &<<F::Param as SystemParam>::World<'static> as FromIds<'static>>::shrink(ids);
+                    shrink_ids::<_, <<F::Param as SystemParam>::World<'w> as FromIds<'w>>::Ids, _>(
+                        ids,
+                    );
 
                 if self.state.is_some() {
                     self.state = Some(FunctionSystemState {
