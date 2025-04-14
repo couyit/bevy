@@ -23,7 +23,7 @@ use variadics_please::all_tuples;
 use tracing::{info_span, Span};
 
 use super::{
-    FromIds, IdType, IntoSystem, LocalSystem, ReadOnlySystem, SystemParamBuilder,
+    FromGlobal, FromLocal, IntoSystem, LocalSystem, ReadOnlySystem, SystemParamBuilder,
     SystemParamValidationError,
 };
 
@@ -390,7 +390,7 @@ all_tuples!(
 impl<Param> SystemState<Param>
 where
     Param: SystemParam,
-    for<'w> Param::World<'w>: From<UnsafeWorldCell<'w>>,
+    Param::W: FromLocal,
 {
     /// Creates a new [`SystemState`] with default state.
     ///
@@ -402,12 +402,14 @@ where
     pub fn new(world: &mut World) -> Self {
         let mut meta = SystemMeta::new::<Param>();
         Param::init_world_access(
-            &Param::World::from(world.as_unsafe_world_cell_readonly()),
+            &Param::W::from_local(world.as_unsafe_world_cell_readonly()),
             &mut meta,
         );
         meta.change_ticks[0].insert(world.id(), world.change_tick().relative_to(Tick::MAX));
-        let param_state =
-            Param::init_state(&Param::World::from(world.as_unsafe_world_cell()), &mut meta);
+        let param_state = Param::init_state(
+            &Param::W::from_local(world.as_unsafe_world_cell()),
+            &mut meta,
+        );
         Self {
             meta,
             param_state,
@@ -420,7 +422,7 @@ where
     pub(crate) fn from_builder(world: &mut World, builder: impl SystemParamBuilder<Param>) -> Self {
         let mut meta = SystemMeta::new::<Param>();
         Param::init_world_access(
-            &Param::World::from(world.as_unsafe_world_cell_readonly()),
+            &Param::W::from_local(world.as_unsafe_world_cell_readonly()),
             &mut meta,
         );
         meta.change_ticks[0].insert(world.id(), world.change_tick().relative_to(Tick::MAX));
@@ -435,15 +437,9 @@ where
 }
 
 impl<Param: SystemParam> SystemState<Param> {
-    pub fn new_with_ids<'w>(
-        worlds: &'w mut Worlds,
-        ids: <Param::World<'w> as FromIds<'w>>::Ids,
-    ) -> Self {
+    pub fn new_with_ids<'w>(worlds: &'w mut Worlds, ids: Param::W) -> Self {
         let mut meta = SystemMeta::new::<Param>();
-        Param::init_world_access(
-            &Param::World::from_ids(worlds.as_unsafe_cell_readonly(), &ids),
-            &mut meta,
-        );
+        Param::init_world_access(&ids.from_global(worlds.as_unsafe_cell()), &mut meta);
         meta.world_access
             .try_iter_component_access()
             .unwrap()
@@ -457,10 +453,7 @@ impl<Param: SystemParam> SystemState<Param> {
                         .relative_to(Tick::MAX),
                 );
             });
-        let param_state = Param::init_state(
-            &Param::World::from_ids(worlds.as_unsafe_cell(), &ids),
-            &mut meta,
-        );
+        let param_state = Param::init_state(&ids.from_global(worlds.as_unsafe_cell()), &mut meta);
         Self {
             meta,
             param_state,
@@ -672,11 +665,6 @@ impl<Param: SystemParam> FromWorld for SystemState<Param> {
     }
 }
 
-enum Ids<Param: SystemParam> {
-    Tuple(<Param::World<'static> as IdType>::Ids),
-    Duplicated(WorldId),
-}
-
 /// The [`System`] counter part of an ordinary function.
 ///
 /// You get this by calling [`IntoSystem::into_system`]  on a function that only accepts
@@ -744,13 +732,13 @@ pub struct IsFunctionSystem;
 
 pub trait SystemBuilder<Marker: 'static, F: SystemParamFunction<Marker>> {
     type System: System;
-    fn build(
-        self,
-        ids: <<F::Param as SystemParam>::World<'static> as IdsType>::Ids,
-    ) -> Self::System;
+    fn build(self, ids: <F::Param as SystemParam>::W) -> Self::System;
 }
 
-pub trait LocalSystemBuilder<Marker: 'static, F: SystemParamFunction<Marker>> {
+pub trait LocalSystemBuilder<Marker: 'static, F: SystemParamFunction<Marker>>
+where
+    <F::Param as SystemParam>::W: FromLocal,
+{
     type System: LocalSystem;
     fn build(self, id: WorldId) -> Self::System;
 }
@@ -761,10 +749,7 @@ where
     F: SystemParamFunction<Marker>,
 {
     type System = FunctionSystem<Marker, F>;
-    fn build(
-        self,
-        ids: <<F::Param as SystemParam>::World<'static> as FromIds<'static>>::Ids,
-    ) -> Self::System {
+    fn build(self, ids: <F::Param as SystemParam>::W) -> Self::System {
         FunctionSystem {
             func: self,
             state: None,
@@ -780,6 +765,7 @@ impl<Marker, F> LocalSystemBuilder<Marker, F> for F
 where
     Marker: 'static,
     F: SystemParamFunction<Marker>,
+    <F::Param as SystemParam>::W: FromLocal,
 {
     type System = FunctionSystem<Marker, F>;
     fn build(self, id: WorldId) -> Self::System {
@@ -883,11 +869,15 @@ where
     #[inline]
     fn apply_deferred(&mut self, worlds: UnsafeWorldsCell) {
         let param_state = &mut self.state.as_mut().expect(Self::ERROR_UNINITIALIZED).param;
-        F::Param::apply(
-            param_state,
-            &self.system_meta,
-            &<F::Param as SystemParam>::World::from_ids(worlds, &self.ids),
-        );
+
+        let worlds = match &self.ids {
+            Ids::Tuple(ids) => <F::Param as SystemParam>::World::from_ids(worlds, ids),
+            Ids::Duplicated(id) => <F::Param as SystemParam>::World::from(unsafe {
+                worlds.get_unsafe_world_cell_mut(*id)
+            }),
+        };
+
+        F::Param::apply(param_state, &self.system_meta, &worlds);
     }
 
     #[inline]

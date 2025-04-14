@@ -322,14 +322,14 @@ impl Drop for CommandQueue {
 
 impl SystemBuffer for CommandQueue {
     #[inline]
-    fn apply(&mut self, _system_meta: &SystemMeta, worlds: UnsafeWorldsCell) {
+    fn apply(&mut self, _system_meta: &SystemMeta, worlds: DeferredWorld) {
         #[cfg(feature = "trace")]
         let _span_guard = _system_meta.commands_span.enter();
         self.apply(worlds);
     }
 
     #[inline]
-    fn queue(&mut self, _system_meta: &SystemMeta, mut worlds: UnsafeWorldsCell) {
+    fn queue(&mut self, _system_meta: &SystemMeta, mut worlds: DeferredWorld) {
         worlds.component_commands().append(self);
     }
 }

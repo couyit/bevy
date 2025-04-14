@@ -403,7 +403,7 @@ pub fn derive_system_param(input: TokenStream) -> TokenStream {
                 #struct_name <#(#shadowed_lifetimes,)* #punctuated_generic_idents> #where_clause
             {
                 type State = #state_struct_name<#punctuated_generic_idents>;
-                type Item<'w, 's> = #struct_name #ty_generics;
+                type Item<'wref, 'w, 's> = #struct_name #ty_generics;
                 type World<'w> = <#fields_alias::<'static, 'static, #punctuated_generic_idents> as #path::system::SystemParam>::World<'w>;
 
                 fn init_world_access<'w>(world: &Self::World<'w>, system_meta: & mut #path::system::SystemMeta) {
@@ -421,11 +421,11 @@ pub fn derive_system_param(input: TokenStream) -> TokenStream {
                     unsafe { #fields_alias::<'_, '_, #punctuated_generic_idents>::new_archetype(&mut state.state, archetype, archetype_component_access) }
                 }
 
-                fn apply<'w, 's>(state: &'s mut Self::State, system_meta: &#path::system::SystemMeta, world: &Self::World<'w>) {
+                fn apply<'w, 's>(state: &'s mut Self::State, system_meta: &#path::system::SystemMeta, world: #path::world::DeferredWorld) {
                     #fields_alias::<'_, '_, #punctuated_generic_idents>::apply(&mut state.state, system_meta, world);
                 }
 
-                fn queue<'w, 's>(state: &'s mut Self::State, system_meta: &#path::system::SystemMeta, world: &Self::World<'w>) {
+                fn queue<'w, 's>(state: &'s mut Self::State, system_meta: &#path::system::SystemMeta, world: #path::world::DeferredWorld) {
                     #fields_alias::<'_, '_, #punctuated_generic_idents>::queue(&mut state.state, system_meta, world);
                 }
 
@@ -439,11 +439,11 @@ pub fn derive_system_param(input: TokenStream) -> TokenStream {
                 }
 
                 #[inline]
-                unsafe fn get_param<'w, 's>(
+                unsafe fn get_param<'wref, 'w, 's>(
                     state: &'s mut Self::State,
                     system_meta: &#path::system::SystemMeta,
-                    world: &Self::World<'w>,
-                ) -> Self::Item<'w, 's> {
+                    world: &'wref Self::World<'w>,
+                ) -> Self::Item<'wref, 'w, 's> {
                     let (#(#tuple_patterns,)*) = <(#(#tuple_types,)*)>::get_param(&mut state.state, system_meta, world);
                     #struct_name {
                         #(#fields: #field_locals,)*
