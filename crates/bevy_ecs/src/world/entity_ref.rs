@@ -10,8 +10,8 @@ use crate::{
         StorageType,
     },
     entity::{
-        Entities, Entity, EntityBorrow, EntityCloner, EntityClonerBuilder, EntityLocation,
-        TrustedEntityBorrow,
+        ContainsEntity, Entities, Entity, EntityCloner, EntityClonerBuilder, EntityEquivalent,
+        EntityLocation,
     },
     event::Event,
     observer::Observer,
@@ -26,7 +26,7 @@ use crate::{
     },
 };
 use alloc::vec::Vec;
-use bevy_platform_support::collections::{HashMap, HashSet};
+use bevy_platform::collections::{HashMap, HashSet};
 use bevy_ptr::{OwningPtr, Ptr};
 use core::{
     any::TypeId,
@@ -251,7 +251,7 @@ impl<'w> EntityRef<'w> {
     /// ## [`HashSet`] of [`ComponentId`]s
     ///
     /// ```
-    /// # use bevy_platform_support::collections::HashSet;
+    /// # use bevy_platform::collections::HashSet;
     /// # use bevy_ecs::{prelude::*, component::ComponentId};
     /// #
     /// # #[derive(Component, PartialEq, Debug)]
@@ -416,14 +416,14 @@ impl Hash for EntityRef<'_> {
     }
 }
 
-impl EntityBorrow for EntityRef<'_> {
+impl ContainsEntity for EntityRef<'_> {
     fn entity(&self) -> Entity {
         self.id()
     }
 }
 
 // SAFETY: This type represents one Entity. We implement the comparison traits based on that Entity.
-unsafe impl TrustedEntityBorrow for EntityRef<'_> {}
+unsafe impl EntityEquivalent for EntityRef<'_> {}
 
 /// Provides mutable access to a single entity and all of its components.
 ///
@@ -801,7 +801,7 @@ impl<'w> EntityMut<'w> {
     /// ## [`HashSet`] of [`ComponentId`]s
     ///
     /// ```
-    /// # use bevy_platform_support::collections::HashSet;
+    /// # use bevy_platform::collections::HashSet;
     /// # use bevy_ecs::{prelude::*, component::ComponentId};
     /// #
     /// # #[derive(Component, PartialEq, Debug)]
@@ -1075,14 +1075,14 @@ impl Hash for EntityMut<'_> {
     }
 }
 
-impl EntityBorrow for EntityMut<'_> {
+impl ContainsEntity for EntityMut<'_> {
     fn entity(&self) -> Entity {
         self.id()
     }
 }
 
 // SAFETY: This type represents one Entity. We implement the comparison traits based on that Entity.
-unsafe impl TrustedEntityBorrow for EntityMut<'_> {}
+unsafe impl EntityEquivalent for EntityMut<'_> {}
 
 /// A mutable reference to a particular [`Entity`], and the entire world.
 ///
@@ -3670,14 +3670,14 @@ impl Hash for FilteredEntityRef<'_> {
     }
 }
 
-impl EntityBorrow for FilteredEntityRef<'_> {
+impl ContainsEntity for FilteredEntityRef<'_> {
     fn entity(&self) -> Entity {
         self.id()
     }
 }
 
 // SAFETY: This type represents one Entity. We implement the comparison traits based on that Entity.
-unsafe impl TrustedEntityBorrow for FilteredEntityRef<'_> {}
+unsafe impl EntityEquivalent for FilteredEntityRef<'_> {}
 
 /// Provides mutable access to a single entity and some of its components defined by the contained [`Access`].
 ///
@@ -4013,14 +4013,14 @@ impl Hash for FilteredEntityMut<'_> {
     }
 }
 
-impl EntityBorrow for FilteredEntityMut<'_> {
+impl ContainsEntity for FilteredEntityMut<'_> {
     fn entity(&self) -> Entity {
         self.id()
     }
 }
 
 // SAFETY: This type represents one Entity. We implement the comparison traits based on that Entity.
-unsafe impl TrustedEntityBorrow for FilteredEntityMut<'_> {}
+unsafe impl EntityEquivalent for FilteredEntityMut<'_> {}
 
 /// Error type returned by [`TryFrom`] conversions from filtered entity types
 /// ([`FilteredEntityRef`]/[`FilteredEntityMut`]) to full-access entity types
@@ -4246,14 +4246,14 @@ impl<B: Bundle> Hash for EntityRefExcept<'_, B> {
     }
 }
 
-impl<B: Bundle> EntityBorrow for EntityRefExcept<'_, B> {
+impl<B: Bundle> ContainsEntity for EntityRefExcept<'_, B> {
     fn entity(&self) -> Entity {
         self.id()
     }
 }
 
 // SAFETY: This type represents one Entity. We implement the comparison traits based on that Entity.
-unsafe impl<B: Bundle> TrustedEntityBorrow for EntityRefExcept<'_, B> {}
+unsafe impl<B: Bundle> EntityEquivalent for EntityRefExcept<'_, B> {}
 
 /// Provides mutable access to all components of an entity, with the exception
 /// of an explicit set.
@@ -4456,14 +4456,14 @@ impl<B: Bundle> Hash for EntityMutExcept<'_, B> {
     }
 }
 
-impl<B: Bundle> EntityBorrow for EntityMutExcept<'_, B> {
+impl<B: Bundle> ContainsEntity for EntityMutExcept<'_, B> {
     fn entity(&self) -> Entity {
         self.id()
     }
 }
 
 // SAFETY: This type represents one Entity. We implement the comparison traits based on that Entity.
-unsafe impl<B: Bundle> TrustedEntityBorrow for EntityMutExcept<'_, B> {}
+unsafe impl<B: Bundle> EntityEquivalent for EntityMutExcept<'_, B> {}
 
 fn bundle_contains_component<B>(components: &Components, query_id: ComponentId) -> bool
 where

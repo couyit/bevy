@@ -25,7 +25,7 @@ use crate::{
     },
 };
 use alloc::{boxed::Box, vec, vec::Vec};
-use bevy_platform_support::collections::{HashMap, HashSet};
+use bevy_platform::collections::{HashMap, HashSet};
 use bevy_ptr::{ConstNonNull, OwningPtr};
 use bevy_utils::TypeIdMap;
 use core::{any::TypeId, ptr::NonNull};

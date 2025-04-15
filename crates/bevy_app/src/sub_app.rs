@@ -7,7 +7,7 @@ use bevy_ecs::{
     system::{ScheduleSystem, SystemId, SystemInput},
     world::Worlds,
 };
-use bevy_platform_support::collections::{HashMap, HashSet};
+use bevy_platform::collections::{HashMap, HashSet};
 use core::fmt::Debug;
 
 #[cfg(feature = "trace")]

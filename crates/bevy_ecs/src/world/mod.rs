@@ -72,7 +72,7 @@ use crate::{
     },
 };
 use alloc::{boxed::Box, vec::Vec};
-use bevy_platform_support::sync::atomic::{AtomicU32, Ordering};
+use bevy_platform::sync::atomic::{AtomicU32, Ordering};
 use bevy_ptr::{OwningPtr, Ptr, UnsafeCellDeref};
 use core::{any::TypeId, fmt, ptr};
 use log::warn;
@@ -1008,10 +1008,10 @@ impl World {
     /// }
     /// ```
     ///
-    /// ## [`EntityHashSet`](crate::entity::hash_map::EntityHashMap)
+    /// ## [`EntityHashSet`](crate::entity::EntityHashMap)
     ///
     /// ```
-    /// # use bevy_ecs::{prelude::*, entity::hash_set::EntityHashSet};
+    /// # use bevy_ecs::{prelude::*, entity::EntityHashSet};
     /// #[derive(Component)]
     /// struct Position {
     ///   x: f32,
@@ -1029,7 +1029,7 @@ impl World {
     /// }
     /// ```
     ///
-    /// [`EntityHashSet`]: crate::entity::hash_set::EntityHashSet
+    /// [`EntityHashSet`]: crate::entity::EntityHashSet
     #[inline]
     #[track_caller]
     pub fn entity<F: WorldEntityFetch>(&self, entities: F) -> F::Ref<'_> {
@@ -1060,8 +1060,8 @@ impl World {
     ///      such as adding or removing components, or despawning the entity.
     /// - Pass a slice of [`Entity`]s to receive a [`Vec<EntityMut>`].
     /// - Pass an array of [`Entity`]s to receive an equally-sized array of [`EntityMut`]s.
-    /// - Pass a reference to a [`EntityHashSet`](crate::entity::hash_map::EntityHashMap) to receive an
-    ///   [`EntityHashMap<EntityMut>`](crate::entity::hash_map::EntityHashMap).
+    /// - Pass a reference to a [`EntityHashSet`](crate::entity::EntityHashMap) to receive an
+    ///   [`EntityHashMap<EntityMut>`](crate::entity::EntityHashMap).
     ///
     /// In order to perform structural changes on the returned entity reference,
     /// such as adding or removing components, or despawning the entity, only a
@@ -1142,10 +1142,10 @@ impl World {
     /// }
     /// ```
     ///
-    /// ## [`EntityHashSet`](crate::entity::hash_map::EntityHashMap)
+    /// ## [`EntityHashSet`](crate::entity::EntityHashMap)
     ///
     /// ```
-    /// # use bevy_ecs::{prelude::*, entity::hash_set::EntityHashSet};
+    /// # use bevy_ecs::{prelude::*, entity::EntityHashSet};
     /// #[derive(Component)]
     /// struct Position {
     ///   x: f32,
@@ -1165,7 +1165,7 @@ impl World {
     /// }
     /// ```
     ///
-    /// [`EntityHashSet`]: crate::entity::hash_set::EntityHashSet
+    /// [`EntityHashSet`]: crate::entity::EntityHashSet
     #[inline]
     #[track_caller]
     pub fn entity_mut<F: WorldEntityFetch>(&mut self, entities: F) -> F::Mut<'_> {
@@ -1212,8 +1212,8 @@ impl World {
     /// - Pass an [`Entity`] to receive a single [`EntityRef`].
     /// - Pass a slice of [`Entity`]s to receive a [`Vec<EntityRef>`].
     /// - Pass an array of [`Entity`]s to receive an equally-sized array of [`EntityRef`]s.
-    /// - Pass a reference to a [`EntityHashSet`](crate::entity::hash_map::EntityHashMap) to receive an
-    ///   [`EntityHashMap<EntityRef>`](crate::entity::hash_map::EntityHashMap).
+    /// - Pass a reference to a [`EntityHashSet`](crate::entity::EntityHashMap) to receive an
+    ///   [`EntityHashMap<EntityRef>`](crate::entity::EntityHashMap).
     ///
     /// # Errors
     ///
@@ -1224,7 +1224,7 @@ impl World {
     ///
     /// For examples, see [`World::entity`].
     ///
-    /// [`EntityHashSet`]: crate::entity::hash_set::EntityHashSet
+    /// [`EntityHashSet`]: crate::entity::EntityHashSet
     #[inline]
     pub fn get_entity<F: WorldEntityFetch>(
         &self,
@@ -1246,8 +1246,8 @@ impl World {
     ///      such as adding or removing components, or despawning the entity.
     /// - Pass a slice of [`Entity`]s to receive a [`Vec<EntityMut>`].
     /// - Pass an array of [`Entity`]s to receive an equally-sized array of [`EntityMut`]s.
-    /// - Pass a reference to a [`EntityHashSet`](crate::entity::hash_map::EntityHashMap) to receive an
-    ///   [`EntityHashMap<EntityMut>`](crate::entity::hash_map::EntityHashMap).
+    /// - Pass a reference to a [`EntityHashSet`](crate::entity::EntityHashMap) to receive an
+    ///   [`EntityHashMap<EntityMut>`](crate::entity::EntityHashMap).
     ///
     /// In order to perform structural changes on the returned entity reference,
     /// such as adding or removing components, or despawning the entity, only a
@@ -1265,7 +1265,7 @@ impl World {
     ///
     /// For examples, see [`World::entity_mut`].
     ///
-    /// [`EntityHashSet`]: crate::entity::hash_set::EntityHashSet
+    /// [`EntityHashSet`]: crate::entity::EntityHashSet
     #[inline]
     pub fn get_entity_mut<F: WorldEntityFetch>(
         &mut self,
@@ -3987,14 +3987,14 @@ mod tests {
     use crate::{
         change_detection::MaybeLocation,
         component::{ComponentCloneBehavior, ComponentDescriptor, ComponentInfo, StorageType},
-        entity::hash_set::EntityHashSet,
+        entity::EntityHashSet,
         entity_disabling::{DefaultQueryFilters, Disabled},
         prelude::{DetectChangesMut, Resource},
         world::{error::EntityMutableFetchError, DeferredWorld, Worlds},
     };
     use alloc::{borrow::ToOwned, sync::Arc, vec, vec::Vec};
     use bevy_ecs_macros::Component;
-    use bevy_platform_support::collections::{HashMap, HashSet};
+    use bevy_platform::collections::{HashMap, HashSet};
     use bevy_ptr::OwningPtr;
     use core::{
         any::TypeId,
