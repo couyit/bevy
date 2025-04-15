@@ -197,6 +197,8 @@ pub unsafe trait SystemParam: Sized {
 
     type World<'w>: Clone;
 
+    fn shrink<'wlong: 'wshort, 'wshort>(world: Self::World<'wlong>) -> Self::World<'wshort>;
+
     fn init_world_access<'w>(world: Self::World<'w>, system_meta: &mut SystemMeta);
 
     /// Registers any [`World`] access used by this [`SystemParam`]
@@ -307,12 +309,6 @@ pub unsafe trait ReadOnlySystemParam: SystemParam {}
 
 /// Shorthand way of accessing the associated type [`SystemParam::Item`] for a given [`SystemParam`].
 pub type SystemParamItem<'w, 's, P> = <P as SystemParam>::Item<'w, 's>;
-
-trait ShrinkableWorld: SystemParam {
-    fn shrink<'wlong: 'wshort, 'wshort>(value: Self::World<'wlong>) -> Self::World<'wshort>;
-}
-
-impl<Param: SystemParam> ShrinkableWorld for Param {}
 
 pub trait FromGlobal<'w, Worlds>: Send + Sync {
     fn from_global(&self, worlds: UnsafeWorldsCell<'w>) -> Worlds;
@@ -451,6 +447,10 @@ unsafe impl<D: QueryData + 'static, F: QueryFilter + 'static> SystemParam for Qu
     type Item<'w, 's> = Query<'w, 's, D, F>;
     type World<'w> = UnsafeWorldCell<'w>;
 
+    fn shrink<'wlong: 'wshort, 'wshort>(world: Self::World<'wlong>) -> Self::World<'wshort> {
+        world
+    }
+
     fn init_world_access<'w>(world: Self::World<'w>, system_meta: &mut SystemMeta) {
         // Ideally, this adds only read-only access if QueryData is read-only.
         system_meta.world_access.add_write(world.id());
@@ -539,6 +539,10 @@ unsafe impl<'a, D: QueryData + 'static, F: QueryFilter + 'static> SystemParam fo
     type Item<'w, 's> = Single<'w, D, F>;
     type World<'w> = UnsafeWorldCell<'w>;
 
+    fn shrink<'wlong: 'wshort, 'wshort>(world: Self::World<'wlong>) -> Self::World<'wshort> {
+        world
+    }
+
     fn init_world_access<'w>(world: Self::World<'w>, system_meta: &mut SystemMeta) {
         Query::<D, F>::init_world_access(world, system_meta)
     }
@@ -611,6 +615,10 @@ unsafe impl<'a, D: QueryData + 'static, F: QueryFilter + 'static> SystemParam
     type State = QueryState<D, F>;
     type Item<'w, 's> = Option<Single<'w, D, F>>;
     type World<'w> = UnsafeWorldCell<'w>;
+
+    fn shrink<'wlong: 'wshort, 'wshort>(world: Self::World<'wlong>) -> Self::World<'wshort> {
+        world
+    }
 
     fn init_world_access<'w>(world: Self::World<'w>, system_meta: &mut SystemMeta) {
         Single::<D, F>::init_world_access(world, system_meta)
@@ -700,6 +708,10 @@ unsafe impl<D: QueryData + 'static, F: QueryFilter + 'static> SystemParam
     type State = QueryState<D, F>;
     type Item<'w, 's> = Populated<'w, 's, D, F>;
     type World<'w> = UnsafeWorldCell<'w>;
+
+    fn shrink<'wlong: 'wshort, 'wshort>(world: Self::World<'wlong>) -> Self::World<'wshort> {
+        world
+    }
 
     fn init_world_access<'w>(world: Self::World<'w>, system_meta: &mut SystemMeta) {
         Query::<D, F>::init_world_access(world, system_meta)
@@ -893,6 +905,10 @@ macro_rules! impl_param_set {
             type Item< 'w, 's> = ParamSet<'w, 's, ($($param,)*)>;
             type World<'w> = <($($param,)*) as SystemParam>::World<'w>;
 
+            fn shrink<'wlong: 'wshort, 'wshort>(world: Self::World<'wlong>) -> Self::World<'wshort> {
+                <($($param,)*) as SystemParam>::shrink(world)
+            }
+
             fn init_world_access<'w>(world: Self::World<'w>, system_meta: &mut SystemMeta) {
                 <($($param,)*) as SystemParam>::init_world_access(world, system_meta);
             }
@@ -994,6 +1010,10 @@ unsafe impl<'a, T: Resource> SystemParam for Res<'a, T> {
     type Item<'w, 's> = Res<'w, T>;
     type World<'w> = UnsafeWorldCell<'w>;
 
+    fn shrink<'wlong: 'wshort, 'wshort>(world: Self::World<'wlong>) -> Self::World<'wshort> {
+        world
+    }
+
     fn init_world_access<'w>(world: Self::World<'w>, system_meta: &mut SystemMeta) {
         system_meta.world_access.add_read(world.id());
     }
@@ -1078,6 +1098,10 @@ unsafe impl<'a, T: Resource> SystemParam for Option<Res<'a, T>> {
     type Item<'w, 's> = Option<Res<'w, T>>;
     type World<'w> = UnsafeWorldCell<'w>;
 
+    fn shrink<'wlong: 'wshort, 'wshort>(world: Self::World<'wlong>) -> Self::World<'wshort> {
+        world
+    }
+
     fn init_world_access<'w>(world: Self::World<'w>, system_meta: &mut SystemMeta) {
         Res::<T>::init_world_access(world, system_meta)
     }
@@ -1113,6 +1137,10 @@ unsafe impl<'a, T: Resource> SystemParam for ResMut<'a, T> {
     type State = ComponentId;
     type Item<'w, 's> = ResMut<'w, T>;
     type World<'w> = UnsafeWorldCell<'w>;
+
+    fn shrink<'wlong: 'wshort, 'wshort>(world: Self::World<'wlong>) -> Self::World<'wshort> {
+        world
+    }
 
     fn init_world_access<'w>(world: Self::World<'w>, system_meta: &mut SystemMeta) {
         system_meta.world_access.add_write(world.id());
@@ -1197,6 +1225,10 @@ unsafe impl<'a, T: Resource> SystemParam for Option<ResMut<'a, T>> {
     type Item<'w, 's> = Option<ResMut<'w, T>>;
     type World<'w> = UnsafeWorldCell<'w>;
 
+    fn shrink<'wlong: 'wshort, 'wshort>(world: Self::World<'wlong>) -> Self::World<'wshort> {
+        world
+    }
+
     fn init_world_access<'w>(world: Self::World<'w>, system_meta: &mut SystemMeta) {
         ResMut::<T>::init_world_access(world, system_meta)
     }
@@ -1234,6 +1266,10 @@ unsafe impl SystemParam for &'_ World {
     type State = ();
     type Item<'w, 's> = &'w World;
     type World<'w> = UnsafeWorldCell<'w>;
+
+    fn shrink<'wlong: 'wshort, 'wshort>(world: Self::World<'wlong>) -> Self::World<'wshort> {
+        world
+    }
 
     fn init_world_access<'w>(world: Self::World<'w>, system_meta: &mut SystemMeta) {
         system_meta.world_access.add_read(world.id());
@@ -1287,6 +1323,10 @@ unsafe impl<'w> SystemParam for DeferredWorld<'w> {
     type State = ();
     type Item<'world, 'state> = DeferredWorld<'world>;
     type World<'world> = UnsafeWorldCell<'world>;
+
+    fn shrink<'wlong: 'wshort, 'wshort>(world: Self::World<'wlong>) -> Self::World<'wshort> {
+        world
+    }
 
     fn init_world_access<'world>(world: Self::World<'world>, system_meta: &mut SystemMeta) {
         system_meta.world_access.add_write(world.id());
@@ -1438,6 +1478,10 @@ unsafe impl<'a, T: FromWorlds + Send + 'static> SystemParam for Local<'a, T> {
     type State = SyncCell<T>;
     type Item<'w, 's> = Local<'s, T>;
     type World<'w> = UnsafeWorldsCell<'w>;
+
+    fn shrink<'wlong: 'wshort, 'wshort>(world: Self::World<'wlong>) -> Self::World<'wshort> {
+        world
+    }
 
     fn init_world_access<'w>(_worlds: Self::World<'w>, _system_meta: &mut SystemMeta) {}
 
@@ -1621,6 +1665,10 @@ unsafe impl<T: SystemBuffer> SystemParam for Deferred<'_, T> {
     type Item<'w, 's> = Deferred<'s, T>;
     type World<'w> = UnsafeWorldsCell<'w>;
 
+    fn shrink<'wlong: 'wshort, 'wshort>(world: Self::World<'wlong>) -> Self::World<'wshort> {
+        world
+    }
+
     fn init_world_access<'w>(_worlds: Self::World<'w>, _system_meta: &mut SystemMeta) {}
 
     fn init_state<'w>(worlds: Self::World<'w>, system_meta: &mut SystemMeta) -> Self::State {
@@ -1654,6 +1702,8 @@ unsafe impl SystemParam for NonSendMarker {
     type State = ();
     type Item<'w, 's> = Self;
     type World<'w> = ();
+
+    fn shrink<'wlong: 'wshort, 'wshort>(_world: Self::World<'wlong>) -> Self::World<'wshort> {}
 
     fn init_world_access(_world: (), _system_meta: &mut SystemMeta) {}
 
@@ -1752,6 +1802,10 @@ unsafe impl<'a, T: 'static> SystemParam for NonSend<'a, T> {
     type Item<'w, 's> = NonSend<'w, T>;
     type World<'w> = UnsafeWorldCell<'w>;
 
+    fn shrink<'wlong: 'wshort, 'wshort>(world: Self::World<'wlong>) -> Self::World<'wshort> {
+        world
+    }
+
     fn init_world_access<'w>(world: Self::World<'w>, system_meta: &mut SystemMeta) {
         system_meta.world_access.add_read(world.id());
     }
@@ -1836,6 +1890,10 @@ unsafe impl<T: 'static> SystemParam for Option<NonSend<'_, T>> {
     type Item<'w, 's> = Option<NonSend<'w, T>>;
     type World<'w> = UnsafeWorldCell<'w>;
 
+    fn shrink<'wlong: 'wshort, 'wshort>(world: Self::World<'wlong>) -> Self::World<'wshort> {
+        world
+    }
+
     fn init_world_access<'w>(world: Self::World<'w>, system_meta: &mut SystemMeta) {
         NonSend::<T>::init_world_access(world, system_meta)
     }
@@ -1868,6 +1926,10 @@ unsafe impl<'a, T: 'static> SystemParam for NonSendMut<'a, T> {
     type State = ComponentId;
     type Item<'w, 's> = NonSendMut<'w, T>;
     type World<'w> = UnsafeWorldCell<'w>;
+
+    fn shrink<'wlong: 'wshort, 'wshort>(world: Self::World<'wlong>) -> Self::World<'wshort> {
+        world
+    }
 
     fn init_world_access<'w>(world: Self::World<'w>, system_meta: &mut SystemMeta) {
         system_meta.world_access.add_write(world.id());
@@ -1953,6 +2015,10 @@ unsafe impl<'a, T: 'static> SystemParam for Option<NonSendMut<'a, T>> {
     type Item<'w, 's> = Option<NonSendMut<'w, T>>;
     type World<'w> = UnsafeWorldCell<'w>;
 
+    fn shrink<'wlong: 'wshort, 'wshort>(world: Self::World<'wlong>) -> Self::World<'wshort> {
+        world
+    }
+
     fn init_world_access<'w>(world: Self::World<'w>, system_meta: &mut SystemMeta) {
         NonSendMut::<T>::init_world_access(world, system_meta)
     }
@@ -1990,6 +2056,10 @@ unsafe impl<'a> SystemParam for &'a Archetypes {
     type Item<'w, 's> = &'w Archetypes;
     type World<'w> = UnsafeWorldCell<'w>;
 
+    fn shrink<'wlong: 'wshort, 'wshort>(world: Self::World<'wlong>) -> Self::World<'wshort> {
+        world
+    }
+
     fn init_world_access<'w>(world: Self::World<'w>, system_meta: &mut SystemMeta) {
         system_meta.world_access.add_read(world.id());
     }
@@ -2014,6 +2084,10 @@ unsafe impl<'a> SystemParam for &'a Components {
     type State = ();
     type Item<'w, 's> = &'w Components;
     type World<'w> = UnsafeWorldCell<'w>;
+
+    fn shrink<'wlong: 'wshort, 'wshort>(world: Self::World<'wlong>) -> Self::World<'wshort> {
+        world
+    }
 
     fn init_world_access<'w>(world: Self::World<'w>, system_meta: &mut SystemMeta) {
         system_meta.world_access.add_read(world.id());
@@ -2040,6 +2114,10 @@ unsafe impl<'a> SystemParam for &'a Entities {
     type Item<'w, 's> = &'w Entities;
     type World<'w> = UnsafeWorldCell<'w>;
 
+    fn shrink<'wlong: 'wshort, 'wshort>(world: Self::World<'wlong>) -> Self::World<'wshort> {
+        world
+    }
+
     fn init_world_access<'w>(world: Self::World<'w>, system_meta: &mut SystemMeta) {
         system_meta.world_access.add_read(world.id());
     }
@@ -2064,6 +2142,10 @@ unsafe impl<'a> SystemParam for &'a Bundles {
     type State = ();
     type Item<'w, 's> = &'w Bundles;
     type World<'w> = UnsafeWorldCell<'w>;
+
+    fn shrink<'wlong: 'wshort, 'wshort>(world: Self::World<'wlong>) -> Self::World<'wshort> {
+        world
+    }
 
     fn init_world_access<'w>(world: Self::World<'w>, system_meta: &mut SystemMeta) {
         system_meta.world_access.add_read(world.id());
@@ -2119,6 +2201,10 @@ unsafe impl SystemParam for SystemChangeTick {
     type Item<'w, 's> = SystemChangeTick;
     type World<'w> = UnsafeWorldCell<'w>;
 
+    fn shrink<'wlong: 'wshort, 'wshort>(world: Self::World<'wlong>) -> Self::World<'wshort> {
+        world
+    }
+
     fn init_world_access<'w>(_world: Self::World<'w>, _system_meta: &mut SystemMeta) {}
 
     fn init_state<'w>(_world: Self::World<'w>, _system_meta: &mut SystemMeta) -> Self::State {}
@@ -2143,6 +2229,10 @@ unsafe impl<T: SystemParam> SystemParam for Vec<T> {
     type State = Vec<T::State>;
     type Item<'w, 's> = Vec<T::Item<'w, 's>>;
     type World<'w> = T::World<'w>;
+
+    fn shrink<'wlong: 'wshort, 'wshort>(world: Self::World<'wlong>) -> Self::World<'wshort> {
+        T::shrink(world)
+    }
 
     fn init_world_access<'w>(world: Self::World<'w>, system_meta: &mut SystemMeta) {
         T::init_world_access(world, system_meta)
@@ -2210,6 +2300,10 @@ unsafe impl<T: SystemParam> SystemParam for ParamSet<'_, '_, Vec<T>> {
     type State = Vec<T::State>;
     type Item<'world, 'state> = ParamSet<'world, 'state, Vec<T>>;
     type World<'w> = T::World<'w>;
+
+    fn shrink<'wlong: 'wshort, 'wshort>(world: Self::World<'wlong>) -> Self::World<'wshort> {
+        T::shrink(world)
+    }
 
     fn init_world_access<'w>(world: Self::World<'w>, system_meta: &mut SystemMeta) {
         T::init_world_access(world, system_meta)
@@ -2311,6 +2405,11 @@ macro_rules! impl_system_param_tuple {
             type State = ($($param::State,)*);
             type Item<'w, 's> = ($($param::Item::< 'w, 's>,)*);
             type World<'w> = ($($param::World<'w>,)*);
+
+            #[inline]
+            fn shrink<'wlong: 'wshort, 'wshort>(($($world,)*): Self::World<'wlong>) -> Self::World<'wshort> {
+                (($($param::shrink($world),)*))
+            }
 
             #[inline]
             fn init_world_access<'w>(($($world,)*): Self::World<'w>, system_meta: &mut SystemMeta) {
@@ -2492,6 +2591,10 @@ unsafe impl<P: SystemParam + 'static> SystemParam for StaticSystemParam<'_, '_, 
     type Item<'world, 'state> = StaticSystemParam<'world, 'state, P>;
     type World<'w> = P::World<'w>;
 
+    fn shrink<'wlong: 'wshort, 'wshort>(world: Self::World<'wlong>) -> Self::World<'wshort> {
+        P::shrink(world)
+    }
+
     fn init_world_access<'w>(world: Self::World<'w>, system_meta: &mut SystemMeta) {
         P::init_world_access(world, system_meta)
     }
@@ -2542,6 +2645,8 @@ unsafe impl<T: ?Sized> SystemParam for PhantomData<T> {
     type State = ();
     type Item<'world, 'state> = Self;
     type World<'w> = ();
+
+    fn shrink<'wlong: 'wshort, 'wshort>(_world: Self::World<'wlong>) -> Self::World<'wshort> {}
 
     fn init_world_access<'w>(_world: (), _system_meta: &mut SystemMeta) {}
 
@@ -2721,13 +2826,19 @@ where
 {
     if let (Some(state), Ok(world)) = (
         state.downcast_mut::<ParamState<T::Item<'static, 'static>>>(),
-        world.downcast::<<T::Item<'static, 'static> as SystemParam>::World<'w>>(),
+        world.downcast::<<T::Item<'static, 'static> as SystemParam>::World<'static>>(),
     ) {
         // SAFETY:
         // - The caller ensures the world has access for the underlying system param,
         //   and since the downcast succeeded, the underlying system param is T.
         // - The caller ensures the `world` matches.
-        Some(unsafe { T::Item::get_param(&mut state.0, system_meta, *world) })
+        Some(unsafe {
+            T::Item::get_param(
+                &mut state.0,
+                system_meta,
+                T::Item::<'static, 'static>::shrink(*world),
+            )
+        })
     } else {
         None
     }
@@ -2820,6 +2931,10 @@ unsafe impl SystemParam for DynSystemParam<'_, '_> {
     type Item<'world, 'state> = DynSystemParam<'world, 'state>;
     type World<'w> = UnsafeWorldsCell<'w>;
 
+    fn shrink<'wlong: 'wshort, 'wshort>(world: Self::World<'wlong>) -> Self::World<'wshort> {
+        world
+    }
+
     fn init_world_access<'w>(_worlds: Self::World<'w>, _system_meta: &mut SystemMeta) {}
 
     fn init_state<'w>(_worlds: Self::World<'w>, _system_meta: &mut SystemMeta) -> Self::State {
@@ -2875,6 +2990,10 @@ unsafe impl SystemParam for FilteredResources<'_, '_> {
     type Item<'world, 'state> = FilteredResources<'world, 'state>;
     type World<'w> = UnsafeWorldCell<'w>;
 
+    fn shrink<'wlong: 'wshort, 'wshort>(world: Self::World<'wlong>) -> Self::World<'wshort> {
+        world
+    }
+
     fn init_world_access<'w>(_world: Self::World<'w>, _system_meta: &mut SystemMeta) {}
 
     fn init_state<'w>(_world: Self::World<'w>, _system_meta: &mut SystemMeta) -> Self::State {
@@ -2909,6 +3028,10 @@ unsafe impl SystemParam for FilteredResourcesMut<'_, '_> {
     type State = Access<ComponentId>;
     type Item<'world, 'state> = FilteredResourcesMut<'world, 'state>;
     type World<'w> = UnsafeWorldCell<'w>;
+
+    fn shrink<'wlong: 'wshort, 'wshort>(world: Self::World<'wlong>) -> Self::World<'wshort> {
+        world
+    }
 
     fn init_world_access<'w>(_world: Self::World<'w>, _system_meta: &mut SystemMeta) {}
 
