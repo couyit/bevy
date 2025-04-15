@@ -31,6 +31,7 @@ use core::{
 };
 use derive_more::derive::Display;
 use disqualified::ShortName;
+use std::rc::Rc;
 use thiserror::Error;
 
 use super::Populated;
@@ -2726,7 +2727,7 @@ unsafe impl<T: ?Sized> ReadOnlySystemParam for PhantomData<T> {}
 pub struct DynSystemParam<'w, 's> {
     /// A `ParamState<T>` wrapping the state for the underlying system param.
     state: &'s mut dyn Any,
-    worlds: Box<dyn Any>,
+    worlds: Rc<dyn Any>,
     system_meta: SystemMeta,
     marker: PhantomData<UnsafeWorldCell<'w>>,
 }
@@ -2738,7 +2739,7 @@ impl<'w, 's> DynSystemParam<'w, 's> {
     ///   in [`init_state`](SystemParam::init_state) for the inner system param.
     /// - `world` must be the same `World` that was used to initialize
     ///   [`state`](SystemParam::init_state) for the inner system param.
-    unsafe fn new(state: &'s mut dyn Any, worlds: Box<dyn Any>, system_meta: SystemMeta) -> Self {
+    unsafe fn new(state: &'s mut dyn Any, worlds: Rc<dyn Any>, system_meta: SystemMeta) -> Self {
         Self {
             state,
             worlds,
@@ -2781,7 +2782,7 @@ impl<'w, 's> DynSystemParam<'w, 's> {
         // - `DynSystemParam::new()` ensures `state` is a `ParamState<T>`, that the world matches,
         //   and that it has access required by the inner system param.
         // - This exclusively borrows the `DynSystemParam` for `'_`, so it is the only use of `world` with this access for `'_`.
-        unsafe { downcast::<T>(self.state, &self.system_meta, self.worlds) }
+        unsafe { downcast::<T>(self.state, &self.system_meta, self.worlds.clone()) }
     }
 
     /// Returns the inner system parameter if it is the correct type.
@@ -2798,7 +2799,7 @@ impl<'w, 's> DynSystemParam<'w, 's> {
         // - `DynSystemParam::new()` ensures `state` is a `ParamState<T>`, that the world matches,
         //   and that it has access required by the inner system param.
         // - The inner system param only performs read access, so it's safe to copy that access for the full `'w` lifetime.
-        unsafe { downcast::<T>(self.state, &self.system_meta, self.worlds) }
+        unsafe { downcast::<T>(self.state, &self.system_meta, self.worlds.clone()) }
     }
 }
 
@@ -2811,7 +2812,7 @@ impl<'w, 's> DynSystemParam<'w, 's> {
 unsafe fn downcast<'w, 's, T: SystemParam>(
     state: &'s mut dyn Any,
     system_meta: &SystemMeta,
-    world: Box<dyn Any>,
+    world: Rc<dyn Any>,
 ) -> Option<T>
 // We need a 'static version of the SystemParam to use with `Any::downcast_mut()`,
 // and we need a <'w, 's> version to actually return.
@@ -2836,7 +2837,7 @@ where
             T::Item::get_param(
                 &mut state.0,
                 system_meta,
-                T::Item::<'static, 'static>::shrink(*world),
+                T::Item::<'static, 'static>::shrink(world.as_ref().to_owned()),
             )
         })
     } else {
@@ -2894,7 +2895,7 @@ trait DynParamState: Sync + Send {
 /// A wrapper around a [`SystemParam::State`] that can be used as a trait object in a [`DynSystemParam`].
 struct ParamState<T: SystemParam>(T::State);
 
-impl<T: SystemParam> DynParamState for ParamState<T> {
+impl<T: SystemParam + 'static> DynParamState for ParamState<T> {
     fn as_any_mut(&mut self) -> &mut dyn Any {
         self
     }
