@@ -510,7 +510,7 @@ mod tests {
         hierarchy::{ChildOf, Children},
         relationship::{RelationshipHookMode, RelationshipTarget},
         spawn::{Spawn, SpawnRelated},
-        world::{World, Worlds},
+        world::World,
     };
     use alloc::{vec, vec::Vec};
 

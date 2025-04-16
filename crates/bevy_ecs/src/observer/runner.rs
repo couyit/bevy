@@ -8,7 +8,7 @@ use crate::{
     prelude::*,
     query::DebugCheckedUnwrap,
     system::{IntoObserverSystem, ObserverSystem},
-    world::{unsafe_world_cell::UnsafeWorldsCell, DeferredWorld},
+    world::DeferredWorld,
 };
 use bevy_ptr::PtrMut;
 

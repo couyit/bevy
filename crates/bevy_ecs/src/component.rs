@@ -10,7 +10,7 @@ use crate::{
     resource::Resource,
     storage::{SparseSetIndex, SparseSets, Table, TableRow},
     system::Local,
-    world::DeferredWorld,
+    world::{DeferredWorld, FromWorld, World},
 };
 use alloc::boxed::Box;
 use alloc::{borrow::Cow, format, vec::Vec};
@@ -1413,31 +1413,6 @@ impl<'w> ComponentsQueuedRegistrator<'w> {
         id
     }
 
-    /// Queues this function to run as a resource registrator.
-    ///
-    /// # Safety
-    ///
-    /// The [`TypeId`] must not already be registered or queued as a resource.
-    unsafe fn force_register_arbitrary_resource(
-        &self,
-        type_id: TypeId,
-        descriptor: ComponentDescriptor,
-        func: impl FnOnce(&mut ComponentsRegistrator, ComponentId, ComponentDescriptor) + 'static,
-    ) -> ComponentId {
-        let id = self.ids.next();
-        self.components
-            .queued
-            .write()
-            .unwrap_or_else(PoisonError::into_inner)
-            .resources
-            .insert(
-                type_id,
-                // SAFETY: The id was just generated.
-                unsafe { QueuedRegistration::new(id, descriptor, func) },
-            );
-        id
-    }
-
     /// Queues this function to run as a dynamic registrator.
     fn force_register_arbitrary_dynamic(
         &self,
@@ -1524,7 +1499,7 @@ impl<'w> ComponentsQueuedRegistrator<'w> {
         self.get_resource_id(type_id).unwrap_or_else(|| {
             // SAFETY: We just checked that this type was not in the queue.
             unsafe {
-                self.force_register_arbitrary_resource(
+                self.force_register_arbitrary_component(
                     type_id,
                     ComponentDescriptor::new_resource::<T>(),
                     move |registrator, id, descriptor| {
@@ -1556,7 +1531,7 @@ impl<'w> ComponentsQueuedRegistrator<'w> {
         self.get_resource_id(type_id).unwrap_or_else(|| {
             // SAFETY: We just checked that this type was not in the queue.
             unsafe {
-                self.force_register_arbitrary_resource(
+                self.force_register_arbitrary_component(
                     type_id,
                     ComponentDescriptor::new_non_send::<T>(StorageType::default()),
                     move |registrator, id, descriptor| {
@@ -1668,21 +1643,6 @@ impl<'w> ComponentsRegistrator<'w> {
             queued.components.keys().next().copied().map(|type_id| {
                 // SAFETY: the id just came from a valid iterator.
                 unsafe { queued.components.remove(&type_id).debug_checked_unwrap() }
-            })
-        } {
-            registrator.register(self);
-        }
-
-        // resources
-        while let Some(registrator) = {
-            let queued = self
-                .components
-                .queued
-                .get_mut()
-                .unwrap_or_else(PoisonError::into_inner);
-            queued.resources.keys().next().copied().map(|type_id| {
-                // SAFETY: the id just came from a valid iterator.
-                unsafe { queued.resources.remove(&type_id).debug_checked_unwrap() }
             })
         } {
             registrator.register(self);
@@ -1909,7 +1869,7 @@ impl<'w> ComponentsRegistrator<'w> {
             .queued
             .get_mut()
             .unwrap_or_else(PoisonError::into_inner)
-            .resources
+            .components
             .remove(&type_id)
         {
             // If we are trying to register something that has already been queued, we respect the queue.
@@ -2000,7 +1960,7 @@ impl Components {
     #[inline]
     pub fn num_queued(&self) -> usize {
         let queued = self.queued.read().unwrap_or_else(PoisonError::into_inner);
-        queued.components.len() + queued.dynamic_registrations.len() + queued.resources.len()
+        queued.components.len() + queued.dynamic_registrations.len()
     }
 
     /// Returns `true` if there are any components registered with this instance. Otherwise, this returns `false`.
@@ -2016,7 +1976,7 @@ impl Components {
             .queued
             .get_mut()
             .unwrap_or_else(PoisonError::into_inner);
-        queued.components.len() + queued.dynamic_registrations.len() + queued.resources.len()
+        queued.components.len() + queued.dynamic_registrations.len()
     }
 
     /// A faster version of [`Self::any_queued`].
@@ -2063,7 +2023,6 @@ impl Components {
                 queued
                     .components
                     .values()
-                    .chain(queued.resources.values())
                     .chain(queued.dynamic_registrations.iter())
                     .find(|queued| queued.id == id)
                     .map(|queued| Cow::Owned(queued.descriptor.clone()))
@@ -2088,7 +2047,6 @@ impl Components {
                 queued
                     .components
                     .values()
-                    .chain(queued.resources.values())
                     .chain(queued.dynamic_registrations.iter())
                     .find(|queued| queued.id == id)
                     .map(|queued| queued.descriptor.name.clone())
@@ -2468,11 +2426,11 @@ impl Components {
     /// Type-erased equivalent of [`Components::resource_id()`].
     #[inline]
     pub fn get_resource_id(&self, type_id: TypeId) -> Option<ComponentId> {
-        self.resource_indices.get(&type_id).copied().or_else(|| {
+        self.indices.get(&type_id).copied().or_else(|| {
             self.queued
                 .read()
                 .unwrap_or_else(PoisonError::into_inner)
-                .resources
+                .components
                 .get(&type_id)
                 .map(|queued| queued.id)
         })
@@ -3129,7 +3087,6 @@ pub fn component_clone_via_reflect(source: &SourceComponent, ctx: &mut Component
                     core::ptr::NonNull::new_unchecked(Box::into_raw(component).cast::<u8>());
                 world
                     .entity_mut(target)
-                    .into_world_mut(world)
                     .insert_by_id(component_id, OwningPtr::new(raw_component_ptr));
 
                 if component_layout.size() > 0 {
