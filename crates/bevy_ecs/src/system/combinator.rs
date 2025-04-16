@@ -431,10 +431,10 @@ where
         worlds: UnsafeWorldsCell,
     ) -> Result<(), SystemParamValidationError> {
         // SAFETY: Delegate to the `System` implementation for `a`.
-        unsafe { self.a.validate_param_unsafe(world) }?;
+        unsafe { self.a.validate_param_unsafe(worlds) }?;
 
         // SAFETY: Delegate to the `System` implementation for `b`.
-        unsafe { self.b.validate_param_unsafe(world) }?;
+        unsafe { self.b.validate_param_unsafe(worlds) }?;
 
         Ok(())
     }
