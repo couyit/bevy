@@ -97,6 +97,11 @@ pub struct Worlds {
     pub(crate) systems: Systems,
 }
 
+impl World {
+    pub const RESOURCE: WorldId = WorldId(0);
+    pub const MAIN: WorldId = WorldId(1);
+}
+
 impl Default for Worlds {
     fn default() -> Self {
         let mut world = Self {
@@ -105,6 +110,7 @@ impl Default for Worlds {
             systems: Default::default(),
         };
 
+        world.create_resource_world();
         world.create_world();
 
         world

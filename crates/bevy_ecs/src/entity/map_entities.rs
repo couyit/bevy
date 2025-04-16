@@ -245,7 +245,7 @@ impl<'m> SceneEntityMapper<'m> {
         Self {
             map,
             // SAFETY: Entities data is kept in a valid state via `EntityMapper::world_scope`
-            dead_start: unsafe { world.entities_mut().alloc() },
+            dead_start: world.entities_mut().alloc(),
             generations: 0,
         }
     }
@@ -255,7 +255,7 @@ impl<'m> SceneEntityMapper<'m> {
     /// safely allocate any more references, this method takes ownership of `self` in order to render it unusable.
     pub fn finish(self, world: &mut World) {
         // SAFETY: Entities data is kept in a valid state via `EntityMap::world_scope`
-        let entities = unsafe { world.entities_mut() };
+        let entities = world.entities_mut();
         assert!(entities.free(self.dead_start).is_some());
         assert!(entities.reserve_generations(self.dead_start.index(), self.generations));
     }
@@ -292,7 +292,7 @@ mod tests {
 
         let mut map = EntityHashMap::default();
         let mut worlds = Worlds::new();
-        let world = worlds.get_main_world_mut();
+        let world = worlds.get_world_mut(worlds.create_world());
         let mut mapper = SceneEntityMapper::new(&mut map, world);
 
         let mapped_ent = Entity::from_raw(FIRST_IDX);
@@ -320,7 +320,7 @@ mod tests {
     fn world_scope_reserves_generations() {
         let mut map = EntityHashMap::default();
         let mut worlds = Worlds::new();
-        let world = worlds.get_main_world_mut();
+        let world = worlds.get_world_mut(worlds.create_world());
 
         let dead_ref = SceneEntityMapper::world_scope(&mut map, world, |_, mapper| {
             mapper.get_mapped(Entity::from_raw(0))
@@ -335,10 +335,10 @@ mod tests {
     #[test]
     fn entity_mapper_no_panic() {
         let mut worlds = Worlds::new();
-        let world = worlds.get_main_world_mut();
+        let world = worlds.get_world_mut(worlds.create_world());
         // "Dirty" the `Entities`, requiring a flush afterward.
-        world.entities.reserve_entity();
-        assert!(world.entities.needs_flush());
+        world.entities().reserve_entity();
+        assert!(world.entities().needs_flush());
 
         // Create and exercise a SceneEntityMapper - should not panic because it flushes
         // `Entities` first.
@@ -347,6 +347,6 @@ mod tests {
         });
 
         // The SceneEntityMapper should leave `Entities` in a flushed state.
-        assert!(!world.entities.needs_flush());
+        assert!(!world.entities().needs_flush());
     }
 }

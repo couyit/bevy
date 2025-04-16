@@ -224,7 +224,7 @@ pub unsafe trait SystemParam: Sized {
 
     type World<'w>: Clone;
 
-    fn shrink<'wlong: 'wshort, 'wshort>(world: Self::World<'wlong>) -> Self::World<'wshort>;
+    fn shrink_world<'wlong: 'wshort, 'wshort>(world: Self::World<'wlong>) -> Self::World<'wshort>;
 
     fn init_world_access<'w>(world: Self::World<'w>, system_meta: &mut SystemMeta);
 
@@ -337,15 +337,20 @@ pub unsafe trait ReadOnlySystemParam: SystemParam {}
 /// Shorthand way of accessing the associated type [`SystemParam::Item`] for a given [`SystemParam`].
 pub type SystemParamItem<'w, 's, P> = <P as SystemParam>::Item<'w, 's>;
 
-pub trait FromGlobal<'w, Worlds>: Send + Sync {
-    fn from_global(&self, worlds: UnsafeWorldsCell<'w>) -> Worlds;
+pub trait GetGlobal<T: SystemParam>: Send + Sync + 'static {
+    fn get_global<'w>(&self, worlds: UnsafeWorldsCell<'w>) -> T::World<'w>;
 }
 
-pub trait FromLocal<'w, Worlds>: FromGlobal<'w, Worlds> {
-    fn from_local(world: UnsafeWorldCell<'w>) -> Worlds;
+pub trait GetLocal<T: SystemParam>: GetGlobal<T> {
+    fn get_local<'w>(world: UnsafeWorldCell<'w>) -> T::World<'w>;
 }
 
-mod fetch {
+pub trait DefaultWorldId: SystemParam {
+    type Id: GetGlobal<Self>;
+    fn default_world_id() -> Self::Id;
+}
+
+pub mod fetch {
     use std::any::Any;
     use variadics_please::all_tuples_enumerated;
 
@@ -354,33 +359,40 @@ mod fetch {
         WorldId,
     };
 
-    use super::{FromGlobal, FromLocal};
+    use super::{DefaultWorldId, GetGlobal, GetLocal, SystemParam};
 
     pub type Local = WorldId;
     pub struct Global;
+    pub struct Default;
 
-    impl<'w> FromLocal<'w, UnsafeWorldCell<'w>> for Local {
-        fn from_local(world: UnsafeWorldCell<'w>) -> UnsafeWorldCell<'w> {
+    impl<T: for<'w> SystemParam<World<'w> = UnsafeWorldCell<'w>>> GetLocal<T> for Local {
+        fn get_local<'w>(world: UnsafeWorldCell<'w>) -> UnsafeWorldCell<'w> {
             world
         }
     }
 
     // TODO: Add immutable local world fetcher.
-    impl<'w> FromGlobal<'w, UnsafeWorldCell<'w>> for Local {
-        fn from_global(&self, worlds: UnsafeWorldsCell<'w>) -> UnsafeWorldCell<'w> {
+    impl<T: for<'w> SystemParam<World<'w> = UnsafeWorldCell<'w>>> GetGlobal<T> for Local {
+        fn get_global<'w>(&self, worlds: UnsafeWorldsCell<'w>) -> UnsafeWorldCell<'w> {
             unsafe { worlds.get_unsafe_world_cell_mut(*self) }
         }
     }
 
     // TODO: Add immutable global world fetcher.
-    impl<'w> FromGlobal<'w, UnsafeWorldsCell<'w>> for Global {
-        fn from_global(&self, worlds: UnsafeWorldsCell<'w>) -> UnsafeWorldsCell<'w> {
+    impl<T: for<'w> SystemParam<World<'w> = UnsafeWorldsCell<'w>>> GetGlobal<T> for Global {
+        fn get_global<'w>(&self, worlds: UnsafeWorldsCell<'w>) -> UnsafeWorldsCell<'w> {
             worlds
         }
     }
 
-    macro_rules! impl_from_ids {
-        ($(($index: tt, $param: ident, $world: ident)),*) => {
+    impl<T: DefaultWorldId> GetGlobal<T> for Default {
+        fn get_global<'w>(&self, worlds: UnsafeWorldsCell<'w>) -> <T as SystemParam>::World<'w> {
+            T::default_world_id().get_global(worlds)
+        }
+    }
+
+    macro_rules! impl_from_ids_for_local {
+        ($(($index: tt, $param: ident, $fetch: ident)),*) => {
             #[expect(
                 clippy::allow_attributes,
                 reason = "This is in a macro, and as such, the below lints may not always apply."
@@ -389,14 +401,10 @@ mod fetch {
                 unused_variables,
                 reason =  "Zero-length tuples won't use variables."
             )]
-            #[allow(
-                clippy::unused_unit,
-                reason = "Zero-length tuples won't have any params to get."
-            )]
-            impl<'w, $($world, )*> FromLocal<'w, ($($world, )*)> for Local
-            where Local: $(FromLocal<'w, $world> + )* Any {
-                fn from_local(world: UnsafeWorldCell<'w>) -> ($($world, )*) {
-                    ($(<Local as FromLocal<'w, $world>>::from_local(world),)*)
+            impl<$($param: SystemParam, )*> GetLocal<($($param, )*)> for Local
+            where Local: $(GetLocal<$param> + )* Any {
+                fn get_local<'w>(world: UnsafeWorldCell<'w>) -> ($($param::World<'w>, )*) {
+                    (($(<Local as GetLocal<$param>>::get_local(world),)*))
                 }
             }
 
@@ -408,15 +416,11 @@ mod fetch {
                 unused_variables,
                 reason =  "Zero-length tuples won't use variables."
             )]
-            #[allow(
-                clippy::unused_unit,
-                reason = "Zero-length tuples won't have any params to get."
-            )]
-            impl<'w, $($world, )*> FromGlobal<'w, ($($world, )*)> for Local
-            where Local: $(FromLocal<'w, $world> + )* Any {
-                fn from_global(&self, worlds: UnsafeWorldsCell<'w>) -> ($($world, )*) {
+            impl<$($param: SystemParam, )*> GetGlobal<($($param, )*)> for Local
+            where Local: $(GetLocal<$param> + )* Any {
+                fn get_global<'w>(&self, worlds: UnsafeWorldsCell<'w>) -> ($($param::World<'w>, )*) {
                     let world = unsafe{ worlds.get_unsafe_world_cell_mut(*self) };
-                    ($(<Local as FromLocal<'w, $world>>::from_local(world), )*)
+                    (($(<Local as GetLocal<$param>>::get_local(world), )*))
                 }
             }
 
@@ -428,37 +432,50 @@ mod fetch {
                 unused_variables,
                 reason =  "Zero-length tuples won't use variables."
             )]
-            #[allow(
-                clippy::unused_unit,
-                reason = "Zero-length tuples won't have any params to get."
-            )]
-            impl<'w, $($param: FromLocal<'w, $world>, )* $($world, )*> FromLocal<'w, ($($world, )*)> for ($($param, )*) {
-                fn from_local(world: UnsafeWorldCell<'w>) -> ($($world, )*) {
-                    ($($param::from_local(world), )*)
-                }
-            }
-
-            #[expect(
-                clippy::allow_attributes,
-                reason = "This is in a macro, and as such, the below lints may not always apply."
-            )]
-            #[allow(
-                unused_variables,
-                reason =  "Zero-length tuples won't use variables."
-            )]
-            #[allow(
-                clippy::unused_unit,
-                reason = "Zero-length tuples won't have any params to get."
-            )]
-            impl<'w, $($param: FromGlobal<'w, $world>, )* $($world, )*> FromGlobal<'w, ($($world, )*)> for ($($param, )*) {
-                fn from_global(&self, worlds: UnsafeWorldsCell<'w>) -> ($($world, )*) {
-                    ($(self.$index.from_global(worlds), )*)
+            impl<$($fetch: GetLocal<$param>, )* $($param: SystemParam, )*> GetLocal<($($param, )*)> for ($($fetch, )*) {
+                fn get_local<'w>(world: UnsafeWorldCell<'w>) -> ($($param::World<'w>, )*) {
+                    (($($fetch::get_local(world), )*))
                 }
             }
         };
     }
 
-    all_tuples_enumerated!(impl_from_ids, 0, 16, P, W);
+    all_tuples_enumerated!(impl_from_ids_for_local, 0, 16, P, F);
+
+    impl<P> GetGlobal<P> for ()
+    where
+        for<'w> P: SystemParam<World<'w> = ()>,
+    {
+        fn get_global<'w>(&self, _worlds: UnsafeWorldsCell<'w>) {}
+    }
+
+    macro_rules! impl_from_ids_for_global {
+        ($(($index: tt, $param: ident, $fetch: ident, $temp: ident)),*) => {
+            #[expect(
+                clippy::allow_attributes,
+                reason = "This is in a macro, and as such, the below lints may not always apply."
+            )]
+            #[allow(
+                unused_variables,
+                reason =  "Zero-length tuples won't use variables."
+            )]
+            impl<$($fetch: GetGlobal<$param>, )* $($param: SystemParam, )*> GetGlobal<($($param, )*)> for ($($fetch, )*) {
+                fn get_global<'w>(&self, worlds: UnsafeWorldsCell<'w>) -> ($($param::World<'w>, )*) {
+                    (($(self.$index.get_global(worlds), )*))
+                }
+            }
+
+            impl<$($param, )*> GetGlobal<($($param, )*)> for ()
+            where $(for<'w> $param: SystemParam<World<'w> = ()>,)*
+            {
+                fn get_global<'w>(&self, _worlds: UnsafeWorldsCell<'w>) -> ($($param::World<'w>, )*) {
+                    (($({ let $temp = (); $temp }, )*))
+                }
+            }
+        };
+    }
+
+    all_tuples_enumerated!(impl_from_ids_for_global, 1, 16, P, F, t);
 }
 
 // SAFETY: QueryState is constrained to read-only fetches, so it only reads World.
@@ -474,7 +491,7 @@ unsafe impl<D: QueryData + 'static, F: QueryFilter + 'static> SystemParam for Qu
     type Item<'w, 's> = Query<'w, 's, D, F>;
     type World<'w> = UnsafeWorldCell<'w>;
 
-    fn shrink<'wlong: 'wshort, 'wshort>(world: Self::World<'wlong>) -> Self::World<'wshort> {
+    fn shrink_world<'wlong: 'wshort, 'wshort>(world: Self::World<'wlong>) -> Self::World<'wshort> {
         world
     }
 
@@ -517,6 +534,13 @@ unsafe impl<D: QueryData + 'static, F: QueryFilter + 'static> SystemParam for Qu
                 *system_meta.change_ticks[1].get(world.id()).unwrap(),
             )
         }
+    }
+}
+
+impl<D: QueryData + 'static, F: QueryFilter + 'static> DefaultWorldId for Query<'_, '_, D, F> {
+    type Id = fetch::Local;
+    fn default_world_id() -> Self::Id {
+        World::MAIN
     }
 }
 
@@ -566,7 +590,7 @@ unsafe impl<'a, D: QueryData + 'static, F: QueryFilter + 'static> SystemParam fo
     type Item<'w, 's> = Single<'w, D, F>;
     type World<'w> = UnsafeWorldCell<'w>;
 
-    fn shrink<'wlong: 'wshort, 'wshort>(world: Self::World<'wlong>) -> Self::World<'wshort> {
+    fn shrink_world<'wlong: 'wshort, 'wshort>(world: Self::World<'wlong>) -> Self::World<'wshort> {
         world
     }
 
@@ -639,6 +663,13 @@ unsafe impl<'a, D: QueryData + 'static, F: QueryFilter + 'static> SystemParam fo
     }
 }
 
+impl<'a, D: QueryData + 'static, F: QueryFilter + 'static> DefaultWorldId for Single<'a, D, F> {
+    type Id = fetch::Local;
+    fn default_world_id() -> Self::Id {
+        Query::<D, F>::default_world_id()
+    }
+}
+
 // SAFETY: Relevant query ComponentId and ArchetypeComponentId access is applied to SystemMeta. If
 // this Query conflicts with any prior access, a panic will occur.
 unsafe impl<'a, D: QueryData + 'static, F: QueryFilter + 'static> SystemParam
@@ -648,7 +679,7 @@ unsafe impl<'a, D: QueryData + 'static, F: QueryFilter + 'static> SystemParam
     type Item<'w, 's> = Option<Single<'w, D, F>>;
     type World<'w> = UnsafeWorldCell<'w>;
 
-    fn shrink<'wlong: 'wshort, 'wshort>(world: Self::World<'wlong>) -> Self::World<'wshort> {
+    fn shrink_world<'wlong: 'wshort, 'wshort>(world: Self::World<'wlong>) -> Self::World<'wshort> {
         world
     }
 
@@ -720,6 +751,15 @@ unsafe impl<'a, D: QueryData + 'static, F: QueryFilter + 'static> SystemParam
     }
 }
 
+impl<'a, D: QueryData + 'static, F: QueryFilter + 'static> DefaultWorldId
+    for Option<Single<'a, D, F>>
+{
+    type Id = fetch::Local;
+    fn default_world_id() -> Self::Id {
+        Single::<D, F>::default_world_id()
+    }
+}
+
 // SAFETY: QueryState is constrained to read-only fetches, so it only reads World.
 unsafe impl<'a, D: ReadOnlyQueryData + 'static, F: QueryFilter + 'static> ReadOnlySystemParam
     for Single<'a, D, F>
@@ -741,7 +781,7 @@ unsafe impl<D: QueryData + 'static, F: QueryFilter + 'static> SystemParam
     type Item<'w, 's> = Populated<'w, 's, D, F>;
     type World<'w> = UnsafeWorldCell<'w>;
 
-    fn shrink<'wlong: 'wshort, 'wshort>(world: Self::World<'wlong>) -> Self::World<'wshort> {
+    fn shrink_world<'wlong: 'wshort, 'wshort>(world: Self::World<'wlong>) -> Self::World<'wshort> {
         world
     }
 
@@ -796,6 +836,13 @@ unsafe impl<D: QueryData + 'static, F: QueryFilter + 'static> SystemParam
         } else {
             Ok(())
         }
+    }
+}
+
+impl<D: QueryData + 'static, F: QueryFilter + 'static> DefaultWorldId for Populated<'_, '_, D, F> {
+    type Id = fetch::Local;
+    fn default_world_id() -> Self::Id {
+        Query::<D, F>::default_world_id()
     }
 }
 
@@ -925,7 +972,7 @@ pub struct ParamSet<'w, 's, T: SystemParam> {
 }
 
 macro_rules! impl_param_set {
-    ($(($index: tt, $param: ident, $system_meta: ident, $fn_name: ident, $world: ident)),*) => {
+    ($(($index: tt, $param: ident, $fetch: ident, $system_meta: ident, $fn_name: ident, $world: ident)),*) => {
         // SAFETY: All parameters are constrained to ReadOnlySystemParam, so World is only read
         unsafe impl<'w, 's, $($param,)*> ReadOnlySystemParam for ParamSet<'w, 's, ($($param,)*)>
         where $($param: ReadOnlySystemParam,)*
@@ -939,8 +986,8 @@ macro_rules! impl_param_set {
             type Item< 'w, 's> = ParamSet<'w, 's, ($($param,)*)>;
             type World<'w> = <($($param,)*) as SystemParam>::World<'w>;
 
-            fn shrink<'wlong: 'wshort, 'wshort>(world: Self::World<'wlong>) -> Self::World<'wshort> {
-                <($($param,)*) as SystemParam>::shrink(world)
+            fn shrink_world<'wlong: 'wshort, 'wshort>(world: Self::World<'wlong>) -> Self::World<'wshort> {
+                <($($param,)*) as SystemParam>::shrink_world(world)
             }
 
             fn init_world_access<'w>(world: Self::World<'w>, system_meta: &mut SystemMeta) {
@@ -1029,10 +1076,23 @@ macro_rules! impl_param_set {
                 }
             )*
         }
+
+        impl<$($param: SystemParam,)* $($fetch: GetGlobal<$param>,)*> GetGlobal<ParamSet<'_, '_, ($($param,)*)>> for ($($fetch, )*) {
+            fn get_global<'w>(&self, worlds: UnsafeWorldsCell<'w>) -> ($($param::World<'w>, )*) {
+                (($(self.$index.get_global(worlds), )*))
+            }
+        }
+
+        impl<$($param: DefaultWorldId,)*> DefaultWorldId for ParamSet<'_, '_, ($($param,)*)> {
+            type Id = ($($param::Id,)*);
+            fn default_world_id() -> Self::Id {
+                <($($param,)*)>::default_world_id()
+            }
+        }
     }
 }
 
-all_tuples_enumerated!(impl_param_set, 1, 8, P, m, p, w);
+all_tuples_enumerated!(impl_param_set, 1, 8, P, F, m, p, w);
 
 // SAFETY: Res only reads a single World resource
 unsafe impl<'a, T: Resource> ReadOnlySystemParam for Res<'a, T> {}
@@ -1044,7 +1104,7 @@ unsafe impl<'a, T: Resource> SystemParam for Res<'a, T> {
     type Item<'w, 's> = Res<'w, T>;
     type World<'w> = UnsafeWorldCell<'w>;
 
-    fn shrink<'wlong: 'wshort, 'wshort>(world: Self::World<'wlong>) -> Self::World<'wshort> {
+    fn shrink_world<'wlong: 'wshort, 'wshort>(world: Self::World<'wlong>) -> Self::World<'wshort> {
         world
     }
 
@@ -1125,6 +1185,13 @@ unsafe impl<'a, T: Resource> SystemParam for Res<'a, T> {
     }
 }
 
+impl<'a, T: Resource> DefaultWorldId for Res<'a, T> {
+    type Id = fetch::Local;
+    fn default_world_id() -> Self::Id {
+        World::RESOURCE
+    }
+}
+
 // SAFETY: Only reads a single World resource
 unsafe impl<'a, T: Resource> ReadOnlySystemParam for Option<Res<'a, T>> {}
 
@@ -1134,7 +1201,7 @@ unsafe impl<'a, T: Resource> SystemParam for Option<Res<'a, T>> {
     type Item<'w, 's> = Option<Res<'w, T>>;
     type World<'w> = UnsafeWorldCell<'w>;
 
-    fn shrink<'wlong: 'wshort, 'wshort>(world: Self::World<'wlong>) -> Self::World<'wshort> {
+    fn shrink_world<'wlong: 'wshort, 'wshort>(world: Self::World<'wlong>) -> Self::World<'wshort> {
         world
     }
 
@@ -1167,6 +1234,13 @@ unsafe impl<'a, T: Resource> SystemParam for Option<Res<'a, T>> {
     }
 }
 
+impl<'a, T: Resource> DefaultWorldId for Option<Res<'a, T>> {
+    type Id = fetch::Local;
+    fn default_world_id() -> Self::Id {
+        Res::<T>::default_world_id()
+    }
+}
+
 // SAFETY: Res ComponentId and ArchetypeComponentId access is applied to SystemMeta. If this Res
 // conflicts with any prior access, a panic will occur.
 unsafe impl<'a, T: Resource> SystemParam for ResMut<'a, T> {
@@ -1174,7 +1248,7 @@ unsafe impl<'a, T: Resource> SystemParam for ResMut<'a, T> {
     type Item<'w, 's> = ResMut<'w, T>;
     type World<'w> = UnsafeWorldCell<'w>;
 
-    fn shrink<'wlong: 'wshort, 'wshort>(world: Self::World<'wlong>) -> Self::World<'wshort> {
+    fn shrink_world<'wlong: 'wshort, 'wshort>(world: Self::World<'wlong>) -> Self::World<'wshort> {
         world
     }
 
@@ -1257,13 +1331,20 @@ unsafe impl<'a, T: Resource> SystemParam for ResMut<'a, T> {
     }
 }
 
+impl<'a, T: Resource> DefaultWorldId for ResMut<'a, T> {
+    type Id = fetch::Local;
+    fn default_world_id() -> Self::Id {
+        Res::<T>::default_world_id()
+    }
+}
+
 // SAFETY: this impl defers to `ResMut`, which initializes and validates the correct world access.
 unsafe impl<'a, T: Resource> SystemParam for Option<ResMut<'a, T>> {
     type State = ComponentId;
     type Item<'w, 's> = Option<ResMut<'w, T>>;
     type World<'w> = UnsafeWorldCell<'w>;
 
-    fn shrink<'wlong: 'wshort, 'wshort>(world: Self::World<'wlong>) -> Self::World<'wshort> {
+    fn shrink_world<'wlong: 'wshort, 'wshort>(world: Self::World<'wlong>) -> Self::World<'wshort> {
         world
     }
 
@@ -1296,6 +1377,13 @@ unsafe impl<'a, T: Resource> SystemParam for Option<ResMut<'a, T>> {
     }
 }
 
+impl<'a, T: Resource> DefaultWorldId for Option<ResMut<'a, T>> {
+    type Id = fetch::Local;
+    fn default_world_id() -> Self::Id {
+        ResMut::<T>::default_world_id()
+    }
+}
+
 /// SAFETY: only reads world
 unsafe impl<'w> ReadOnlySystemParam for &'w World {}
 
@@ -1305,7 +1393,7 @@ unsafe impl SystemParam for &'_ World {
     type Item<'w, 's> = &'w World;
     type World<'w> = UnsafeWorldCell<'w>;
 
-    fn shrink<'wlong: 'wshort, 'wshort>(world: Self::World<'wlong>) -> Self::World<'wshort> {
+    fn shrink_world<'wlong: 'wshort, 'wshort>(world: Self::World<'wlong>) -> Self::World<'wshort> {
         world
     }
 
@@ -1356,13 +1444,20 @@ unsafe impl SystemParam for &'_ World {
     }
 }
 
+impl DefaultWorldId for &'_ World {
+    type Id = fetch::Local;
+    fn default_world_id() -> Self::Id {
+        World::MAIN
+    }
+}
+
 /// SAFETY: `DeferredWorld` can read all components and resources but cannot be used to gain any other mutable references.
 unsafe impl<'w> SystemParam for DeferredWorld<'w> {
     type State = ();
     type Item<'world, 'state> = DeferredWorld<'world>;
     type World<'world> = UnsafeWorldCell<'world>;
 
-    fn shrink<'wlong: 'wshort, 'wshort>(world: Self::World<'wlong>) -> Self::World<'wshort> {
+    fn shrink_world<'wlong: 'wshort, 'wshort>(world: Self::World<'wlong>) -> Self::World<'wshort> {
         world
     }
 
@@ -1399,6 +1494,13 @@ unsafe impl<'w> SystemParam for DeferredWorld<'w> {
     }
 }
 
+impl<'w> DefaultWorldId for DeferredWorld<'w> {
+    type Id = fetch::Local;
+    fn default_world_id() -> Self::Id {
+        World::MAIN
+    }
+}
+
 /// A system local [`SystemParam`].
 ///
 /// A local may only be accessed by the system itself and is therefore not visible to other systems.
@@ -1416,11 +1518,11 @@ unsafe impl<'w> SystemParam for DeferredWorld<'w> {
 /// fn write_to_local(mut local: Local<usize>) {
 ///     *local = 42;
 /// }
-/// fn read_from_local(local: Local<usize>) -> usize {
+/// fn read_get_local(local: Local<usize>) -> usize {
 ///     *local
 /// }
 /// let mut write_system = IntoSystem::into_system(write_to_local);
-/// let mut read_system = IntoSystem::into_system(read_from_local);
+/// let mut read_system = IntoSystem::into_system(read_get_local);
 /// write_system.initialize(world);
 /// read_system.initialize(world);
 ///
@@ -1517,7 +1619,7 @@ unsafe impl<'a, T: FromWorlds + Send + 'static> SystemParam for Local<'a, T> {
     type Item<'w, 's> = Local<'s, T>;
     type World<'w> = UnsafeWorldsCell<'w>;
 
-    fn shrink<'wlong: 'wshort, 'wshort>(world: Self::World<'wlong>) -> Self::World<'wshort> {
+    fn shrink_world<'wlong: 'wshort, 'wshort>(world: Self::World<'wlong>) -> Self::World<'wshort> {
         world
     }
 
@@ -1534,6 +1636,13 @@ unsafe impl<'a, T: FromWorlds + Send + 'static> SystemParam for Local<'a, T> {
         _world: Self::World<'w>,
     ) -> Self::Item<'w, 's> {
         Local(state.get())
+    }
+}
+
+impl<'a, T: FromWorlds + Send + 'static> DefaultWorldId for Local<'a, T> {
+    type Id = fetch::Global;
+    fn default_world_id() -> Self::Id {
+        fetch::Global
     }
 }
 
@@ -1703,7 +1812,7 @@ unsafe impl<T: SystemBuffer> SystemParam for Deferred<'_, T> {
     type Item<'w, 's> = Deferred<'s, T>;
     type World<'w> = UnsafeWorldsCell<'w>;
 
-    fn shrink<'wlong: 'wshort, 'wshort>(world: Self::World<'wlong>) -> Self::World<'wshort> {
+    fn shrink_world<'wlong: 'wshort, 'wshort>(world: Self::World<'wlong>) -> Self::World<'wshort> {
         world
     }
 
@@ -1732,6 +1841,13 @@ unsafe impl<T: SystemBuffer> SystemParam for Deferred<'_, T> {
     }
 }
 
+impl<T: SystemBuffer> DefaultWorldId for Deferred<'_, T> {
+    type Id = fetch::Global;
+    fn default_world_id() -> Self::Id {
+        fetch::Global
+    }
+}
+
 /// A dummy type that is [`!Send`](Send), to force systems to run on the main thread.
 pub struct NonSendMarker;
 
@@ -1741,7 +1857,8 @@ unsafe impl SystemParam for NonSendMarker {
     type Item<'w, 's> = Self;
     type World<'w> = ();
 
-    fn shrink<'wlong: 'wshort, 'wshort>(_world: Self::World<'wlong>) -> Self::World<'wshort> {}
+    fn shrink_world<'wlong: 'wshort, 'wshort>(_world: Self::World<'wlong>) -> Self::World<'wshort> {
+    }
 
     fn init_world_access(_world: (), _system_meta: &mut SystemMeta) {}
 
@@ -1758,6 +1875,11 @@ unsafe impl SystemParam for NonSendMarker {
     ) -> Self::Item<'world, 'state> {
         Self
     }
+}
+
+impl DefaultWorldId for NonSendMarker {
+    type Id = ();
+    fn default_world_id() -> Self::Id {}
 }
 
 // SAFETY: Does not read any world state
@@ -1840,7 +1962,7 @@ unsafe impl<'a, T: 'static> SystemParam for NonSend<'a, T> {
     type Item<'w, 's> = NonSend<'w, T>;
     type World<'w> = UnsafeWorldCell<'w>;
 
-    fn shrink<'wlong: 'wshort, 'wshort>(world: Self::World<'wlong>) -> Self::World<'wshort> {
+    fn shrink_world<'wlong: 'wshort, 'wshort>(world: Self::World<'wlong>) -> Self::World<'wshort> {
         world
     }
 
@@ -1921,6 +2043,13 @@ unsafe impl<'a, T: 'static> SystemParam for NonSend<'a, T> {
     }
 }
 
+impl<T: 'static> DefaultWorldId for NonSend<'_, T> {
+    type Id = fetch::Local;
+    fn default_world_id() -> Self::Id {
+        World::RESOURCE
+    }
+}
+
 // SAFETY: Only reads a single World non-send resource
 unsafe impl<T: 'static> ReadOnlySystemParam for Option<NonSend<'_, T>> {}
 
@@ -1930,7 +2059,7 @@ unsafe impl<T: 'static> SystemParam for Option<NonSend<'_, T>> {
     type Item<'w, 's> = Option<NonSend<'w, T>>;
     type World<'w> = UnsafeWorldCell<'w>;
 
-    fn shrink<'wlong: 'wshort, 'wshort>(world: Self::World<'wlong>) -> Self::World<'wshort> {
+    fn shrink_world<'wlong: 'wshort, 'wshort>(world: Self::World<'wlong>) -> Self::World<'wshort> {
         world
     }
 
@@ -1960,6 +2089,13 @@ unsafe impl<T: 'static> SystemParam for Option<NonSend<'_, T>> {
     }
 }
 
+impl<T: 'static> DefaultWorldId for Option<NonSend<'_, T>> {
+    type Id = fetch::Local;
+    fn default_world_id() -> Self::Id {
+        NonSend::<T>::default_world_id()
+    }
+}
+
 // SAFETY: NonSendMut ComponentId and ArchetypeComponentId access is applied to SystemMeta. If this
 // NonSendMut conflicts with any prior access, a panic will occur.
 unsafe impl<'a, T: 'static> SystemParam for NonSendMut<'a, T> {
@@ -1967,7 +2103,7 @@ unsafe impl<'a, T: 'static> SystemParam for NonSendMut<'a, T> {
     type Item<'w, 's> = NonSendMut<'w, T>;
     type World<'w> = UnsafeWorldCell<'w>;
 
-    fn shrink<'wlong: 'wshort, 'wshort>(world: Self::World<'wlong>) -> Self::World<'wshort> {
+    fn shrink_world<'wlong: 'wshort, 'wshort>(world: Self::World<'wlong>) -> Self::World<'wshort> {
         world
     }
 
@@ -2051,13 +2187,20 @@ unsafe impl<'a, T: 'static> SystemParam for NonSendMut<'a, T> {
     }
 }
 
+impl<T: 'static> DefaultWorldId for NonSendMut<'_, T> {
+    type Id = fetch::Local;
+    fn default_world_id() -> Self::Id {
+        NonSend::<T>::default_world_id()
+    }
+}
+
 // SAFETY: this impl defers to `NonSendMut`, which initializes and validates the correct world access.
 unsafe impl<'a, T: 'static> SystemParam for Option<NonSendMut<'a, T>> {
     type State = ComponentId;
     type Item<'w, 's> = Option<NonSendMut<'w, T>>;
     type World<'w> = UnsafeWorldCell<'w>;
 
-    fn shrink<'wlong: 'wshort, 'wshort>(world: Self::World<'wlong>) -> Self::World<'wshort> {
+    fn shrink_world<'wlong: 'wshort, 'wshort>(world: Self::World<'wlong>) -> Self::World<'wshort> {
         world
     }
 
@@ -2089,6 +2232,13 @@ unsafe impl<'a, T: 'static> SystemParam for Option<NonSendMut<'a, T>> {
     }
 }
 
+impl<T: 'static> DefaultWorldId for Option<NonSendMut<'_, T>> {
+    type Id = fetch::Local;
+    fn default_world_id() -> Self::Id {
+        NonSendMut::<T>::default_world_id()
+    }
+}
+
 // SAFETY: Only reads World archetypes
 unsafe impl<'a> ReadOnlySystemParam for &'a Archetypes {}
 
@@ -2098,7 +2248,7 @@ unsafe impl<'a> SystemParam for &'a Archetypes {
     type Item<'w, 's> = &'w Archetypes;
     type World<'w> = UnsafeWorldCell<'w>;
 
-    fn shrink<'wlong: 'wshort, 'wshort>(world: Self::World<'wlong>) -> Self::World<'wshort> {
+    fn shrink_world<'wlong: 'wshort, 'wshort>(world: Self::World<'wlong>) -> Self::World<'wshort> {
         world
     }
 
@@ -2118,6 +2268,13 @@ unsafe impl<'a> SystemParam for &'a Archetypes {
     }
 }
 
+impl DefaultWorldId for &Archetypes {
+    type Id = fetch::Local;
+    fn default_world_id() -> Self::Id {
+        <&World>::default_world_id()
+    }
+}
+
 // SAFETY: Only reads World components
 unsafe impl<'a> ReadOnlySystemParam for &'a Components {}
 
@@ -2127,7 +2284,7 @@ unsafe impl<'a> SystemParam for &'a Components {
     type Item<'w, 's> = &'w Components;
     type World<'w> = UnsafeWorldCell<'w>;
 
-    fn shrink<'wlong: 'wshort, 'wshort>(world: Self::World<'wlong>) -> Self::World<'wshort> {
+    fn shrink_world<'wlong: 'wshort, 'wshort>(world: Self::World<'wlong>) -> Self::World<'wshort> {
         world
     }
 
@@ -2147,6 +2304,13 @@ unsafe impl<'a> SystemParam for &'a Components {
     }
 }
 
+impl DefaultWorldId for &Components {
+    type Id = fetch::Local;
+    fn default_world_id() -> Self::Id {
+        <&World>::default_world_id()
+    }
+}
+
 // SAFETY: Only reads World entities
 unsafe impl<'a> ReadOnlySystemParam for &'a Entities {}
 
@@ -2156,7 +2320,7 @@ unsafe impl<'a> SystemParam for &'a Entities {
     type Item<'w, 's> = &'w Entities;
     type World<'w> = UnsafeWorldCell<'w>;
 
-    fn shrink<'wlong: 'wshort, 'wshort>(world: Self::World<'wlong>) -> Self::World<'wshort> {
+    fn shrink_world<'wlong: 'wshort, 'wshort>(world: Self::World<'wlong>) -> Self::World<'wshort> {
         world
     }
 
@@ -2176,6 +2340,13 @@ unsafe impl<'a> SystemParam for &'a Entities {
     }
 }
 
+impl DefaultWorldId for &Entities {
+    type Id = fetch::Local;
+    fn default_world_id() -> Self::Id {
+        <&World>::default_world_id()
+    }
+}
+
 // SAFETY: Only reads World bundles
 unsafe impl<'a> ReadOnlySystemParam for &'a Bundles {}
 
@@ -2185,7 +2356,7 @@ unsafe impl<'a> SystemParam for &'a Bundles {
     type Item<'w, 's> = &'w Bundles;
     type World<'w> = UnsafeWorldCell<'w>;
 
-    fn shrink<'wlong: 'wshort, 'wshort>(world: Self::World<'wlong>) -> Self::World<'wshort> {
+    fn shrink_world<'wlong: 'wshort, 'wshort>(world: Self::World<'wlong>) -> Self::World<'wshort> {
         world
     }
 
@@ -2202,6 +2373,13 @@ unsafe impl<'a> SystemParam for &'a Bundles {
         world: Self::World<'w>,
     ) -> Self::Item<'w, 's> {
         world.bundles()
+    }
+}
+
+impl DefaultWorldId for &Bundles {
+    type Id = fetch::Local;
+    fn default_world_id() -> Self::Id {
+        <&World>::default_world_id()
     }
 }
 
@@ -2243,7 +2421,7 @@ unsafe impl SystemParam for SystemChangeTick {
     type Item<'w, 's> = SystemChangeTick;
     type World<'w> = UnsafeWorldCell<'w>;
 
-    fn shrink<'wlong: 'wshort, 'wshort>(world: Self::World<'wlong>) -> Self::World<'wshort> {
+    fn shrink_world<'wlong: 'wshort, 'wshort>(world: Self::World<'wlong>) -> Self::World<'wshort> {
         world
     }
 
@@ -2272,8 +2450,8 @@ unsafe impl<T: SystemParam> SystemParam for Vec<T> {
     type Item<'w, 's> = Vec<T::Item<'w, 's>>;
     type World<'w> = T::World<'w>;
 
-    fn shrink<'wlong: 'wshort, 'wshort>(world: Self::World<'wlong>) -> Self::World<'wshort> {
-        T::shrink(world)
+    fn shrink_world<'wlong: 'wshort, 'wshort>(world: Self::World<'wlong>) -> Self::World<'wshort> {
+        T::shrink_world(world)
     }
 
     fn init_world_access<'w>(world: Self::World<'w>, system_meta: &mut SystemMeta) {
@@ -2335,6 +2513,16 @@ unsafe impl<T: SystemParam> SystemParam for Vec<T> {
     }
 }
 
+impl<T: DefaultWorldId> DefaultWorldId for Vec<T>
+where
+    T::Id: GetGlobal<Self>,
+{
+    type Id = T::Id;
+    fn default_world_id() -> Self::Id {
+        T::default_world_id()
+    }
+}
+
 // SAFETY: When initialized with `init_state`, `get_param` returns an empty `Vec` and does no access.
 // Therefore, `init_state` trivially registers all access, and no accesses can conflict.
 // Note that the safety requirements for non-empty `Vec`s are handled by the `SystemParamBuilder` impl that builds them.
@@ -2343,8 +2531,8 @@ unsafe impl<T: SystemParam> SystemParam for ParamSet<'_, '_, Vec<T>> {
     type Item<'world, 'state> = ParamSet<'world, 'state, Vec<T>>;
     type World<'w> = T::World<'w>;
 
-    fn shrink<'wlong: 'wshort, 'wshort>(world: Self::World<'wlong>) -> Self::World<'wshort> {
-        T::shrink(world)
+    fn shrink_world<'wlong: 'wshort, 'wshort>(world: Self::World<'wlong>) -> Self::World<'wshort> {
+        T::shrink_world(world)
     }
 
     fn init_world_access<'w>(world: Self::World<'w>, system_meta: &mut SystemMeta) {
@@ -2423,6 +2611,16 @@ impl<'w, T: SystemParam> ParamSet<'w, '_, Vec<T>> {
     }
 }
 
+impl<T: DefaultWorldId> DefaultWorldId for ParamSet<'_, '_, Vec<T>>
+where
+    T::Id: GetGlobal<Self>,
+{
+    type Id = T::Id;
+    fn default_world_id() -> Self::Id {
+        T::default_world_id()
+    }
+}
+
 macro_rules! impl_system_param_tuple {
     ($(#[$meta:meta])* $(($param:ident, $world:ident)),*) => {
         $(#[$meta])*
@@ -2449,8 +2647,8 @@ macro_rules! impl_system_param_tuple {
             type World<'w> = ($($param::World<'w>,)*);
 
             #[inline]
-            fn shrink<'wlong: 'wshort, 'wshort>(($($world,)*): Self::World<'wlong>) -> Self::World<'wshort> {
-                (($($param::shrink($world),)*))
+            fn shrink_world<'wlong: 'wshort, 'wshort>(($($world,)*): Self::World<'wlong>) -> Self::World<'wshort> {
+                (($($param::shrink_world($world),)*))
             }
 
             #[inline]
@@ -2506,6 +2704,13 @@ macro_rules! impl_system_param_tuple {
                     reason = "Zero-length tuples won't have any params to get."
                 )]
                 ($($param::get_param($param, system_meta, $world),)*)
+            }
+        }
+
+        impl<$($param: DefaultWorldId),*> DefaultWorldId for ($($param,)*) {
+            type Id = ($($param::Id,)*);
+            fn default_world_id() -> Self::Id {
+                (($($param::default_world_id(),)*))
             }
         }
     };
@@ -2633,8 +2838,8 @@ unsafe impl<P: SystemParam + 'static> SystemParam for StaticSystemParam<'_, '_, 
     type Item<'world, 'state> = StaticSystemParam<'world, 'state, P>;
     type World<'w> = P::World<'w>;
 
-    fn shrink<'wlong: 'wshort, 'wshort>(world: Self::World<'wlong>) -> Self::World<'wshort> {
-        P::shrink(world)
+    fn shrink_world<'wlong: 'wshort, 'wshort>(world: Self::World<'wlong>) -> Self::World<'wshort> {
+        P::shrink_world(world)
     }
 
     fn init_world_access<'w>(world: Self::World<'w>, system_meta: &mut SystemMeta) {
@@ -2682,13 +2887,24 @@ unsafe impl<P: SystemParam + 'static> SystemParam for StaticSystemParam<'_, '_, 
     }
 }
 
+impl<P: DefaultWorldId + 'static> DefaultWorldId for StaticSystemParam<'_, '_, P>
+where
+    P::Id: GetGlobal<Self>,
+{
+    type Id = P::Id;
+    fn default_world_id() -> Self::Id {
+        P::default_world_id()
+    }
+}
+
 // SAFETY: No world access.
 unsafe impl<T: ?Sized> SystemParam for PhantomData<T> {
     type State = ();
     type Item<'world, 'state> = Self;
     type World<'w> = ();
 
-    fn shrink<'wlong: 'wshort, 'wshort>(_world: Self::World<'wlong>) -> Self::World<'wshort> {}
+    fn shrink_world<'wlong: 'wshort, 'wshort>(_world: Self::World<'wlong>) -> Self::World<'wshort> {
+    }
 
     fn init_world_access<'w>(_world: (), _system_meta: &mut SystemMeta) {}
 
@@ -2706,6 +2922,11 @@ unsafe impl<T: ?Sized> SystemParam for PhantomData<T> {
 
 // SAFETY: No world access.
 unsafe impl<T: ?Sized> ReadOnlySystemParam for PhantomData<T> {}
+
+impl<T: ?Sized> DefaultWorldId for PhantomData<T> {
+    type Id = ();
+    fn default_world_id() -> Self::Id {}
+}
 
 /// A [`SystemParam`] with a type that can be configured at runtime.
 ///
@@ -2878,7 +3099,7 @@ where
             T::Item::get_param(
                 &mut state.0,
                 system_meta,
-                T::Item::<'static, 'static>::shrink(world.as_ref().to_owned()),
+                T::Item::<'static, 'static>::shrink_world(world.as_ref().to_owned()),
             )
         })
     } else {
@@ -2973,7 +3194,7 @@ unsafe impl SystemParam for DynSystemParam<'_, '_> {
     type Item<'world, 'state> = DynSystemParam<'world, 'state>;
     type World<'w> = UnsafeWorldsCell<'w>;
 
-    fn shrink<'wlong: 'wshort, 'wshort>(world: Self::World<'wlong>) -> Self::World<'wshort> {
+    fn shrink_world<'wlong: 'wshort, 'wshort>(world: Self::World<'wlong>) -> Self::World<'wshort> {
         world
     }
 
@@ -3024,6 +3245,13 @@ unsafe impl SystemParam for DynSystemParam<'_, '_> {
     }
 }
 
+impl DefaultWorldId for DynSystemParam<'_, '_> {
+    type Id = fetch::Global;
+    fn default_world_id() -> Self::Id {
+        fetch::Global
+    }
+}
+
 // SAFETY: When initialized with `init_state`, `get_param` returns a `FilteredResources` with no access.
 // Therefore, `init_state` trivially registers all access, and no accesses can conflict.
 // Note that the safety requirements for non-empty access are handled by the `SystemParamBuilder` impl that builds them.
@@ -3032,7 +3260,7 @@ unsafe impl SystemParam for FilteredResources<'_, '_> {
     type Item<'world, 'state> = FilteredResources<'world, 'state>;
     type World<'w> = UnsafeWorldCell<'w>;
 
-    fn shrink<'wlong: 'wshort, 'wshort>(world: Self::World<'wlong>) -> Self::World<'wshort> {
+    fn shrink_world<'wlong: 'wshort, 'wshort>(world: Self::World<'wlong>) -> Self::World<'wshort> {
         world
     }
 
@@ -3063,6 +3291,13 @@ unsafe impl SystemParam for FilteredResources<'_, '_> {
 // SAFETY: FilteredResources only reads resources.
 unsafe impl ReadOnlySystemParam for FilteredResources<'_, '_> {}
 
+impl DefaultWorldId for FilteredResources<'_, '_> {
+    type Id = fetch::Local;
+    fn default_world_id() -> Self::Id {
+        World::RESOURCE
+    }
+}
+
 // SAFETY: When initialized with `init_state`, `get_param` returns a `FilteredResourcesMut` with no access.
 // Therefore, `init_state` trivially registers all access, and no accesses can conflict.
 // Note that the safety requirements for non-empty access are handled by the `SystemParamBuilder` impl that builds them.
@@ -3071,7 +3306,7 @@ unsafe impl SystemParam for FilteredResourcesMut<'_, '_> {
     type Item<'world, 'state> = FilteredResourcesMut<'world, 'state>;
     type World<'w> = UnsafeWorldCell<'w>;
 
-    fn shrink<'wlong: 'wshort, 'wshort>(world: Self::World<'wlong>) -> Self::World<'wshort> {
+    fn shrink_world<'wlong: 'wshort, 'wshort>(world: Self::World<'wlong>) -> Self::World<'wshort> {
         world
     }
 
@@ -3096,6 +3331,13 @@ unsafe impl SystemParam for FilteredResourcesMut<'_, '_> {
                 *system_meta.change_ticks[1].get(world.id()).unwrap(),
             )
         }
+    }
+}
+
+impl DefaultWorldId for FilteredResourcesMut<'_, '_> {
+    type Id = fetch::Local;
+    fn default_world_id() -> Self::Id {
+        FilteredResources::default_world_id()
     }
 }
 
@@ -3178,43 +3420,49 @@ impl Display for SystemParamValidationError {
 mod tests {
     use super::*;
     use crate::{
+        entity::Entity,
         system::assert_is_system,
         world::{WorldId, Worlds},
     };
     use core::cell::RefCell;
 
+    #[derive(Resource)]
+    struct A;
+
     #[test]
     fn fetch_worlds() {
         fn check_global<
-            T: FromGlobal<
-                'static,
-                (
-                    UnsafeWorldCell<'static>,
-                    (UnsafeWorldCell<'static>, UnsafeWorldCell<'static>),
-                    (UnsafeWorldCell<'static>, UnsafeWorldsCell<'static>),
-                ),
-            >,
+            T: GetGlobal<(
+                Query<'static, 'static, Entity>,
+                (Query<'static, 'static, Entity>, Res<'static, A>),
+                ((Query<'static, 'static, Entity>,), Local<'static, u32>),
+            )>,
         >(
             _: T,
         ) {
         }
         fn check_local<
-            T: FromLocal<
-                'static,
+            T: GetLocal<(
+                Query<'static, 'static, Entity>,
                 (
-                    UnsafeWorldCell<'static>,
-                    (UnsafeWorldCell<'static>, UnsafeWorldCell<'static>),
-                    ((UnsafeWorldCell<'static>,), UnsafeWorldCell<'static>),
+                    Query<'static, 'static, Entity>,
+                    Query<'static, 'static, Entity>,
                 ),
-            >,
+                (
+                    (Query<'static, 'static, Entity>,),
+                    Query<'static, 'static, Entity>,
+                ),
+            )>,
         >(
             _: T,
         ) {
         }
 
         let id = WorldId(0);
-        check_global((id, (id, id), (id, fetch::Global)));
+        check_global((id, (id, id), ((id,), fetch::Global)));
         check_global((id, id, (id, fetch::Global)));
+        check_global((id, fetch::Default, (id, fetch::Global)));
+        check_global(fetch::Default);
         check_local((id, (id, id), ((id,), id)));
         check_local((id, id, (id, id)));
         check_local((id, id, id));

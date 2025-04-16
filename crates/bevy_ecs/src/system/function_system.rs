@@ -23,8 +23,8 @@ use variadics_please::all_tuples;
 use tracing::{info_span, Span};
 
 use super::{
-    FromGlobal, FromLocal, IntoSystem, LocalSystem, ReadOnlySystem, SystemParamBuilder,
-    SystemParamValidationError,
+    fetch, DefaultWorldId, GetGlobal, GetLocal, IntoSystem, LocalSystem, ReadOnlySystem,
+    SystemParamBuilder, SystemParamValidationError,
 };
 
 /// The metadata of a [`System`].
@@ -390,7 +390,7 @@ all_tuples!(
 impl<Param> SystemState<Param>
 where
     Param: SystemParam,
-    Param::W: FromLocal,
+    Param::W: GetLocal,
 {
     /// Creates a new [`SystemState`] with default state.
     ///
@@ -675,14 +675,15 @@ impl<Param: SystemParam> FromWorld for SystemState<Param> {
 ///
 /// The [`Clone`] implementation for [`FunctionSystem`] returns a new instance which
 /// is NOT initialized. The cloned system must also be `.initialized` before it can be run.
-pub struct FunctionSystem<Marker, F>
+pub struct FunctionSystem<Marker, F, Ids>
 where
     F: SystemParamFunction<Marker>,
+    Ids: GetGlobal<F::Param>,
 {
     func: F,
     state: Option<FunctionSystemState<F::Param>>,
     system_meta: SystemMeta,
-    ids: Ids<F::Param>,
+    ids: Ids,
     archetype_generations: SparseSet<WorldId, ArchetypeGeneration>,
     // NOTE: PhantomData<fn()-> T> gives this safe Send/Sync impls
     marker: PhantomData<fn() -> Marker>,
@@ -696,9 +697,10 @@ struct FunctionSystemState<P: SystemParam> {
     param: P::State,
 }
 
-impl<Marker, F> FunctionSystem<Marker, F>
+impl<Marker, F, Ids> FunctionSystem<Marker, F, Ids>
 where
     F: SystemParamFunction<Marker>,
+    Ids: GetGlobal<F::Param>,
 {
     /// Return this system with a new name.
     ///
@@ -710,9 +712,10 @@ where
 }
 
 // De-initializes the cloned system.
-impl<Marker, F> Clone for FunctionSystem<Marker, F>
+impl<Marker, F, Ids> Clone for FunctionSystem<Marker, F, Ids>
 where
     F: SystemParamFunction<Marker> + Clone,
+    Ids: GetGlobal<F::Param> + Clone,
 {
     fn clone(&self) -> Self {
         Self {
@@ -730,17 +733,41 @@ where
 #[doc(hidden)]
 pub struct IsFunctionSystem;
 
-pub trait SystemBuilder<Marker: 'static, F: SystemParamFunction<Marker>> {
-    type System: System;
-    fn build(self, ids: <F::Param as SystemParam>::W) -> Self::System;
+impl<Marker, F> IntoSystem<F::In, F::Out, (IsFunctionSystem, Marker)> for F
+where
+    Marker: 'static,
+    F: SystemParamFunction<Marker>,
+    F::Param: DefaultWorldId,
+{
+    type System = FunctionSystem<Marker, F, fetch::Default>;
+    fn into_system(func: Self) -> Self::System {
+        FunctionSystem {
+            func,
+            state: None,
+            system_meta: SystemMeta::new::<F>(),
+            ids: fetch::Default,
+            archetype_generations: SparseSet::new(),
+            marker: PhantomData,
+        }
+    }
 }
 
-pub trait LocalSystemBuilder<Marker: 'static, F: SystemParamFunction<Marker>>
-where
-    <F::Param as SystemParam>::W: FromLocal,
-{
-    type System: LocalSystem;
-    fn build(self, id: WorldId) -> Self::System;
+pub trait SystemBuilder<Marker: 'static, F: SystemParamFunction<Marker>> {
+    type System<Ids>: System
+    where
+        Ids: GetGlobal<F::Param>;
+    fn build<Ids>(self, ids: Ids) -> Self::System<Ids>
+    where
+        Ids: GetGlobal<F::Param>;
+}
+
+pub trait LocalSystemBuilder<Marker: 'static, F: SystemParamFunction<Marker>> {
+    type System<Ids>: LocalSystem
+    where
+        Ids: GetLocal<F::Param>;
+    fn build<Ids>(self, id: Ids) -> Self::System<Ids>
+    where
+        Ids: GetLocal<F::Param>;
 }
 
 impl<Marker, F> SystemBuilder<Marker, F> for F
@@ -748,13 +775,19 @@ where
     Marker: 'static,
     F: SystemParamFunction<Marker>,
 {
-    type System = FunctionSystem<Marker, F>;
-    fn build(self, ids: <F::Param as SystemParam>::W) -> Self::System {
+    type System<Ids>
+        = FunctionSystem<Marker, F, Ids>
+    where
+        Ids: GetGlobal<F::Param>;
+    fn build<Ids>(self, ids: Ids) -> Self::System<Ids>
+    where
+        Ids: GetGlobal<F::Param>,
+    {
         FunctionSystem {
             func: self,
             state: None,
             system_meta: SystemMeta::new::<F>(),
-            ids: Ids::Tuple(ids),
+            ids,
             archetype_generations: SparseSet::new(),
             marker: PhantomData,
         }
@@ -765,24 +798,30 @@ impl<Marker, F> LocalSystemBuilder<Marker, F> for F
 where
     Marker: 'static,
     F: SystemParamFunction<Marker>,
-    <F::Param as SystemParam>::W: FromLocal,
 {
-    type System = FunctionSystem<Marker, F>;
-    fn build(self, id: WorldId) -> Self::System {
+    type System<Ids>
+        = FunctionSystem<Marker, F, Ids>
+    where
+        Ids: GetLocal<F::Param>;
+    fn build<Ids>(self, ids: Ids) -> Self::System<Ids>
+    where
+        Ids: GetLocal<F::Param>,
+    {
         FunctionSystem {
             func: self,
             state: None,
             system_meta: SystemMeta::new::<F>(),
-            ids: Ids::Duplicated(id),
+            ids,
             archetype_generations: SparseSet::new(),
             marker: PhantomData,
         }
     }
 }
 
-impl<Marker, F> FunctionSystem<Marker, F>
+impl<Marker, F, Ids> FunctionSystem<Marker, F, Ids>
 where
     F: SystemParamFunction<Marker>,
+    Ids: GetGlobal<F::Param>,
 {
     /// Message shown when a system isn't initialized
     // When lines get too long, rustfmt can sometimes refuse to format them.
@@ -791,10 +830,11 @@ where
         "System's state was not found. Did you forget to initialize this system before running it?";
 }
 
-impl<Marker, F> System for FunctionSystem<Marker, F>
+impl<Marker, F, Ids> System for FunctionSystem<Marker, F, Ids>
 where
     Marker: 'static,
     F: SystemParamFunction<Marker>,
+    Ids: GetGlobal<F::Param>,
 {
     type In = F::In;
     type Out = F::Out;
@@ -828,42 +868,35 @@ where
         #[cfg(feature = "trace")]
         let _span_guard = self.system_meta.system_span.enter();
 
-        match &self.ids {
-            Ids::Tuple(ids) => {
-                self.system_meta
-                    .world_access
-                    .try_iter_component_access()
-                    .unwrap()
-                    .for_each(|component_access_kind| {
-                        let &id = component_access_kind.index();
+        self.system_meta
+            .world_access
+            .try_iter_component_access()
+            .unwrap()
+            .for_each(|component_access_kind| {
+                let &id = component_access_kind.index();
 
-                        let tick = worlds.get_unsafe_world_cell_mut(id).increment_change_tick();
+                let tick = worlds.get_unsafe_world_cell_mut(id).increment_change_tick();
 
-                        self.system_meta.change_ticks[1].insert(id, tick);
-                    });
+                self.system_meta.change_ticks[1].insert(id, tick);
+            });
 
-                let param_state = &mut self.state.as_mut().expect(Self::ERROR_UNINITIALIZED).param;
+        let param_state = &mut self.state.as_mut().expect(Self::ERROR_UNINITIALIZED).param;
 
-                // SAFETY:
-                // - The caller has invoked `update_archetype_component_access`, which will panic
-                //   if the world does not match.
-                // - All world accesses used by `F::Param` have been registered, so the caller
-                //   will ensure that there are no data access conflicts.
-                let params = unsafe {
-                    F::Param::get_param(
-                        param_state,
-                        &self.system_meta,
-                        &<F::Param as SystemParam>::World::from_ids(worlds, &ids),
-                    )
-                };
-                let out = self.func.run(input, params);
-                self.system_meta.change_ticks.swap(0, 1);
-                out
-            }
-            Ids::Duplicated(id) => <Self as LocalSystem>::run_local(self, input, unsafe {
-                worlds.get_unsafe_world_cell_mut(*id).world_mut()
-            }),
-        }
+        // SAFETY:
+        // - The caller has invoked `update_archetype_component_access`, which will panic
+        //   if the world does not match.
+        // - All world accesses used by `F::Param` have been registered, so the caller
+        //   will ensure that there are no data access conflicts.
+        let params = unsafe {
+            F::Param::get_param(
+                param_state,
+                &self.system_meta,
+                &<F::Param as SystemParam>::World::from_ids(worlds, &ids),
+            )
+        };
+        let out = self.func.run(input, params);
+        self.system_meta.change_ticks.swap(0, 1);
+        out
     }
 
     #[inline]

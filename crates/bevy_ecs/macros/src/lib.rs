@@ -326,6 +326,11 @@ pub fn derive_system_param(input: TokenStream) -> TokenStream {
 
     let mut tuple_types: Vec<_> = field_types.iter().map(|x| quote! { #x }).collect();
     let mut tuple_patterns: Vec<_> = field_locals.iter().map(|x| quote! { #x }).collect();
+    let world_tuple_fields: Vec<_> = (0..field_locals.len())
+        .map(|i| format_ident!("w{i}"))
+        .collect();
+    let mut world_tuple_patterns: Vec<_> =
+        world_tuple_fields.iter().map(|x| quote! { #x }).collect();
 
     // If the number of fields exceeds the 16-parameter limit,
     // fold the fields into tuples of tuples until we are below the limit.
@@ -336,6 +341,9 @@ pub fn derive_system_param(input: TokenStream) -> TokenStream {
 
         let end = Vec::from_iter(tuple_patterns.drain(..LIMIT));
         tuple_patterns.push(parse_quote!( (#(#end,)*) ));
+
+        let end = Vec::from_iter(world_tuple_patterns.drain(..LIMIT));
+        world_tuple_patterns.push(parse_quote!( (#(#end,)*) ));
     }
 
     // Create a where clause for the `ReadOnlySystemParam` impl.
@@ -426,6 +434,10 @@ pub fn derive_system_param(input: TokenStream) -> TokenStream {
                 type Item<'w, 's> = #struct_name #ty_generics;
                 type World<'w> = <#fields_alias::<'static, 'static, #punctuated_generic_idents> as #path::system::SystemParam>::World<'w>;
 
+                fn shrink_world<'wlong: 'wshort, 'wshort>(world: Self::World<'wlong>) -> Self::World<'wshort> {
+                    #fields_alias::<'_, '_, #punctuated_generic_idents>::shrink_world(world)
+                }
+
                 fn init_world_access<'w>(world: Self::World<'w>, system_meta: & mut #path::system::SystemMeta) {
                     #fields_alias::<'_, '_, #punctuated_generic_idents>::init_world_access(world, system_meta);
                 }
@@ -452,12 +464,13 @@ pub fn derive_system_param(input: TokenStream) -> TokenStream {
                 #[inline]
                 unsafe fn validate_param<'w, 's>(
                     state: &'s Self::State,
-                    system_meta: &#path::system::SystemMeta,
+                    _system_meta: &#path::system::SystemMeta,
                     world: Self::World<'w>,
                 ) -> Result<(), #path::system::SystemParamValidationError> {
                     let #state_struct_name { state: (#(#tuple_patterns,)*) } = state;
+                    let (#(#world_tuple_patterns,)*) = world;
                     #(
-                        <#field_types as #path::system::SystemParam>::validate_param(#field_locals, _system_meta, _world)
+                        <#field_types as #path::system::SystemParam>::validate_param(#field_locals, _system_meta, #world_tuple_fields)
                             .map_err(|err| #path::system::SystemParamValidationError::new::<Self>(err.skipped, #field_messages, #field_names))?;
                     )*
                     Ok(())
