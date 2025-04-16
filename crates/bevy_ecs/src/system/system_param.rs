@@ -1,5 +1,5 @@
 pub use crate::change_detection::{NonSendMut, Res, ResMut};
-use crate::world::{FromWorld, FromWorlds, WorldId};
+use crate::world::{FromWorld, WorldId};
 use crate::{
     archetype::{Archetype, ArchetypeComponentId, Archetypes},
     bundle::Bundles,
@@ -3275,7 +3275,7 @@ unsafe impl SystemParam for DynSystemParam<'_, '_> {
     }
 
     fn apply<'w>(state: &mut Self::State, system_meta: &SystemMeta, worlds: UnsafeWorldsCell<'w>) {
-        state.0.apply(system_meta, unsafe { world.into_deferred() });
+        state.0.apply(system_meta, worlds);
     }
 
     fn queue<'w>(state: &mut Self::State, system_meta: &SystemMeta, world: DeferredWorld) {

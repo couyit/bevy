@@ -377,14 +377,6 @@ where
         self.name.clone()
     }
 
-    fn component_access(&self) -> &Access<ComponentId> {
-        &self.component_access
-    }
-
-    fn archetype_component_access(&self) -> &Access<ArchetypeComponentId> {
-        &self.archetype_component_access
-    }
-
     fn is_send(&self) -> bool {
         self.a.is_send() && self.b.is_send()
     }
