@@ -1601,12 +1601,12 @@ impl<'w> DefaultWorldId for DeferredWorld<'w> {
 /// # assert_is_system(reset_to_system(Config(10)));
 /// ```
 #[derive(Debug)]
-pub struct Local<'s, T: FromWorlds + Send + 'static>(pub(crate) &'s mut T);
+pub struct Local<'s, T: FromWorld + Send + 'static>(pub(crate) &'s mut T);
 
 // SAFETY: Local only accesses internal state
-unsafe impl<'s, T: FromWorlds + Send + 'static> ReadOnlySystemParam for Local<'s, T> {}
+unsafe impl<'s, T: FromWorld + Send + 'static> ReadOnlySystemParam for Local<'s, T> {}
 
-impl<'s, T: FromWorlds + Send + 'static> Deref for Local<'s, T> {
+impl<'s, T: FromWorld + Send + 'static> Deref for Local<'s, T> {
     type Target = T;
 
     #[inline]
@@ -1615,14 +1615,14 @@ impl<'s, T: FromWorlds + Send + 'static> Deref for Local<'s, T> {
     }
 }
 
-impl<'s, T: FromWorlds + Send + 'static> DerefMut for Local<'s, T> {
+impl<'s, T: FromWorld + Send + 'static> DerefMut for Local<'s, T> {
     #[inline]
     fn deref_mut(&mut self) -> &mut Self::Target {
         self.0
     }
 }
 
-impl<'s, 'a, T: FromWorlds + Send + 'static> IntoIterator for &'a Local<'s, T>
+impl<'s, 'a, T: FromWorld + Send + 'static> IntoIterator for &'a Local<'s, T>
 where
     &'a T: IntoIterator,
 {
@@ -1634,7 +1634,7 @@ where
     }
 }
 
-impl<'s, 'a, T: FromWorlds + Send + 'static> IntoIterator for &'a mut Local<'s, T>
+impl<'s, 'a, T: FromWorld + Send + 'static> IntoIterator for &'a mut Local<'s, T>
 where
     &'a mut T: IntoIterator,
 {
@@ -1647,10 +1647,10 @@ where
 }
 
 // SAFETY: only local state is accessed
-unsafe impl<'a, T: FromWorlds + Send + 'static> SystemParam for Local<'a, T> {
+unsafe impl<'a, T: FromWorld + Send + 'static> SystemParam for Local<'a, T> {
     type State = SyncCell<T>;
     type Item<'w, 's> = Local<'s, T>;
-    type World<'w> = UnsafeWorldsCell<'w>;
+    type World<'w> = UnsafeWorldCell<'w>;
 
     fn shrink_world<'wlong: 'wshort, 'wshort>(world: Self::World<'wlong>) -> Self::World<'wshort> {
         world
@@ -1659,7 +1659,7 @@ unsafe impl<'a, T: FromWorlds + Send + 'static> SystemParam for Local<'a, T> {
     fn init_world_access<'w>(_worlds: Self::World<'w>, _system_meta: &mut SystemMeta) {}
 
     fn init_state<'w>(worlds: Self::World<'w>, _system_meta: &mut SystemMeta) -> Self::State {
-        SyncCell::new(T::from_worlds(unsafe { worlds.get_mut() }))
+        SyncCell::new(T::from_world(unsafe { worlds.get_mut() }))
     }
 
     #[inline]
@@ -1672,10 +1672,10 @@ unsafe impl<'a, T: FromWorlds + Send + 'static> SystemParam for Local<'a, T> {
     }
 }
 
-impl<'a, T: FromWorlds + Send + 'static> DefaultWorldId for Local<'a, T> {
-    type Id = fetch::Global;
+impl<'a, T: FromWorld + Send + 'static> DefaultWorldId for Local<'a, T> {
+    type Id = fetch::Local;
     fn default_world_id() -> Self::Id {
-        fetch::Global
+        World::MAIN
     }
 }
 
@@ -2538,15 +2538,15 @@ unsafe impl<T: SystemParam> SystemParam for Vec<T> {
         }
     }
 
-    fn apply<'w>(state: &mut Self::State, system_meta: &SystemMeta, world: Self::World<'w>) {
+    fn apply<'w>(state: &mut Self::State, system_meta: &SystemMeta, worlds: UnsafeWorldsCell<'w>) {
         for state in state {
-            T::apply(state, system_meta, world.clone());
+            T::apply(state, system_meta, worlds);
         }
     }
 
-    fn queue<'w>(state: &mut Self::State, system_meta: &SystemMeta, world: Self::World<'w>) {
+    fn queue<'w>(state: &mut Self::State, system_meta: &SystemMeta, world: DeferredWorld) {
         for state in state {
-            T::queue(state, system_meta, world.clone());
+            T::queue(state, system_meta, world);
         }
     }
 }
@@ -2605,15 +2605,15 @@ unsafe impl<T: SystemParam> SystemParam for ParamSet<'_, '_, Vec<T>> {
         }
     }
 
-    fn apply<'w>(state: &mut Self::State, system_meta: &SystemMeta, world: Self::World<'w>) {
+    fn apply<'w>(state: &mut Self::State, system_meta: &SystemMeta, worlds: UnsafeWorldsCell<'w>) {
         for state in state {
-            T::apply(state, system_meta, world.clone());
+            T::apply(state, system_meta, worlds);
         }
     }
 
-    fn queue<'w>(state: &mut Self::State, system_meta: &SystemMeta, world: Self::World<'w>) {
+    fn queue<'w>(state: &mut Self::State, system_meta: &SystemMeta, world: DeferredWorld) {
         for state in state {
-            T::queue(state, system_meta, world.clone());
+            T::queue(state, system_meta, world);
         }
     }
 }
@@ -2710,13 +2710,13 @@ macro_rules! impl_system_param_tuple {
             }
 
             #[inline]
-            fn apply<'w>(($($param,)*): &mut Self::State, system_meta: &SystemMeta, ($($world,)*): Self::World<'w>) {
-                $($param::apply($param, system_meta, $world);)*
+            fn apply<'w>(($($param,)*): &mut Self::State, system_meta: &SystemMeta, worlds: UnsafeWorldsCell<'w>) {
+                $($param::apply($param, system_meta, worlds);)*
             }
 
             #[inline]
-            fn queue<'w>(($($param,)*): &mut Self::State, system_meta: &SystemMeta, ($($world,)*): Self::World<'w>) {
-                $($param::queue($param, system_meta, $world);)*
+            fn queue<'w>(($($param,)*): &mut Self::State, system_meta: &SystemMeta, world: DeferredWorld) {
+                $($param::queue($param, system_meta, world);)*
             }
 
             #[inline]
@@ -2897,11 +2897,11 @@ unsafe impl<P: SystemParam + 'static> SystemParam for StaticSystemParam<'_, '_, 
         unsafe { P::new_archetype(state, archetype, archetype_component_access) };
     }
 
-    fn apply<'w>(state: &mut Self::State, system_meta: &SystemMeta, world: Self::World<'w>) {
-        P::apply(state, system_meta, world);
+    fn apply<'w>(state: &mut Self::State, system_meta: &SystemMeta, worlds: UnsafeWorldsCell<'w>) {
+        P::apply(state, system_meta, worlds);
     }
 
-    fn queue<'w>(state: &mut Self::State, system_meta: &SystemMeta, world: Self::World<'w>) {
+    fn queue<'w>(state: &mut Self::State, system_meta: &SystemMeta, world: DeferredWorld) {
         P::queue(state, system_meta, world);
     }
 
@@ -3274,11 +3274,11 @@ unsafe impl SystemParam for DynSystemParam<'_, '_> {
         unsafe { state.0.new_archetype(archetype, archetype_component_access) };
     }
 
-    fn apply<'w>(state: &mut Self::State, system_meta: &SystemMeta, world: Self::World<'w>) {
+    fn apply<'w>(state: &mut Self::State, system_meta: &SystemMeta, worlds: UnsafeWorldsCell<'w>) {
         state.0.apply(system_meta, unsafe { world.into_deferred() });
     }
 
-    fn queue<'w>(state: &mut Self::State, system_meta: &SystemMeta, world: Self::World<'w>) {
+    fn queue<'w>(state: &mut Self::State, system_meta: &SystemMeta, world: DeferredWorld) {
         state.0.queue(system_meta, unsafe { world.into_deferred() });
     }
 }
