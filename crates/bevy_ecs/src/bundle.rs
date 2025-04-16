@@ -1833,19 +1833,19 @@ mod tests {
     #[component(on_add = a_on_add, on_insert = a_on_insert, on_replace = a_on_replace, on_remove = a_on_remove)]
     struct AMacroHooks;
 
-    fn a_on_add(_: In<HookContext>, mut world: DeferredWorld) {
+    fn a_on_add(mut world: DeferredWorld, _: HookContext) {
         world.resource_mut::<R>().assert_order(0);
     }
 
-    fn a_on_insert(_: In<HookContext>, mut world: DeferredWorld) {
+    fn a_on_insert(mut world: DeferredWorld, _: HookContext) {
         world.resource_mut::<R>().assert_order(1);
     }
 
-    fn a_on_replace(_: In<HookContext>, mut world: DeferredWorld) {
+    fn a_on_replace(mut world: DeferredWorld, _: HookContext) {
         world.resource_mut::<R>().assert_order(2);
     }
 
-    fn a_on_remove(_: In<HookContext>, mut world: DeferredWorld) {
+    fn a_on_remove(mut world: DeferredWorld, _: HookContext) {
         world.resource_mut::<R>().assert_order(3);
     }
 
@@ -1875,10 +1875,9 @@ mod tests {
     #[test]
     fn component_hook_order_spawn_despawn() {
         let mut worlds = Worlds::new();
-        let resource_world = worlds.create_resource_world();
-        worlds.get_world_mut(resource_world).init_resource::<R>();
+        worlds.get_world_mut(World::RESOURCE).init_resource::<R>();
 
-        let world = worlds.get_world_mut(worlds.create_world());
+        let world = worlds.get_world_mut(World::MAIN);
         world
             .register_component_hooks::<A>()
             .on_add(|mut world, _| world.resource_mut::<R>().assert_order(0))
@@ -1888,29 +1887,27 @@ mod tests {
 
         let entity = world.spawn(A).id();
         world.despawn(entity);
-        assert_eq!(4, worlds.get_world(resource_world).resource::<R>().0);
+        assert_eq!(4, worlds.get_world(World::RESOURCE).resource::<R>().0);
     }
 
     #[test]
     fn component_hook_order_spawn_despawn_with_macro_hooks() {
         let mut worlds = Worlds::new();
-        let resource_world = worlds.create_resource_world();
-        worlds.get_world_mut(resource_world).init_resource::<R>();
+        worlds.get_world_mut(World::RESOURCE).init_resource::<R>();
 
-        let world = worlds.get_world_mut(worlds.create_world());
+        let world = worlds.get_world_mut(World::MAIN);
         let entity = world.spawn(AMacroHooks).id();
         world.despawn(entity);
 
-        assert_eq!(4, worlds.get_world(resource_world).resource::<R>().0);
+        assert_eq!(4, worlds.get_world(World::RESOURCE).resource::<R>().0);
     }
 
     #[test]
     fn component_hook_order_insert_remove() {
         let mut worlds = Worlds::new();
-        let resource_world = worlds.create_resource_world();
-        worlds.get_world_mut(resource_world).init_resource::<R>();
+        worlds.get_world_mut(World::RESOURCE).init_resource::<R>();
 
-        let world = worlds.get_world_mut(worlds.create_world());
+        let world = worlds.get_world_mut(World::MAIN);
         world
             .register_component_hooks::<A>()
             .on_add(|mut world, _| world.resource_mut::<R>().assert_order(0))
@@ -1922,16 +1919,15 @@ mod tests {
         entity.insert(A);
         entity.remove::<A>();
         entity.flush();
-        assert_eq!(4, worlds.get_world(resource_world).resource::<R>().0);
+        assert_eq!(4, worlds.get_world(World::RESOURCE).resource::<R>().0);
     }
 
     #[test]
     fn component_hook_order_replace() {
         let mut worlds = Worlds::new();
-        let resource_world = worlds.create_resource_world();
-        worlds.get_world_mut(resource_world).init_resource::<R>();
+        worlds.get_world_mut(World::RESOURCE).init_resource::<R>();
 
-        let world = worlds.get_world_mut(worlds.create_world());
+        let world = worlds.get_world_mut(World::MAIN);
         world
             .register_component_hooks::<A>()
             .on_replace(|mut world, _| world.resource_mut::<R>().assert_order(0))
@@ -1946,16 +1942,15 @@ mod tests {
         entity.insert(A);
         entity.insert_if_new(A); // this will not trigger on_replace or on_insert
         entity.flush();
-        assert_eq!(2, worlds.get_world(resource_world).resource::<R>().0);
+        assert_eq!(2, worlds.get_world(World::RESOURCE).resource::<R>().0);
     }
 
     #[test]
     fn component_hook_order_recursive() {
         let mut worlds = Worlds::new();
-        let resource_world = worlds.create_resource_world();
-        worlds.get_world_mut(resource_world).init_resource::<R>();
+        worlds.get_world_mut(World::RESOURCE).init_resource::<R>();
 
-        let world = worlds.get_world_mut(worlds.create_world());
+        let world = worlds.get_world_mut(World::MAIN);
         world
             .register_component_hooks::<A>()
             .on_add(|mut world, context| {
@@ -1981,16 +1976,15 @@ mod tests {
         let entity = world.get_entity(entity).unwrap();
         assert!(!entity.contains::<A>());
         assert!(!entity.contains::<B>());
-        assert_eq!(4, worlds.get_world(resource_world).resource::<R>().0);
+        assert_eq!(4, worlds.get_world(World::RESOURCE).resource::<R>().0);
     }
 
     #[test]
     fn component_hook_order_recursive_multiple() {
         let mut worlds = Worlds::new();
-        let resource_world = worlds.create_resource_world();
-        worlds.get_world_mut(resource_world).init_resource::<R>();
+        worlds.get_world_mut(World::RESOURCE).init_resource::<R>();
 
-        let world = worlds.get_world_mut(worlds.create_world());
+        let world = worlds.get_world_mut(World::MAIN);
         world
             .register_component_hooks::<A>()
             .on_add(|mut world, context| {
@@ -2018,13 +2012,13 @@ mod tests {
             });
 
         world.spawn(A).flush();
-        assert_eq!(4, worlds.get_world(resource_world).resource::<R>().0);
+        assert_eq!(4, worlds.get_world(World::RESOURCE).resource::<R>().0);
     }
 
     #[test]
     fn insert_if_new() {
         let mut worlds = Worlds::new();
-        let world = worlds.get_main_world_mut();
+        let world = worlds.get_world_mut(World::MAIN);
         let id = world.spawn(V("one")).id();
         let mut entity = world.entity_mut(id);
         entity.insert_if_new(V("two"));

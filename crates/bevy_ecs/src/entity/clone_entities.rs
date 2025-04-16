@@ -880,12 +880,12 @@ mod tests {
             }
 
             let mut worlds = Worlds::new();
-            let resource_world = worlds.get_resource_world_mut();
+            let resource_world = worlds.get_world_mut(World::RESOURCE);
             resource_world.init_resource::<AppTypeRegistry>();
             let registry = resource_world.get_resource::<AppTypeRegistry>().unwrap();
             registry.write().register::<A>();
 
-            let world = worlds.get_main_world_mut();
+            let world = worlds.get_world_mut(World::MAIN);
             world.register_component::<A>();
             let component = A { field: 5 };
 
@@ -944,12 +944,12 @@ mod tests {
             }
 
             let mut worlds = Worlds::new();
-            let resource_world = worlds.get_resource_world_mut();
+            let resource_world = worlds.get_world_mut(World::RESOURCE);
             resource_world.init_resource::<AppTypeRegistry>();
             let registry = resource_world.get_resource::<AppTypeRegistry>().unwrap();
             registry.write().register::<(A, B, C, D)>();
 
-            let world = worlds.get_main_world_mut();
+            let world = worlds.get_world_mut(World::MAIN);
             let a_id = world.register_component::<A>();
             let b_id = world.register_component::<B>();
             let c_id = world.register_component::<C>();
@@ -1006,7 +1006,7 @@ mod tests {
             }
 
             let mut worlds = Worlds::new();
-            let resource_world = worlds.get_resource_world_mut();
+            let resource_world = worlds.get_world_mut(World::RESOURCE);
             resource_world.init_resource::<AppTypeRegistry>();
             let registry = resource_world.get_resource::<AppTypeRegistry>().unwrap();
             {
@@ -1018,7 +1018,7 @@ mod tests {
                     .insert(<ReflectFromPtr as FromType<B>>::from_type());
             }
 
-            let world = worlds.get_main_world_mut();
+            let world = worlds.get_world_mut(World::MAIN);
             let e = world.spawn(A).id();
             let e_clone = world.spawn_empty().id();
 
@@ -1042,14 +1042,14 @@ mod tests {
             }
 
             let mut worlds = Worlds::new();
-            let resource_world = worlds.get_resource_world_mut();
+            let resource_world = worlds.get_world_mut(World::RESOURCE);
             resource_world.init_resource::<AppTypeRegistry>();
             let registry = resource_world.get_resource::<AppTypeRegistry>().unwrap();
             registry.write().register::<A>();
 
             let component = A { field: 5 };
 
-            let world = worlds.get_main_world_mut();
+            let world = worlds.get_world_mut(World::MAIN);
             let e = world.spawn(component.clone()).id();
             let e_clone = world.spawn_empty().id();
 
@@ -1073,7 +1073,7 @@ mod tests {
             struct B(#[reflect(ignore)] PhantomData<()>);
 
             let mut worlds = Worlds::new();
-            let world = worlds.get_main_world_mut();
+            let world = worlds.get_world_mut(World::MAIN);
 
             // No AppTypeRegistry
             let e = world.spawn((A, B(Default::default()))).id();
@@ -1085,13 +1085,13 @@ mod tests {
             assert_eq!(world.get::<A>(e_clone), None);
             assert_eq!(world.get::<B>(e_clone), None);
 
-            let world = worlds.get_resource_world_mut();
+            let world = worlds.get_world_mut(World::RESOURCE);
             // With AppTypeRegistry
             world.init_resource::<AppTypeRegistry>();
             let registry = world.get_resource::<AppTypeRegistry>().unwrap();
             registry.write().register::<B>();
 
-            let world = worlds.get_main_world_mut();
+            let world = worlds.get_world_mut(World::MAIN);
             let e = world.spawn((A, B(Default::default()))).id();
             let e_clone = world.spawn_empty().id();
             EntityCloner::build(world).clone_entity(e, e_clone);
@@ -1108,7 +1108,7 @@ mod tests {
         }
 
         let mut worlds = Worlds::new();
-        let world = worlds.get_main_world_mut();
+        let world = worlds.get_world_mut(World::MAIN);
 
         let component = A { field: 5 };
 
@@ -1131,7 +1131,7 @@ mod tests {
         struct B;
 
         let mut worlds = Worlds::new();
-        let world = worlds.get_main_world_mut();
+        let world = worlds.get_world_mut(World::MAIN);
 
         let component = A { field: 5 };
 
@@ -1161,7 +1161,7 @@ mod tests {
         struct C;
 
         let mut worlds = Worlds::new();
-        let world = worlds.get_main_world_mut();
+        let world = worlds.get_world_mut(World::MAIN);
 
         let component = A { field: 5 };
 
@@ -1191,7 +1191,7 @@ mod tests {
         struct C;
 
         let mut worlds = Worlds::new();
-        let world = worlds.get_main_world_mut();
+        let world = worlds.get_world_mut(World::MAIN);
 
         let component = A { field: 5 };
 
@@ -1225,7 +1225,7 @@ mod tests {
         struct C;
 
         let mut worlds = Worlds::new();
-        let world = worlds.get_main_world_mut();
+        let world = worlds.get_world_mut(World::MAIN);
 
         let component = A { field: 5 };
 
@@ -1257,7 +1257,7 @@ mod tests {
         struct C(u32);
 
         let mut worlds = Worlds::new();
-        let world = worlds.get_main_world_mut();
+        let world = worlds.get_world_mut(World::MAIN);
 
         let e = world.spawn(A).id();
         let e_clone = world.spawn_empty().id();
@@ -1286,7 +1286,7 @@ mod tests {
         struct C(u32);
 
         let mut worlds = Worlds::new();
-        let world = worlds.get_main_world_mut();
+        let world = worlds.get_world_mut(World::MAIN);
 
         let e = world.spawn((A, C(0))).id();
         let e_clone = world.spawn_empty().id();
@@ -1314,7 +1314,7 @@ mod tests {
         }
 
         let mut worlds = Worlds::new();
-        let world = worlds.get_main_world_mut();
+        let world = worlds.get_world_mut(World::MAIN);
 
         let layout = Layout::array::<u8>(COMPONENT_SIZE).unwrap();
         // SAFETY:
@@ -1360,7 +1360,7 @@ mod tests {
     #[test]
     fn recursive_clone() {
         let mut worlds = Worlds::new();
-        let world = worlds.get_main_world_mut();
+        let world = worlds.get_world_mut(World::MAIN);
         let root = world.spawn_empty().id();
         let child1 = world.spawn(ChildOf(root)).id();
         let grandchild = world.spawn(ChildOf(child1)).id();
@@ -1412,12 +1412,12 @@ mod tests {
             }
         }
         let mut worlds = Worlds::new();
-        let resource_world = worlds.get_resource_world_mut();
+        let resource_world = worlds.get_world_mut(World::RESOURCE);
         let registry = AppTypeRegistry::default();
         registry.write().register::<SomeRef>();
         resource_world.insert_resource(registry);
 
-        let world = worlds.get_main_world_mut();
+        let world = worlds.get_world_mut(World::MAIN);
         let a = world.spawn_empty().id();
         let b = world.spawn_empty().id();
         let c = world.spawn(SomeRef(a, Default::default())).id();
@@ -1426,7 +1426,7 @@ mod tests {
         map.insert(a, b);
         map.insert(c, d);
 
-        let cloned = EntityCloner::default().clone_entity_mapped(&mut world, c, &mut map);
+        let cloned = EntityCloner::default().clone_entity_mapped(world, c, &mut map);
         assert_eq!(
             *world.entity(cloned).get::<SomeRef>().unwrap(),
             SomeRef(b, Default::default())

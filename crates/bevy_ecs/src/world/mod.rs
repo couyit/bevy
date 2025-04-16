@@ -220,7 +220,17 @@ impl Drop for World {
     }
 }
 
+impl Default for World {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl World {
+    pub fn new() -> Self {
+        Self::new_for_components(World::MAIN)
+    }
+
     fn new_for_storage(id: WorldId, storage: Storage) -> Self {
         let mut world = Self {
             id,

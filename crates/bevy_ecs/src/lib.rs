@@ -200,8 +200,7 @@ mod tests {
     #[test]
     fn random_access() {
         let mut worlds = Worlds::new();
-        let id = worlds.create_world();
-        let world = worlds.get_world_mut(id);
+        let world = worlds.get_world_mut(World::MAIN);
 
         let e = world.spawn((TableStored("abc"), SparseStored(123))).id();
         let f = world
@@ -224,8 +223,7 @@ mod tests {
     #[test]
     fn bundle_derive() {
         let mut worlds = Worlds::new();
-        let id = worlds.create_world();
-        let world = worlds.get_world_mut(id);
+        let world = worlds.get_world_mut(World::MAIN);
 
         #[derive(Bundle, PartialEq, Debug)]
         struct FooBundle {
@@ -363,8 +361,7 @@ mod tests {
     #[test]
     fn despawn_table_storage() {
         let mut worlds = Worlds::new();
-        let id = worlds.create_world();
-        let world = worlds.get_world_mut(id);
+        let world = worlds.get_world_mut(World::MAIN);
         let e = world.spawn((TableStored("abc"), A(123))).id();
         let f = world.spawn((TableStored("def"), A(456))).id();
         assert_eq!(world.entities().len(), 2);
@@ -379,8 +376,7 @@ mod tests {
     #[test]
     fn despawn_mixed_storage() {
         let mut worlds = Worlds::new();
-        let id = worlds.create_world();
-        let world = worlds.get_world_mut(id);
+        let world = worlds.get_world_mut(World::MAIN);
 
         let e = world.spawn((TableStored("abc"), SparseStored(123))).id();
         let f = world.spawn((TableStored("def"), SparseStored(456))).id();
@@ -396,8 +392,7 @@ mod tests {
     #[test]
     fn query_all() {
         let mut worlds = Worlds::new();
-        let id = worlds.create_world();
-        let world = worlds.get_world_mut(id);
+        let world = worlds.get_world_mut(World::MAIN);
         let e = world.spawn((TableStored("abc"), A(123))).id();
         let f = world.spawn((TableStored("def"), A(456))).id();
 
@@ -418,8 +413,7 @@ mod tests {
     #[test]
     fn query_all_for_each() {
         let mut worlds = Worlds::new();
-        let id = worlds.create_world();
-        let world = worlds.get_world_mut(id);
+        let world = worlds.get_world_mut(World::MAIN);
         let e = world.spawn((TableStored("abc"), A(123))).id();
         let f = world.spawn((TableStored("def"), A(456))).id();
 
@@ -440,8 +434,7 @@ mod tests {
     #[test]
     fn query_single_component() {
         let mut worlds = Worlds::new();
-        let id = worlds.create_world();
-        let world = worlds.get_world_mut(id);
+        let world = worlds.get_world_mut(World::MAIN);
         let e = world.spawn((TableStored("abc"), A(123))).id();
         let f = world.spawn((TableStored("def"), A(456), B(1))).id();
         let ents = world
@@ -456,8 +449,7 @@ mod tests {
     #[test]
     fn stateful_query_handles_new_archetype() {
         let mut worlds = Worlds::new();
-        let id = worlds.create_world();
-        let world = worlds.get_world_mut(id);
+        let world = worlds.get_world_mut(World::MAIN);
         let e = world.spawn((TableStored("abc"), A(123))).id();
         let mut query = world.query::<(Entity, &A)>();
 
@@ -472,8 +464,7 @@ mod tests {
     #[test]
     fn query_single_component_for_each() {
         let mut worlds = Worlds::new();
-        let id = worlds.create_world();
-        let world = worlds.get_world_mut(id);
+        let world = worlds.get_world_mut(World::MAIN);
         let e = world.spawn((TableStored("abc"), A(123))).id();
         let f = world.spawn((TableStored("def"), A(456), B(1))).id();
         let mut results = <HashSet<_>>::default();
@@ -491,8 +482,7 @@ mod tests {
     fn par_for_each_dense() {
         ComputeTaskPool::get_or_init(TaskPool::default);
         let mut worlds = Worlds::new();
-        let id = worlds.create_world();
-        let world = worlds.get_world_mut(id);
+        let world = worlds.get_world_mut(World::MAIN);
         let e1 = world.spawn(A(1)).id();
         let e2 = world.spawn(A(2)).id();
         let e3 = world.spawn(A(3)).id();
@@ -516,8 +506,7 @@ mod tests {
     fn par_for_each_sparse() {
         ComputeTaskPool::get_or_init(TaskPool::default);
         let mut worlds = Worlds::new();
-        let id = worlds.create_world();
-        let world = worlds.get_world_mut(id);
+        let world = worlds.get_world_mut(World::MAIN);
         let e1 = world.spawn(SparseStored(1)).id();
         let e2 = world.spawn(SparseStored(2)).id();
         let e3 = world.spawn(SparseStored(3)).id();
@@ -538,8 +527,7 @@ mod tests {
     #[test]
     fn query_missing_component() {
         let mut worlds = Worlds::new();
-        let id = worlds.create_world();
-        let world = worlds.get_world_mut(id);
+        let world = worlds.get_world_mut(World::MAIN);
         world.spawn((TableStored("abc"), A(123)));
         world.spawn((TableStored("def"), A(456)));
         assert!(world.query::<(&B, &A)>().iter(&world).next().is_none());
@@ -548,8 +536,7 @@ mod tests {
     #[test]
     fn query_sparse_component() {
         let mut worlds = Worlds::new();
-        let id = worlds.create_world();
-        let world = worlds.get_world_mut(id);
+        let world = worlds.get_world_mut(World::MAIN);
         world.spawn((TableStored("abc"), A(123)));
         let f = world.spawn((TableStored("def"), A(456), B(1))).id();
         let ents = world
@@ -563,8 +550,7 @@ mod tests {
     #[test]
     fn query_filter_with() {
         let mut worlds = Worlds::new();
-        let id = worlds.create_world();
-        let world = worlds.get_world_mut(id);
+        let world = worlds.get_world_mut(World::MAIN);
         world.spawn((A(123), B(1)));
         world.spawn(A(456));
         let result = world
@@ -578,8 +564,7 @@ mod tests {
     #[test]
     fn query_filter_with_for_each() {
         let mut worlds = Worlds::new();
-        let id = worlds.create_world();
-        let world = worlds.get_world_mut(id);
+        let world = worlds.get_world_mut(World::MAIN);
         world.spawn((A(123), B(1)));
         world.spawn(A(456));
 
@@ -594,8 +579,7 @@ mod tests {
     #[test]
     fn query_filter_with_sparse() {
         let mut worlds = Worlds::new();
-        let id = worlds.create_world();
-        let world = worlds.get_world_mut(id);
+        let world = worlds.get_world_mut(World::MAIN);
 
         world.spawn((A(123), SparseStored(321)));
         world.spawn(A(456));
@@ -610,8 +594,7 @@ mod tests {
     #[test]
     fn query_filter_with_sparse_for_each() {
         let mut worlds = Worlds::new();
-        let id = worlds.create_world();
-        let world = worlds.get_world_mut(id);
+        let world = worlds.get_world_mut(World::MAIN);
 
         world.spawn((A(123), SparseStored(321)));
         world.spawn(A(456));
@@ -626,8 +609,7 @@ mod tests {
     #[test]
     fn query_filter_without() {
         let mut worlds = Worlds::new();
-        let id = worlds.create_world();
-        let world = worlds.get_world_mut(id);
+        let world = worlds.get_world_mut(World::MAIN);
         world.spawn((A(123), B(321)));
         world.spawn(A(456));
         let result = world
@@ -641,8 +623,7 @@ mod tests {
     #[test]
     fn query_optional_component_table() {
         let mut worlds = Worlds::new();
-        let id = worlds.create_world();
-        let world = worlds.get_world_mut(id);
+        let world = worlds.get_world_mut(World::MAIN);
         let e = world.spawn((TableStored("abc"), A(123))).id();
         let f = world.spawn((TableStored("def"), A(456), B(1))).id();
         // this should be skipped
@@ -659,8 +640,7 @@ mod tests {
     #[test]
     fn query_optional_component_sparse() {
         let mut worlds = Worlds::new();
-        let id = worlds.create_world();
-        let world = worlds.get_world_mut(id);
+        let world = worlds.get_world_mut(World::MAIN);
 
         let e = world.spawn((TableStored("abc"), A(123))).id();
         let f = world
@@ -684,8 +664,7 @@ mod tests {
     #[test]
     fn query_optional_component_sparse_no_match() {
         let mut worlds = Worlds::new();
-        let id = worlds.create_world();
-        let world = worlds.get_world_mut(id);
+        let world = worlds.get_world_mut(World::MAIN);
 
         let e = world.spawn((TableStored("abc"), A(123))).id();
         let f = world.spawn((TableStored("def"), A(456))).id();
@@ -702,8 +681,7 @@ mod tests {
     #[test]
     fn add_remove_components() {
         let mut worlds = Worlds::new();
-        let id = worlds.create_world();
-        let world = worlds.get_world_mut(id);
+        let world = worlds.get_world_mut(World::MAIN);
         let e1 = world.spawn((A(1), B(3), TableStored("abc"))).id();
         let e2 = world.spawn((A(2), B(4), TableStored("xyz"))).id();
 
@@ -761,8 +739,7 @@ mod tests {
     #[test]
     fn table_add_remove_many() {
         let mut worlds = Worlds::new();
-        let id = worlds.create_world();
-        let world = worlds.get_world_mut(id);
+        let world = worlds.get_world_mut(World::MAIN);
         #[cfg(miri)]
         let (mut entities, to) = {
             let to = 10;
@@ -790,8 +767,7 @@ mod tests {
     #[test]
     fn sparse_set_add_remove_many() {
         let mut worlds = Worlds::new();
-        let id = worlds.create_world();
-        let world = worlds.get_world_mut(id);
+        let world = worlds.get_world_mut(World::MAIN);
 
         let mut entities = Vec::with_capacity(1000);
         for _ in 0..4 {
@@ -813,8 +789,7 @@ mod tests {
     #[test]
     fn remove_missing() {
         let mut worlds = Worlds::new();
-        let id = worlds.create_world();
-        let world = worlds.get_world_mut(id);
+        let world = worlds.get_world_mut(World::MAIN);
         let e = world.spawn((TableStored("abc"), A(123))).id();
         assert!(world.entity_mut(e).take::<B>().is_none());
     }
@@ -822,8 +797,7 @@ mod tests {
     #[test]
     fn spawn_batch() {
         let mut worlds = Worlds::new();
-        let id = worlds.create_world();
-        let world = worlds.get_world_mut(id);
+        let world = worlds.get_world_mut(World::MAIN);
         world.spawn_batch((0..100).map(|x| (A(x), TableStored("abc"))));
         let values = world
             .query::<&A>()
@@ -837,8 +811,7 @@ mod tests {
     #[test]
     fn query_get() {
         let mut worlds = Worlds::new();
-        let id = worlds.create_world();
-        let world = worlds.get_world_mut(id);
+        let world = worlds.get_world_mut(World::MAIN);
         let a = world.spawn((TableStored("abc"), A(123))).id();
         let b = world.spawn((TableStored("def"), A(456))).id();
         let c = world.spawn((TableStored("ghi"), A(789), B(1))).id();
@@ -858,8 +831,7 @@ mod tests {
     fn query_get_works_across_sparse_removal() {
         // Regression test for: https://github.com/bevyengine/bevy/issues/6623
         let mut worlds = Worlds::new();
-        let id = worlds.create_world();
-        let world = worlds.get_world_mut(id);
+        let world = worlds.get_world_mut(World::MAIN);
         let a = world.spawn((TableStored("abc"), SparseStored(123))).id();
         let b = world.spawn((TableStored("def"), SparseStored(456))).id();
         let c = world
@@ -882,8 +854,7 @@ mod tests {
     #[test]
     fn remove_tracking() {
         let mut worlds = Worlds::new();
-        let id = worlds.create_world();
-        let world = worlds.get_world_mut(id);
+        let world = worlds.get_world_mut(World::MAIN);
 
         let a = world.spawn((SparseStored(0), A(123))).id();
         let b = world.spawn((SparseStored(1), A(123))).id();
@@ -955,8 +926,7 @@ mod tests {
     #[test]
     fn added_tracking() {
         let mut worlds = Worlds::new();
-        let id = worlds.create_world();
-        let world = worlds.get_world_mut(id);
+        let world = worlds.get_world_mut(World::MAIN);
         let a = world.spawn(A(123)).id();
 
         assert_eq!(world.query::<&A>().iter(&world).count(), 1);
@@ -1007,8 +977,7 @@ mod tests {
     #[test]
     fn added_queries() {
         let mut worlds = Worlds::new();
-        let id = worlds.create_world();
-        let world = worlds.get_world_mut(id);
+        let world = worlds.get_world_mut(World::MAIN);
         let e1 = world.spawn(A(0)).id();
 
         fn get_added<Com: Component>(world: &mut World) -> Vec<Entity> {
@@ -1039,8 +1008,7 @@ mod tests {
     #[test]
     fn changed_trackers() {
         let mut worlds = Worlds::new();
-        let id = worlds.create_world();
-        let world = worlds.get_world_mut(id);
+        let world = worlds.get_world_mut(World::MAIN);
         let e1 = world.spawn((A(0), B(0))).id();
         let e2 = world.spawn((A(0), B(0))).id();
         let e3 = world.spawn((A(0), B(0))).id();
@@ -1146,8 +1114,7 @@ mod tests {
     #[test]
     fn changed_trackers_sparse() {
         let mut worlds = Worlds::new();
-        let id = worlds.create_world();
-        let world = worlds.get_world_mut(id);
+        let world = worlds.get_world_mut(World::MAIN);
         let e1 = world.spawn(SparseStored(0)).id();
         let e2 = world.spawn(SparseStored(0)).id();
         let e3 = world.spawn(SparseStored(0)).id();
@@ -1244,8 +1211,7 @@ mod tests {
     #[test]
     fn empty_spawn() {
         let mut worlds = Worlds::new();
-        let id = worlds.create_world();
-        let world = worlds.get_world_mut(id);
+        let world = worlds.get_world_mut(World::MAIN);
         let e = world.spawn_empty().id();
         let mut e_mut = world.entity_mut(e);
         e_mut.insert(A(0));
@@ -1255,8 +1221,7 @@ mod tests {
     #[test]
     fn reserve_and_spawn() {
         let mut worlds = Worlds::new();
-        let id = worlds.create_world();
-        let world = worlds.get_world_mut(id);
+        let world = worlds.get_world_mut(World::MAIN);
         let e = world.entities().reserve_entity();
         world.flush_entities();
         let mut e_mut = world.entity_mut(e);
@@ -1267,8 +1232,7 @@ mod tests {
     #[test]
     fn changed_query() {
         let mut worlds = Worlds::new();
-        let id = worlds.create_world();
-        let world = worlds.get_world_mut(id);
+        let world = worlds.get_world_mut(World::MAIN);
         let e1 = world.spawn((A(0), B(0))).id();
 
         fn get_changed(world: &mut World) -> Vec<Entity> {
@@ -1295,8 +1259,7 @@ mod tests {
         struct BigNum(u64);
 
         let mut worlds = Worlds::new();
-        let id = worlds.create_resource_world();
-        let world = worlds.get_world_mut(id);
+        let world = worlds.get_world_mut(World::RESOURCE);
         assert!(world.get_resource::<Num>().is_none());
         assert!(!world.contains_resource::<Num>());
         assert!(!world.is_resource_added::<Num>());
@@ -1382,8 +1345,7 @@ mod tests {
     #[test]
     fn remove() {
         let mut worlds = Worlds::new();
-        let id = worlds.create_world();
-        let world = worlds.get_world_mut(id);
+        let world = worlds.get_world_mut(World::MAIN);
         let e1 = world.spawn((A(1), B(1), TableStored("a"))).id();
 
         let mut e = world.entity_mut(e1);
@@ -1422,8 +1384,7 @@ mod tests {
     #[test]
     fn take() {
         let mut worlds = Worlds::new();
-        let id = worlds.create_world();
-        let world = worlds.get_world_mut(id);
+        let world = worlds.get_world_mut(World::MAIN);
         world.spawn((A(1), B(1), TableStored("1")));
         let e2 = world.spawn((A(2), B(2), TableStored("2"))).id();
         world.spawn((A(3), B(3), TableStored("3")));
@@ -1477,8 +1438,7 @@ mod tests {
     #[test]
     fn non_send_resource() {
         let mut worlds = Worlds::new();
-        let id = worlds.create_resource_world();
-        let world = worlds.get_world_mut(id);
+        let world = worlds.get_world_mut(World::RESOURCE);
         world.insert_non_send_resource(123i32);
         world.insert_non_send_resource(456i64);
         assert_eq!(*world.non_send_resource::<i32>(), 123);
@@ -1488,8 +1448,7 @@ mod tests {
     #[test]
     fn non_send_resource_points_to_distinct_data() {
         let mut worlds = Worlds::new();
-        let id = worlds.create_resource_world();
-        let world = worlds.get_world_mut(id);
+        let world = worlds.get_world_mut(World::RESOURCE);
         world.insert_resource(A(123));
         world.insert_non_send_resource(A(456));
         assert_eq!(*world.resource::<A>(), A(123));
@@ -1500,8 +1459,7 @@ mod tests {
     #[should_panic]
     fn non_send_resource_panic() {
         let mut worlds = Worlds::new();
-        let id = worlds.create_resource_world();
-        let world = worlds.get_world_mut(id);
+        let world = worlds.get_world_mut(World::RESOURCE);
         world.insert_non_send_resource(0i32);
         std::thread::spawn(move || {
             let _ = world.non_send_resource_mut::<i32>();
@@ -1513,8 +1471,7 @@ mod tests {
     #[test]
     fn exact_size_query() {
         let mut worlds = Worlds::new();
-        let id = worlds.create_world();
-        let world = worlds.get_world_mut(id);
+        let world = worlds.get_world_mut(World::MAIN);
         world.spawn((A(0), B(0)));
         world.spawn((A(0), B(0)));
         world.spawn((A(0), B(0), C));
@@ -1528,8 +1485,7 @@ mod tests {
     #[should_panic]
     fn duplicate_components_panic() {
         let mut worlds = Worlds::new();
-        let id = worlds.create_world();
-        let world = worlds.get_world_mut(id);
+        let world = worlds.get_world_mut(World::MAIN);
         world.spawn((A(1), A(2)));
     }
 
@@ -1537,8 +1493,7 @@ mod tests {
     #[should_panic]
     fn ref_and_mut_query_panic() {
         let mut worlds = Worlds::new();
-        let id = worlds.create_world();
-        let world = worlds.get_world_mut(id);
+        let world = worlds.get_world_mut(World::MAIN);
         world.query::<(&A, &mut A)>();
     }
 
@@ -1546,8 +1501,7 @@ mod tests {
     #[should_panic]
     fn entity_ref_and_mut_query_panic() {
         let mut worlds = Worlds::new();
-        let id = worlds.create_world();
-        let world = worlds.get_world_mut(id);
+        let world = worlds.get_world_mut(World::MAIN);
         world.query::<(EntityRef, &mut A)>();
     }
 
@@ -1555,8 +1509,7 @@ mod tests {
     #[should_panic]
     fn mut_and_ref_query_panic() {
         let mut worlds = Worlds::new();
-        let id = worlds.create_world();
-        let world = worlds.get_world_mut(id);
+        let world = worlds.get_world_mut(World::MAIN);
         world.query::<(&mut A, &A)>();
     }
 
@@ -1564,8 +1517,7 @@ mod tests {
     #[should_panic]
     fn mut_and_entity_ref_query_panic() {
         let mut worlds = Worlds::new();
-        let id = worlds.create_world();
-        let world = worlds.get_world_mut(id);
+        let world = worlds.get_world_mut(World::MAIN);
         world.query::<(&mut A, EntityRef)>();
     }
 
@@ -1573,8 +1525,7 @@ mod tests {
     #[should_panic]
     fn entity_ref_and_entity_mut_query_panic() {
         let mut worlds = Worlds::new();
-        let id = worlds.create_world();
-        let world = worlds.get_world_mut(id);
+        let world = worlds.get_world_mut(World::MAIN);
         world.query::<(EntityRef, EntityMut)>();
     }
 
@@ -1582,16 +1533,14 @@ mod tests {
     #[should_panic]
     fn entity_mut_and_entity_mut_query_panic() {
         let mut worlds = Worlds::new();
-        let id = worlds.create_world();
-        let world = worlds.get_world_mut(id);
+        let world = worlds.get_world_mut(World::MAIN);
         world.query::<(EntityMut, EntityMut)>();
     }
 
     #[test]
     fn entity_ref_and_entity_ref_query_no_panic() {
         let mut worlds = Worlds::new();
-        let id = worlds.create_world();
-        let world = worlds.get_world_mut(id);
+        let world = worlds.get_world_mut(World::MAIN);
         world.query::<(EntityRef, EntityRef)>();
     }
 
@@ -1599,8 +1548,7 @@ mod tests {
     #[should_panic]
     fn mut_and_mut_query_panic() {
         let mut worlds = Worlds::new();
-        let id = worlds.create_world();
-        let world = worlds.get_world_mut(id);
+        let world = worlds.get_world_mut(World::MAIN);
         world.query::<(&mut A, &mut A)>();
     }
 
@@ -1610,8 +1558,11 @@ mod tests {
         let mut worlds = Worlds::new();
         let id_a = worlds.create_world();
         let id_b = worlds.create_world();
-        let world_a = worlds.get_world(id_a);
-        let world_b = worlds.get_world(id_b);
+
+        let cell = worlds.as_unsafe_cell();
+
+        let world_a = unsafe { cell.get_mut() }.get_world_mut(id_a);
+        let world_b = unsafe { cell.get() }.get_world(id_b);
         let mut query = world_a.query::<&A>();
         query.iter(world_a);
         query.iter(world_b);
@@ -1620,8 +1571,7 @@ mod tests {
     #[test]
     fn query_filters_dont_collide_with_fetches() {
         let mut worlds = Worlds::new();
-        let id = worlds.create_world();
-        let world = worlds.get_world(id);
+        let world = worlds.get_world_mut(World::MAIN);
         world.query_filtered::<&mut A, Changed<A>>();
     }
 
@@ -1646,8 +1596,14 @@ mod tests {
     #[test]
     #[should_panic]
     fn multiple_worlds_same_query_get() {
-        let mut world_a = World::new();
-        let world_b = World::new();
+        let mut worlds = Worlds::new();
+        let id_a = worlds.create_world();
+        let id_b = worlds.create_world();
+
+        let cell = worlds.as_unsafe_cell();
+
+        let world_a = unsafe { cell.get_mut() }.get_world_mut(id_a);
+        let world_b = unsafe { cell.get() }.get_world(id_b);
         let mut query = world_a.query::<&A>();
         let _ = query.get(&world_a, Entity::from_raw(0));
         let _ = query.get(&world_b, Entity::from_raw(0));
@@ -1656,8 +1612,14 @@ mod tests {
     #[test]
     #[should_panic]
     fn multiple_worlds_same_query_for_each() {
-        let mut world_a = World::new();
-        let world_b = World::new();
+        let mut worlds = Worlds::new();
+        let id_a = worlds.create_world();
+        let id_b = worlds.create_world();
+
+        let cell = worlds.as_unsafe_cell();
+
+        let world_a = unsafe { cell.get_mut() }.get_world_mut(id_a);
+        let world_b = unsafe { cell.get() }.get_world(id_b);
         let mut query = world_a.query::<&A>();
         query.iter(&world_a).for_each(|_| {});
         query.iter(&world_b).for_each(|_| {});
@@ -1665,7 +1627,8 @@ mod tests {
 
     #[test]
     fn resource_scope() {
-        let mut world = World::default();
+        let mut worlds = Worlds::new();
+        let world = worlds.get_world_mut(World::RESOURCE);
         assert!(world.try_resource_scope::<A, _>(|_, _| {}).is_none());
         world.insert_resource(A(0));
         world.resource_scope(|world: &mut World, mut value: Mut<A>| {
@@ -1680,13 +1643,14 @@ mod tests {
         expected = "Attempted to access or drop non-send resource bevy_ecs::tests::NonSendA from thread"
     )]
     fn non_send_resource_drop_from_different_thread() {
-        let mut world = World::default();
+        let mut worlds = Worlds::new();
+        let world = worlds.get_world_mut(World::RESOURCE);
         world.insert_non_send_resource(NonSendA::default());
 
         let thread = std::thread::spawn(move || {
             // Dropping the non-send resource on a different thread
             // Should result in a panic
-            drop(world);
+            drop(worlds);
         });
 
         if let Err(err) = thread.join() {
@@ -1696,7 +1660,8 @@ mod tests {
 
     #[test]
     fn non_send_resource_drop_from_same_thread() {
-        let mut world = World::default();
+        let mut worlds = Worlds::new();
+        let world = worlds.get_world_mut(World::RESOURCE);
         world.insert_non_send_resource(NonSendA::default());
         drop(world);
     }
@@ -1705,7 +1670,8 @@ mod tests {
     fn insert_overwrite_drop() {
         let (dropck1, dropped1) = DropCk::new_pair();
         let (dropck2, dropped2) = DropCk::new_pair();
-        let mut world = World::default();
+        let mut worlds = Worlds::new();
+        let world = worlds.get_world_mut(World::MAIN);
         world.spawn(dropck1).insert(dropck2);
         assert_eq!(dropped1.load(Ordering::Relaxed), 1);
         assert_eq!(dropped2.load(Ordering::Relaxed), 0);
@@ -1718,7 +1684,8 @@ mod tests {
     fn insert_overwrite_drop_sparse() {
         let (dropck1, dropped1) = DropCk::new_pair();
         let (dropck2, dropped2) = DropCk::new_pair();
-        let mut world = World::default();
+        let mut worlds = Worlds::new();
+        let world = worlds.get_world_mut(World::MAIN);
 
         world
             .spawn(DropCkSparse(dropck1))

@@ -121,12 +121,12 @@ const _: () = {
         type Item<'w, 's> = Commands<'w, 's>;
         type World<'w> = UnsafeWorldCell<'w>;
 
-        fn init_world_access<'w>(world: &Self::World<'w>, system_meta: &mut super::SystemMeta) {
+        fn init_world_access<'w>(world: Self::World<'w>, system_meta: &mut super::SystemMeta) {
             system_meta.world_access.add_read(world.id());
         }
 
         fn init_state<'w>(
-            world: &Self::World<'w>,
+            world: Self::World<'w>,
             system_meta: &mut bevy_ecs::system::SystemMeta,
         ) -> Self::State {
             FetchState {
@@ -144,7 +144,7 @@ const _: () = {
             // SAFETY: Caller guarantees the archetype is from the world used in `init_state`
             unsafe {
                 <__StructFieldsAlias<'_, '_> as SystemParam>::new_archetype(
-                    &mut state.state,
+                    mut state.state,
                     archetype,
                     archetype_component_id,
                 );
@@ -154,7 +154,7 @@ const _: () = {
         fn apply<'w>(
             state: &mut Self::State,
             system_meta: &bevy_ecs::system::SystemMeta,
-            world: &Self::World<'w>,
+            world: Self::World<'w>,
         ) {
             <__StructFieldsAlias<'_, '_> as SystemParam>::apply(
                 &mut state.state,

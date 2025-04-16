@@ -2735,6 +2735,15 @@ struct InitComponentId<T: Component> {
     marker: PhantomData<T>,
 }
 
+impl<T: Component> FromWorld for InitComponentId<T> {
+    fn from_world(world: &mut World) -> Self {
+        Self {
+            component_id: world.register_component::<T>(),
+            marker: PhantomData,
+        }
+    }
+}
+
 /// An error returned when the registration of a required component fails.
 #[derive(Error, Debug)]
 #[non_exhaustive]

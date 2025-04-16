@@ -387,9 +387,9 @@ pub fn derive_system_param(input: TokenStream) -> TokenStream {
         quote! {}
     } else {
         quote! {
-            impl<'w, 's, #punctuated_generics> #path::system::system_param::GetGlobal<#struct_name #ty_generics> for <#fields_alias::<'w, 's, #punctuated_generic_idents> as DefaultWorldId>::Id #where_clause {
-                fn get_global<'world>(&self, worlds: #path::world::unsafe_world_cell::UnsafeWorldsCell<'world>) -> <#struct_name #ty_generics as #path::system::system_param::SystemParam>::World<'world> {
-                    self.get_global(worlds)
+            impl<'w, 's, #punctuated_generics> #path::system::GetGlobal<#struct_name #ty_generics> for <#fields_alias::<'w, 's, #punctuated_generic_idents> as #path::system::DefaultWorldId>::Id #where_clause {
+                fn get_global<'world>(&self, worlds: #path::world::unsafe_world_cell::UnsafeWorldsCell<'world>) -> <#struct_name #ty_generics as #path::system::SystemParam>::World<'world> {
+                    <Self as #path::system::GetGlobal<#fields_alias::<'w, 's, #punctuated_generic_idents>>>::get_global(self, worlds)
                 }
             }
         }
@@ -467,11 +467,11 @@ pub fn derive_system_param(input: TokenStream) -> TokenStream {
                     unsafe { #fields_alias::<'_, '_, #punctuated_generic_idents>::new_archetype(&mut state.state, archetype, archetype_component_access) }
                 }
 
-                fn apply<'w, 's>(state: &'s mut Self::State, system_meta: &#path::system::SystemMeta, world: Self::World<'w>) {
-                    #fields_alias::<'_, '_, #punctuated_generic_idents>::apply(&mut state.state, system_meta, world);
+                fn apply<'w, 's>(state: &'s mut Self::State, system_meta: &#path::system::SystemMeta, worlds: #path::world::unsafe_world_cell::UnsafeWorldsCell<'w>) {
+                    #fields_alias::<'_, '_, #punctuated_generic_idents>::apply(&mut state.state, system_meta, worlds);
                 }
 
-                fn queue<'w, 's>(state: &'s mut Self::State, system_meta: &#path::system::SystemMeta, world: Self::World<'w>) {
+                fn queue<'w, 's>(state: &'s mut Self::State, system_meta: &#path::system::SystemMeta, world: #path::world::DeferredWorld) {
                     #fields_alias::<'_, '_, #punctuated_generic_idents>::queue(&mut state.state, system_meta, world);
                 }
 
@@ -506,7 +506,7 @@ pub fn derive_system_param(input: TokenStream) -> TokenStream {
             // Safety: Each field is `ReadOnlySystemParam`, so this can only read from the `World`
             unsafe impl<'w, 's, #punctuated_generics> #path::system::ReadOnlySystemParam for #struct_name #ty_generics #read_only_where_clause {}
 
-            impl<'w, 's, #punctuated_generics> #path::system::system_param::IntoSystemParamTuple for #struct_name #ty_generics #where_clause {
+            impl<'w, 's, #punctuated_generics> #path::system::IntoSystemParamTuple for #struct_name #ty_generics #where_clause {
                 type Tuple = #fields_alias::<'w, 's, #punctuated_generic_idents>;
             }
 

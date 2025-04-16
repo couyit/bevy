@@ -547,8 +547,7 @@ mod tests {
 
     #[test]
     fn hierarchy() {
-        let mut worlds = Worlds::new();
-        let world = worlds.get_main_world_mut();
+        let mut world = World::new();
         let root = world.spawn_empty().id();
         let child1 = world.spawn(ChildOf(root)).id();
         let grandchild = world.spawn(ChildOf(child1)).id();
@@ -596,8 +595,7 @@ mod tests {
 
     #[test]
     fn with_children() {
-        let mut worlds = Worlds::new();
-        let world = worlds.get_main_world_mut();
+        let mut world = World::new();
         let mut child1 = Entity::PLACEHOLDER;
         let mut child2 = Entity::PLACEHOLDER;
         let root = world
@@ -617,8 +615,7 @@ mod tests {
 
     #[test]
     fn add_children() {
-        let mut worlds = Worlds::new();
-        let world = worlds.get_main_world_mut();
+        let mut world = World::new();
         let child1 = world.spawn_empty().id();
         let child2 = world.spawn_empty().id();
         let root = world.spawn_empty().add_children(&[child1, child2]).id();
@@ -681,8 +678,7 @@ mod tests {
 
     #[test]
     fn self_parenting_invalid() {
-        let mut worlds = Worlds::new();
-        let world = worlds.get_main_world_mut();
+        let mut world = World::new();
         let id = world.spawn_empty().id();
         world.entity_mut(id).insert(ChildOf(id));
         assert!(
@@ -693,8 +689,7 @@ mod tests {
 
     #[test]
     fn missing_parent_invalid() {
-        let mut worlds = Worlds::new();
-        let world = worlds.get_main_world_mut();
+        let mut world = World::new();
         let parent = world.spawn_empty().id();
         world.entity_mut(parent).despawn();
         let id = world.spawn(ChildOf(parent)).id();
@@ -706,8 +701,7 @@ mod tests {
 
     #[test]
     fn reinsert_same_parent() {
-        let mut worlds = Worlds::new();
-        let world = worlds.get_main_world_mut();
+        let mut world = World::new();
         let parent = world.spawn_empty().id();
         let id = world.spawn(ChildOf(parent)).id();
         world.entity_mut(id).insert(ChildOf(parent));
@@ -720,16 +714,14 @@ mod tests {
 
     #[test]
     fn spawn_children() {
-        let mut worlds = Worlds::new();
-        let world = worlds.get_main_world_mut();
+        let mut world = World::new();
         let id = world.spawn(Children::spawn((Spawn(()), Spawn(())))).id();
         assert_eq!(world.entity(id).get::<Children>().unwrap().len(), 2,);
     }
 
     #[test]
     fn replace_children() {
-        let mut worlds = Worlds::new();
-        let world = worlds.get_main_world_mut();
+        let mut world = World::new();
         let parent = world.spawn(Children::spawn((Spawn(()), Spawn(())))).id();
         let &[child_a, child_b] = &world.entity(parent).get::<Children>().unwrap().0[..] else {
             panic!("Tried to spawn 2 children on an entity and didn't get 2 children");
@@ -760,8 +752,7 @@ mod tests {
 
     #[test]
     fn replace_children_with_nothing() {
-        let mut worlds = Worlds::new();
-        let world = worlds.get_main_world_mut();
+        let mut world = World::new();
         let parent = world.spawn_empty().id();
         let child_a = world.spawn_empty().id();
         let child_b = world.spawn_empty().id();
@@ -778,8 +769,7 @@ mod tests {
 
     #[test]
     fn insert_same_child_twice() {
-        let mut worlds = Worlds::new();
-        let world = worlds.get_main_world_mut();
+        let mut world = World::new();
 
         let parent = world.spawn_empty().id();
         let child = world.spawn_empty().id();
@@ -797,8 +787,7 @@ mod tests {
 
     #[test]
     fn replace_with_difference() {
-        let mut worlds = Worlds::new();
-        let world = worlds.get_main_world_mut();
+        let mut world = World::new();
 
         let parent = world.spawn_empty().id();
         let child_a = world.spawn_empty().id();
@@ -865,8 +854,7 @@ mod tests {
 
     #[test]
     fn replace_with_difference_on_empty() {
-        let mut worlds = Worlds::new();
-        let world = worlds.get_main_world_mut();
+        let mut world = World::new();
 
         let parent = world.spawn_empty().id();
         let child_a = world.spawn_empty().id();
@@ -881,8 +869,7 @@ mod tests {
 
     #[test]
     fn replace_with_difference_totally_new_children() {
-        let mut worlds = Worlds::new();
-        let world = worlds.get_main_world_mut();
+        let mut world = World::new();
 
         let parent = world.spawn_empty().id();
         let child_a = world.spawn_empty().id();
@@ -934,8 +921,7 @@ mod tests {
 
     #[test]
     fn replace_children_order() {
-        let mut worlds = Worlds::new();
-        let world = worlds.get_main_world_mut();
+        let mut world = World::new();
 
         let parent = world.spawn_empty().id();
         let child_a = world.spawn_empty().id();
@@ -964,8 +950,7 @@ mod tests {
         ignore = "we don't check invariants if debug assertions are off"
     )]
     fn replace_diff_invariant_overlapping_unrelate_with_relate() {
-        let mut worlds = Worlds::new();
-        let world = worlds.get_main_world_mut();
+        let mut world = World::new();
 
         let parent = world.spawn_empty().id();
         let child_a = world.spawn_empty().id();
@@ -987,8 +972,7 @@ mod tests {
         ignore = "we don't check invariants if debug assertions are off"
     )]
     fn replace_diff_invariant_overlapping_unrelate_with_newly() {
-        let mut worlds = Worlds::new();
-        let world = worlds.get_main_world_mut();
+        let mut world = World::new();
 
         let parent = world.spawn_empty().id();
         let child_a = world.spawn_empty().id();
@@ -1013,8 +997,7 @@ mod tests {
         ignore = "we don't check invariants if debug assertions are off"
     )]
     fn replace_diff_invariant_newly_not_subset() {
-        let mut worlds = Worlds::new();
-        let world = worlds.get_main_world_mut();
+        let mut world = World::new();
 
         let parent = world.spawn_empty().id();
         let child_a = world.spawn_empty().id();
@@ -1030,8 +1013,7 @@ mod tests {
 
     #[test]
     fn child_replace_hook_skip() {
-        let mut worlds = Worlds::new();
-        let world = worlds.get_main_world_mut();
+        let mut world = World::new();
         let parent = world.spawn_empty().id();
         let other = world.spawn_empty().id();
         let child = world.spawn(ChildOf(parent)).id();
