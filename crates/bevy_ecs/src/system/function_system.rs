@@ -888,11 +888,7 @@ where
         // - All world accesses used by `F::Param` have been registered, so the caller
         //   will ensure that there are no data access conflicts.
         let params = unsafe {
-            F::Param::get_param(
-                param_state,
-                &self.system_meta,
-                &<F::Param as SystemParam>::World::from_ids(worlds, &ids),
-            )
+            F::Param::get_param(param_state, &self.system_meta, self.ids.get_global(worlds))
         };
         let out = self.func.run(input, params);
         self.system_meta.change_ticks.swap(0, 1);
@@ -902,15 +898,7 @@ where
     #[inline]
     fn apply_deferred(&mut self, worlds: UnsafeWorldsCell) {
         let param_state = &mut self.state.as_mut().expect(Self::ERROR_UNINITIALIZED).param;
-
-        let worlds = match &self.ids {
-            Ids::Tuple(ids) => <F::Param as SystemParam>::World::from_ids(worlds, ids),
-            Ids::Duplicated(id) => <F::Param as SystemParam>::World::from(unsafe {
-                worlds.get_unsafe_world_cell_mut(*id)
-            }),
-        };
-
-        F::Param::apply(param_state, &self.system_meta, &worlds);
+        F::Param::apply(param_state, &self.system_meta, self.ids.get_global(worlds));
     }
 
     #[inline]

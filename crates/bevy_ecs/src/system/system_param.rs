@@ -1,5 +1,5 @@
 pub use crate::change_detection::{NonSendMut, Res, ResMut};
-use crate::world::FromWorlds;
+use crate::world::{FromWorld, FromWorlds};
 use crate::{
     archetype::{Archetype, ArchetypeComponentId, Archetypes},
     bundle::Bundles,
@@ -257,7 +257,7 @@ pub unsafe trait SystemParam: Sized {
         unused_variables,
         reason = "The parameters here are intentionally unused by the default implementation; however, putting underscores here will result in the underscores being copied by rust-analyzer's tab completion."
     )]
-    fn apply<'w>(state: &mut Self::State, system_meta: &SystemMeta, world: DeferredWorld) {}
+    fn apply<'w>(state: &mut Self::State, system_meta: &SystemMeta, world: Self::World<'w>) {}
 
     /// Queues any deferred mutations to be applied at the next [`ApplyDeferred`](crate::prelude::ApplyDeferred).
     #[inline]
@@ -265,7 +265,7 @@ pub unsafe trait SystemParam: Sized {
         unused_variables,
         reason = "The parameters here are intentionally unused by the default implementation; however, putting underscores here will result in the underscores being copied by rust-analyzer's tab completion."
     )]
-    fn queue<'w>(state: &mut Self::State, system_meta: &SystemMeta, world: DeferredWorld) {}
+    fn queue<'w>(state: &mut Self::State, system_meta: &SystemMeta, world: Self::World<'w>) {}
 
     /// Validates that the param can be acquired by the [`get_param`](SystemParam::get_param).
     ///
@@ -337,7 +337,7 @@ pub unsafe trait ReadOnlySystemParam: SystemParam {}
 /// Shorthand way of accessing the associated type [`SystemParam::Item`] for a given [`SystemParam`].
 pub type SystemParamItem<'w, 's, P> = <P as SystemParam>::Item<'w, 's>;
 
-pub trait GetGlobal<T: SystemParam>: Send + Sync + 'static {
+pub trait GetGlobal<T: SystemParam> {
     fn get_global<'w>(&self, worlds: UnsafeWorldsCell<'w>) -> T::World<'w>;
 }
 
@@ -348,6 +348,22 @@ pub trait GetLocal<T: SystemParam>: GetGlobal<T> {
 pub trait DefaultWorldId: SystemParam {
     type Id: GetGlobal<Self>;
     fn default_world_id() -> Self::Id;
+}
+
+pub(crate) trait IntoSystemParamTuple: SystemParam {
+    type Tuple: DefaultWorldId;
+}
+
+impl<T, U> DefaultWorldId for T
+where
+    T: IntoSystemParamTuple<Tuple = U>,
+    U: DefaultWorldId,
+    U::Id: GetGlobal<T>,
+{
+    type Id = <T::Tuple as DefaultWorldId>::Id;
+    fn default_world_id() -> Self::Id {
+        T::Tuple::default_world_id()
+    }
 }
 
 pub mod fetch {
@@ -1026,11 +1042,11 @@ macro_rules! impl_param_set {
                 unsafe { <($($param,)*) as SystemParam>::new_archetype(state, archetype, archetype_component_access); }
             }
 
-            fn apply<'w>(state: &mut Self::State, system_meta: &SystemMeta, world: DeferredWorld) {
+            fn apply<'w>(state: &mut Self::State, system_meta: &SystemMeta, world: Self::World<'w>) {
                 <($($param,)*) as SystemParam>::apply(state, system_meta, world);
             }
 
-            fn queue<'w>(state: &mut Self::State, system_meta: &SystemMeta, world: DeferredWorld) {
+            fn queue<'w>(state: &mut Self::State, system_meta: &SystemMeta, world: Self::World<'w>) {
                 <($($param,)*) as SystemParam>::queue(state, system_meta, world);
             }
 
@@ -1652,7 +1668,7 @@ impl<'a, T: FromWorlds + Send + 'static> DefaultWorldId for Local<'a, T> {
 /// Types that implement `SystemBuffer` should take care to perform as many
 /// computations up-front as possible. Buffers cannot be applied in parallel,
 /// so you should try to minimize the time spent in [`SystemBuffer::apply`].
-pub trait SystemBuffer: FromWorlds + Send + 'static {
+pub trait SystemBuffer: FromWorld + Send + 'static {
     /// Applies any deferred mutations to the [`World`].
     fn apply<'w>(&mut self, system_meta: &SystemMeta, world: DeferredWorld);
     /// Queues any deferred mutations to be applied at the next [`ApplyDeferred`](crate::prelude::ApplyDeferred).
@@ -1810,25 +1826,29 @@ unsafe impl<T: SystemBuffer> ReadOnlySystemParam for Deferred<'_, T> {}
 unsafe impl<T: SystemBuffer> SystemParam for Deferred<'_, T> {
     type State = SyncCell<T>;
     type Item<'w, 's> = Deferred<'s, T>;
-    type World<'w> = UnsafeWorldsCell<'w>;
+    type World<'w> = UnsafeWorldCell<'w>;
 
     fn shrink_world<'wlong: 'wshort, 'wshort>(world: Self::World<'wlong>) -> Self::World<'wshort> {
         world
     }
 
-    fn init_world_access<'w>(_worlds: Self::World<'w>, _system_meta: &mut SystemMeta) {}
+    fn init_world_access<'w>(_world: Self::World<'w>, _system_meta: &mut SystemMeta) {}
 
-    fn init_state<'w>(worlds: Self::World<'w>, system_meta: &mut SystemMeta) -> Self::State {
+    fn init_state<'w>(world: Self::World<'w>, system_meta: &mut SystemMeta) -> Self::State {
         system_meta.set_has_deferred();
-        SyncCell::new(T::from_worlds(unsafe { worlds.get_mut() }))
+        SyncCell::new(T::from_world(unsafe { world.world_mut() }))
     }
 
-    fn apply<'w>(state: &mut Self::State, system_meta: &SystemMeta, worlds: DeferredWorld) {
-        state.get().apply(system_meta, worlds);
+    fn apply<'w>(state: &mut Self::State, system_meta: &SystemMeta, world: Self::World<'w>) {
+        state
+            .get()
+            .apply(system_meta, unsafe { world.into_deferred() });
     }
 
-    fn queue<'w>(state: &mut Self::State, system_meta: &SystemMeta, worlds: DeferredWorld) {
-        state.get().queue(system_meta, worlds);
+    fn queue<'w>(state: &mut Self::State, system_meta: &SystemMeta, world: Self::World<'w>) {
+        state
+            .get()
+            .queue(system_meta, unsafe { world.into_deferred() });
     }
 
     #[inline]
@@ -1842,9 +1862,9 @@ unsafe impl<T: SystemBuffer> SystemParam for Deferred<'_, T> {
 }
 
 impl<T: SystemBuffer> DefaultWorldId for Deferred<'_, T> {
-    type Id = fetch::Global;
+    type Id = fetch::Local;
     fn default_world_id() -> Self::Id {
-        fetch::Global
+        World::MAIN
     }
 }
 
@@ -2500,15 +2520,15 @@ unsafe impl<T: SystemParam> SystemParam for Vec<T> {
         }
     }
 
-    fn apply<'w>(state: &mut Self::State, system_meta: &SystemMeta, world: DeferredWorld) {
+    fn apply<'w>(state: &mut Self::State, system_meta: &SystemMeta, world: Self::World<'w>) {
         for state in state {
-            T::apply(state, system_meta, world);
+            T::apply(state, system_meta, world.clone());
         }
     }
 
-    fn queue<'w>(state: &mut Self::State, system_meta: &SystemMeta, world: DeferredWorld) {
+    fn queue<'w>(state: &mut Self::State, system_meta: &SystemMeta, world: Self::World<'w>) {
         for state in state {
-            T::queue(state, system_meta, world);
+            T::queue(state, system_meta, world.clone());
         }
     }
 }
@@ -2567,15 +2587,15 @@ unsafe impl<T: SystemParam> SystemParam for ParamSet<'_, '_, Vec<T>> {
         }
     }
 
-    fn apply<'w>(state: &mut Self::State, system_meta: &SystemMeta, world: DeferredWorld) {
+    fn apply<'w>(state: &mut Self::State, system_meta: &SystemMeta, world: Self::World<'w>) {
         for state in state {
-            T::apply(state, system_meta, world);
+            T::apply(state, system_meta, world.clone());
         }
     }
 
-    fn queue<'w>(state: &mut Self::State, system_meta: &SystemMeta, world: DeferredWorld) {
+    fn queue<'w>(state: &mut Self::State, system_meta: &SystemMeta, world: Self::World<'w>) {
         for state in state {
-            T::queue(state, system_meta, world);
+            T::queue(state, system_meta, world.clone());
         }
     }
 }
@@ -2672,13 +2692,13 @@ macro_rules! impl_system_param_tuple {
             }
 
             #[inline]
-            fn apply<'w>(($($param,)*): &mut Self::State, system_meta: &SystemMeta, world: DeferredWorld) {
-                $($param::apply($param, system_meta, world);)*
+            fn apply<'w>(($($param,)*): &mut Self::State, system_meta: &SystemMeta, ($($world,)*): Self::World<'w>) {
+                $($param::apply($param, system_meta, $world);)*
             }
 
             #[inline]
-            fn queue<'w>(($($param,)*): &mut Self::State, system_meta: &SystemMeta, world: DeferredWorld) {
-                $($param::queue($param, system_meta, world);)*
+            fn queue<'w>(($($param,)*): &mut Self::State, system_meta: &SystemMeta, ($($world,)*): Self::World<'w>) {
+                $($param::queue($param, system_meta, $world);)*
             }
 
             #[inline]
@@ -2859,11 +2879,11 @@ unsafe impl<P: SystemParam + 'static> SystemParam for StaticSystemParam<'_, '_, 
         unsafe { P::new_archetype(state, archetype, archetype_component_access) };
     }
 
-    fn apply<'w>(state: &mut Self::State, system_meta: &SystemMeta, world: DeferredWorld) {
+    fn apply<'w>(state: &mut Self::State, system_meta: &SystemMeta, world: Self::World<'w>) {
         P::apply(state, system_meta, world);
     }
 
-    fn queue<'w>(state: &mut Self::State, system_meta: &SystemMeta, world: DeferredWorld) {
+    fn queue<'w>(state: &mut Self::State, system_meta: &SystemMeta, world: Self::World<'w>) {
         P::queue(state, system_meta, world);
     }
 
@@ -3138,10 +3158,10 @@ trait DynParamState: Sync + Send {
     /// This is used to apply [`Commands`] during [`ApplyDeferred`](crate::prelude::ApplyDeferred).
     ///
     /// [`Commands`]: crate::prelude::Commands
-    fn apply<'w>(&mut self, system_meta: &SystemMeta, world: DeferredWorld<'w>);
+    fn apply<'w>(&mut self, system_meta: &SystemMeta, world: DeferredWorld);
 
     /// Queues any deferred mutations to be applied at the next [`ApplyDeferred`](crate::prelude::ApplyDeferred).
-    fn queue<'w>(&mut self, system_meta: &SystemMeta, world: DeferredWorld<'w>);
+    fn queue<'w>(&mut self, system_meta: &SystemMeta, world: DeferredWorld);
 
     /// Refer to [`SystemParam::validate_param`].
     ///
@@ -3171,11 +3191,11 @@ impl<T: SystemParam + 'static> DynParamState for ParamState<T> {
         unsafe { T::new_archetype(&mut self.0, archetype, archetype_component_access) };
     }
 
-    fn apply<'w>(&mut self, system_meta: &SystemMeta, world: DeferredWorld<'w>) {
+    fn apply<'w>(&mut self, system_meta: &SystemMeta, world: DeferredWorld) {
         T::apply(&mut self.0, system_meta, world);
     }
 
-    fn queue<'w>(&mut self, system_meta: &SystemMeta, world: DeferredWorld<'w>) {
+    fn queue<'w>(&mut self, system_meta: &SystemMeta, world: DeferredWorld) {
         T::queue(&mut self.0, system_meta, world);
     }
 
@@ -3236,12 +3256,12 @@ unsafe impl SystemParam for DynSystemParam<'_, '_> {
         unsafe { state.0.new_archetype(archetype, archetype_component_access) };
     }
 
-    fn apply<'w>(state: &mut Self::State, system_meta: &SystemMeta, world: DeferredWorld) {
-        state.0.apply(system_meta, world);
+    fn apply<'w>(state: &mut Self::State, system_meta: &SystemMeta, world: Self::World<'w>) {
+        state.0.apply(system_meta, unsafe { world.into_deferred() });
     }
 
-    fn queue<'w>(state: &mut Self::State, system_meta: &SystemMeta, world: DeferredWorld) {
-        state.0.queue(system_meta, world);
+    fn queue<'w>(state: &mut Self::State, system_meta: &SystemMeta, world: Self::World<'w>) {
+        state.0.queue(system_meta, unsafe { world.into_deferred() });
     }
 }
 
