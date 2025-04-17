@@ -349,7 +349,7 @@ pub trait GetGlobal<T: SystemParam> {
 }
 
 pub trait GetLocal<T: SystemParam>: GetGlobal<T> {
-    fn get_local<'w>(world: UnsafeWorldCell<'w>) -> T::World<'w>;
+    fn get_local<'w>(&self, world: UnsafeWorldCell<'w>) -> T::World<'w>;
 }
 
 pub trait DefaultWorldId: SystemParam {
@@ -387,10 +387,10 @@ pub mod fetch {
     pub type Local = WorldId;
     pub struct Global;
     pub struct Default;
-    pub struct Deferred(pub WorldId, pub WorldId);
 
     impl<T: for<'w> SystemParam<World<'w> = UnsafeWorldCell<'w>>> GetLocal<T> for Local {
-        fn get_local<'w>(world: UnsafeWorldCell<'w>) -> UnsafeWorldCell<'w> {
+        fn get_local<'w>(&self, world: UnsafeWorldCell<'w>) -> UnsafeWorldCell<'w> {
+            assert_eq!(*self, world.id());
             world
         }
     }
@@ -415,7 +415,17 @@ pub mod fetch {
         }
     }
 
-    impl<T: SystemBuffer> GetGlobal<super::Deferred<'_, T>> for Deferred {
+    impl<T: SystemBuffer> GetLocal<super::Deferred<'_, T>> for (Local, Local) {
+        fn get_local<'w>(
+            &self,
+            world: UnsafeWorldCell<'w>,
+        ) -> <super::Deferred<'_, T> as SystemParam>::World<'w> {
+            assert_eq!(self.0, world.id());
+            (world, self.1)
+        }
+    }
+
+    impl<T: SystemBuffer> GetGlobal<super::Deferred<'_, T>> for (Local, Local) {
         fn get_global<'w>(
             &self,
             worlds: UnsafeWorldsCell<'w>,
@@ -436,8 +446,8 @@ pub mod fetch {
             )]
             impl<$($param: SystemParam, )*> GetLocal<($($param, )*)> for Local
             where Local: $(GetLocal<$param> + )* Any {
-                fn get_local<'w>(world: UnsafeWorldCell<'w>) -> ($($param::World<'w>, )*) {
-                    (($(<Local as GetLocal<$param>>::get_local(world),)*))
+                fn get_local<'w>(&self, world: UnsafeWorldCell<'w>) -> ($($param::World<'w>, )*) {
+                    (($(<Local as GetLocal<$param>>::get_local(self, world),)*))
                 }
             }
 
@@ -453,7 +463,7 @@ pub mod fetch {
             where Local: $(GetLocal<$param> + )* Any {
                 fn get_global<'w>(&self, worlds: UnsafeWorldsCell<'w>) -> ($($param::World<'w>, )*) {
                     let world = unsafe{ worlds.get_unsafe_world_cell_mut(*self) };
-                    (($(<Local as GetLocal<$param>>::get_local(world), )*))
+                    (($(<Local as GetLocal<$param>>::get_local(self, world), )*))
                 }
             }
 
@@ -466,8 +476,8 @@ pub mod fetch {
                 reason =  "Zero-length tuples won't use variables."
             )]
             impl<$($fetch: GetLocal<$param>, )* $($param: SystemParam, )*> GetLocal<($($param, )*)> for ($($fetch, )*) {
-                fn get_local<'w>(world: UnsafeWorldCell<'w>) -> ($($param::World<'w>, )*) {
-                    (($($fetch::get_local(world), )*))
+                fn get_local<'w>(&self, world: UnsafeWorldCell<'w>) -> ($($param::World<'w>, )*) {
+                    (($($fetch::get_local(&self.$index, world), )*))
                 }
             }
         };
@@ -1659,7 +1669,7 @@ unsafe impl<'a, T: FromWorld + Send + 'static> SystemParam for Local<'a, T> {
     fn init_world_access<'w>(_worlds: Self::World<'w>, _system_meta: &mut SystemMeta) {}
 
     fn init_state<'w>(worlds: Self::World<'w>, _system_meta: &mut SystemMeta) -> Self::State {
-        SyncCell::new(T::from_world(unsafe { worlds.get_mut() }))
+        SyncCell::new(T::from_world(unsafe { worlds.world_mut() }))
     }
 
     #[inline]
@@ -1880,9 +1890,9 @@ unsafe impl<T: SystemBuffer> SystemParam for Deferred<'_, T> {
 }
 
 impl<T: SystemBuffer> DefaultWorldId for Deferred<'_, T> {
-    type Id = fetch::Deferred;
+    type Id = (fetch::Local, fetch::Local);
     fn default_world_id() -> Self::Id {
-        fetch::Deferred(World::MAIN, World::MAIN)
+        (World::MAIN, World::MAIN)
     }
 }
 
@@ -3471,7 +3481,7 @@ mod tests {
     fn fetch_worlds() {
         fn check_global<
             T: GetGlobal<(
-                Query<'static, 'static, Entity>,
+                Commands,
                 (Query<'static, 'static, Entity>, Res<'static, A>),
                 ((Query<'static, 'static, Entity>,), Local<'static, u32>),
             )>,
@@ -3497,9 +3507,9 @@ mod tests {
         }
 
         let id = WorldId(0);
-        check_global((id, (id, id), ((id,), fetch::Global)));
-        check_global((id, id, (id, fetch::Global)));
-        check_global((id, fetch::Default, (id, fetch::Global)));
+        check_global((id, (id, id), ((id,), id)));
+        check_global((id, id, (id, id)));
+        check_global((id, fetch::Default, (id, id)));
         check_global(fetch::Default);
         check_local((id, (id, id), ((id,), id)));
         check_local((id, id, (id, id)));

@@ -12,7 +12,7 @@ use crate::{
     system::{input::SystemInput, SystemIn},
     world::{
         unsafe_world_cell::{UnsafeWorldCell, UnsafeWorldsCell},
-        World, Worlds,
+        DeferredWorld, World, Worlds,
     },
 };
 
@@ -113,7 +113,7 @@ pub trait System: Send + Sync + 'static {
 
     /// Enqueues any [`Deferred`](crate::system::Deferred) system parameters (or other system buffers)
     /// of this system into the world's command buffer.
-    fn queue_deferred(&mut self, worlds: UnsafeWorldsCell);
+    fn queue_deferred(&mut self, world: DeferredWorld);
 
     /// Validates that all parameters can be acquired and that system can run without panic.
     /// Built-in executors use this to prevent invalid systems from running.

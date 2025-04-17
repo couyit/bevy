@@ -1721,6 +1721,43 @@ impl World {
         }
     }
 
+    /// Applies any commands in the world's internal [`CommandQueue`].
+    /// This does not apply commands from any systems, only those stored in the world.
+    ///
+    /// # Panics
+    /// This will panic if any of the queued commands are [`spawn`](Commands::spawn).
+    /// If this is possible, you should instead use [`flush`](Self::flush).
+    pub(crate) fn flush_commands(&mut self) {
+        // SAFETY: `self.command_queue` is only de-allocated in `World`'s `Drop`
+        if !unsafe { self.command_queue.is_empty() } {
+            // SAFETY: `self.command_queue` is only de-allocated in `World`'s `Drop`
+            unsafe {
+                self.command_queue
+                    .clone()
+                    .apply_or_drop_queued(Some(self.into()));
+            };
+        }
+    }
+
+    /// Applies any queued component registration.
+    /// For spawning vanilla rust component types and resources, this is not strictly necessary.
+    /// However, flushing components can make information available more quickly, and can have performance benefits.
+    /// Additionally, for components and resources registered dynamically through a raw descriptor or similar,
+    /// this is the only way to complete their registration.
+    pub(crate) fn flush_components(&mut self) {
+        self.components_registrator().apply_queued_registrations();
+    }
+
+    /// Flushes queued entities and commands.
+    ///
+    /// Queued entities will be spawned, and then commands will be applied.
+    #[inline]
+    pub fn flush(&mut self) {
+        self.flush_entities();
+        self.flush_components();
+        self.flush_commands();
+    }
+
     /// Registers all of the components in the given [`Bundle`] and returns both the component
     /// ids and the bundle id.
     ///

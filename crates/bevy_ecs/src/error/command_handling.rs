@@ -4,7 +4,7 @@ use crate::{
     entity::Entity,
     never::Never,
     system::{entity_command::EntityCommandError, Command, EntityCommand},
-    world::{error::EntityMutableFetchError, Worlds},
+    world::{error::EntityMutableFetchError, World, Worlds},
 };
 
 use super::{default_error_handler, BevyError, ErrorContext};
@@ -93,8 +93,8 @@ where
         entity: Entity,
     ) -> impl Command<Result<(), EntityMutableFetchError>>
            + HandleError<Result<(), EntityMutableFetchError>> {
-        move |worlds: &mut Worlds| -> Result<(), EntityMutableFetchError> {
-            let entity = worlds.get_entity_mut(entity)?;
+        move |world: &mut World| -> Result<(), EntityMutableFetchError> {
+            let entity = world.get_entity_mut(entity)?;
             self.apply(entity);
             Ok(())
         }
@@ -111,8 +111,8 @@ where
         entity: Entity,
     ) -> impl Command<Result<T, EntityCommandError<Err>>> + HandleError<Result<T, EntityCommandError<Err>>>
     {
-        move |worlds: &mut Worlds| {
-            let entity = worlds.get_entity_mut(entity)?;
+        move |world: &mut World| {
+            let entity = world.get_entity_mut(entity)?;
             self.apply(entity)
                 .map_err(EntityCommandError::CommandFailed)
         }

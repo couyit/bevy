@@ -13,16 +13,16 @@ use crate::{
     world::{unsafe_world_cell::UnsafeWorldCell, DeferredWorld, World},
 };
 
-use super::{IntoSystem, SystemParamValidationError};
+use super::{IntoSystem, LocalSystem, SystemParamValidationError};
 
 /// Implemented for [`System`]s that have a [`Trigger`] as the first argument.
 pub trait ObserverSystem<E: 'static, B: Bundle, Out = Result>:
-    System<In = Trigger<'static, E, B>, Out = Out> + Send + 'static
+    LocalSystem<In = Trigger<'static, E, B>, Out = Out> + Send + 'static
 {
 }
 
 impl<E: 'static, B: Bundle, Out, T> ObserverSystem<E, B, Out> for T where
-    T: System<In = Trigger<'static, E, B>, Out = Out> + Send + 'static
+    T: LocalSystem<In = Trigger<'static, E, B>, Out = Out> + Send + 'static
 {
 }
 

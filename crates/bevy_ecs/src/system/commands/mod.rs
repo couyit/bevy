@@ -30,10 +30,11 @@ use crate::{
         SystemParam, SystemParamValidationError,
     },
     world::{
-        command_queue::RawCommandQueue, unsafe_world_cell::UnsafeWorldCell, CommandQueue,
-        EntityWorldMut, FromWorld, World,
+        command_queue::RawCommandQueue, unsafe_world_cell::{UnsafeWorldCell, UnsafeWorldsCell}, CommandQueue, DeferredWorld, EntityWorldMut, FromWorld, World, WorldId
     },
 };
+
+use super::{fetch, DefaultWorldId, GetGlobal, GetLocal};
 
 /// A [`Command`] queue to perform structural changes to the [`World`].
 ///
@@ -119,9 +120,13 @@ const _: () = {
     unsafe impl SystemParam for Commands<'_, '_> {
         type State = FetchState;
         type Item<'w, 's> = Commands<'w, 's>;
-        type World<'w> = UnsafeWorldCell<'w>;
+        type World<'w> = (UnsafeWorldCell<'w>, WorldId);
 
-        fn init_world_access<'w>(world: Self::World<'w>, system_meta: &mut super::SystemMeta) {
+        fn shrink_world<'wlong: 'wshort, 'wshort>(world: Self::World<'wlong>) -> Self::World<'wshort> {
+            world
+        }
+
+        fn init_world_access<'w>((world, _): Self::World<'w>, system_meta: &mut super::SystemMeta) {
             system_meta.world_access.add_read(world.id());
         }
 
@@ -154,7 +159,7 @@ const _: () = {
         fn apply<'w>(
             state: &mut Self::State,
             system_meta: &bevy_ecs::system::SystemMeta,
-            world: Self::World<'w>,
+            world: UnsafeWorldsCell<'w>,
         ) {
             <__StructFieldsAlias<'_, '_> as SystemParam>::apply(
                 &mut state.state,
@@ -166,7 +171,7 @@ const _: () = {
         fn queue<'w>(
             state: &mut Self::State,
             system_meta: &bevy_ecs::system::SystemMeta,
-            world: &Self::World<'w>,
+            world: DeferredWorld<'w>,
         ) {
             <__StructFieldsAlias<'_, '_> as SystemParam>::queue(
                 &mut state.state,
@@ -179,7 +184,7 @@ const _: () = {
         unsafe fn validate_param<'w>(
             state: &Self::State,
             system_meta: &bevy_ecs::system::SystemMeta,
-            world: &Self::World<'w>,
+            world: Self::World<'w>,
         ) -> Result<(), SystemParamValidationError> {
             <(Deferred<CommandQueue>, &Entities) as SystemParam>::validate_param(
                 &state.state,
@@ -192,7 +197,7 @@ const _: () = {
         unsafe fn get_param<'w, 's>(
             state: &'s mut Self::State,
             system_meta: &bevy_ecs::system::SystemMeta,
-            world: &Self::World<'w>,
+            world: Self::World<'w>,
         ) -> Self::Item<'w, 's> {
             let (f0, f1) = <(Deferred<'s, CommandQueue>, &'w Entities) as SystemParam>::get_param(
                 &mut state.state,
@@ -214,6 +219,25 @@ const _: () = {
     }
 };
 
+impl GetLocal<Commands<'_,'_>> for (fetch::Local, fetch::Local) {
+    fn get_local<'w>(&self, world: UnsafeWorldCell<'w>) -> <Commands<'_,'_> as SystemParam>::World<'w> {
+        GetLocal::<Deferred::<CommandQueue>>::get_local(self, world)
+    }
+}
+
+impl GetGlobal<Commands<'_,'_>> for (fetch::Local, fetch::Local) {
+    fn get_global<'w>(&self, worlds: UnsafeWorldsCell<'w>) -> <Commands<'_,'_> as SystemParam>::World<'w> {
+        GetGlobal::<Deferred::<CommandQueue>>::get_global(self, worlds)
+    }
+}
+
+impl DefaultWorldId for Commands<'_, '_> {
+    type Id = (fetch::Local, fetch::Local);
+    fn default_world_id() -> Self::Id {
+        (World::MAIN, World::MAIN)
+    }
+}
+
 enum InternalQueue<'s> {
     CommandQueue(Deferred<'s, CommandQueue>),
     RawCommandQueue(RawCommandQueue),
@@ -222,7 +246,7 @@ enum InternalQueue<'s> {
 impl<'w, 's> Commands<'w, 's> {
     /// Returns a new `Commands` instance from a [`CommandQueue`] and a [`World`].
     pub fn new(queue: &'s mut CommandQueue, world: &'w World) -> Self {
-        Self::new_from_entities(queue, &world.entities)
+        Self::new_from_entities(queue, world.entities())
     }
 
     /// Returns a new `Commands` instance from a [`CommandQueue`] and an [`Entities`] reference.

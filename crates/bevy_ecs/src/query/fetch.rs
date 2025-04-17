@@ -508,10 +508,10 @@ unsafe impl<'a> WorldQuery for EntityRef<'a> {
 
     fn update_component_access(_state: &Self::State, access: &mut FilteredAccess<ComponentId>) {
         assert!(
-            !access.access().has_any_component_write(),
+            !access.access().has_any_write(),
             "EntityRef conflicts with a previous access in this query. Shared access cannot coincide with exclusive access.",
         );
-        access.read_all_components();
+        access.read_all();
     }
 
     fn init_state(_world: &mut World) {}
@@ -589,10 +589,10 @@ unsafe impl<'a> WorldQuery for EntityMut<'a> {
 
     fn update_component_access(_state: &Self::State, access: &mut FilteredAccess<ComponentId>) {
         assert!(
-            !access.access().has_any_component_read(),
+            !access.access().has_any_read(),
             "EntityMut conflicts with a previous access in this query. Exclusive access cannot coincide with any other accesses.",
         );
-        access.write_all_components();
+        access.write_all();
     }
 
     fn init_state(_world: &mut World) {}
@@ -650,7 +650,7 @@ unsafe impl<'a> WorldQuery for FilteredEntityRef<'a> {
         _this_run: Tick,
     ) -> Self::Fetch<'w> {
         let mut access = Access::default();
-        access.read_all_components();
+        access.read_all();
         (world, access)
     }
 
@@ -746,7 +746,7 @@ unsafe impl<'a> WorldQuery for FilteredEntityMut<'a> {
         _this_run: Tick,
     ) -> Self::Fetch<'w> {
         let mut access = Access::default();
-        access.write_all_components();
+        access.write_all();
         (world, access)
     }
 
@@ -860,7 +860,7 @@ where
         filtered_access: &mut FilteredAccess<ComponentId>,
     ) {
         let mut my_access = Access::new();
-        my_access.read_all_components();
+        my_access.read_all();
         for id in state {
             my_access.remove_read(*id);
         }
@@ -960,7 +960,7 @@ where
         filtered_access: &mut FilteredAccess<ComponentId>,
     ) {
         let mut my_access = Access::new();
-        my_access.write_all_components();
+        my_access.write_all();
         for id in state {
             my_access.remove_read(*id);
         }
@@ -1143,7 +1143,7 @@ unsafe impl<T: Component> WorldQuery for &T {
                     // which we are allowed to access since we registered it in `update_archetype_component_access`.
                     // Note that we do not actually access any components in this function, we just get a shared
                     // reference to the sparse set, which is used to access the components in `Self::fetch`.
-                    unsafe { world.storages().sparse_sets.get(component_id) }
+                    world.sparse_sets().get(component_id)
                 },
             ),
         }
@@ -1192,7 +1192,7 @@ unsafe impl<T: Component> WorldQuery for &T {
         access: &mut FilteredAccess<ComponentId>,
     ) {
         assert!(
-            !access.access().has_component_write(component_id),
+            !access.access().has_write(component_id),
             "&{} conflicts with a previous access in this query. Shared access cannot coincide with exclusive access.",
             core::any::type_name::<T>(),
         );
@@ -1310,7 +1310,7 @@ unsafe impl<'__w, T: Component> WorldQuery for Ref<'__w, T> {
                     // which we are allowed to access since we registered it in `update_archetype_component_access`.
                     // Note that we do not actually access any components in this function, we just get a shared
                     // reference to the sparse set, which is used to access the components in `Self::fetch`.
-                    unsafe { world.storages().sparse_sets.get(component_id) }
+                    world.sparse_sets().get(component_id)
                 },
             ),
             last_run,
@@ -1364,7 +1364,7 @@ unsafe impl<'__w, T: Component> WorldQuery for Ref<'__w, T> {
         access: &mut FilteredAccess<ComponentId>,
     ) {
         assert!(
-            !access.access().has_component_write(component_id),
+            !access.access().has_write(component_id),
             "&{} conflicts with a previous access in this query. Shared access cannot coincide with exclusive access.",
             core::any::type_name::<T>(),
         );
@@ -1505,7 +1505,7 @@ unsafe impl<'__w, T: Component> WorldQuery for &'__w mut T {
                     // which we are allowed to access since we registered it in `update_archetype_component_access`.
                     // Note that we do not actually access any components in this function, we just get a shared
                     // reference to the sparse set, which is used to access the components in `Self::fetch`.
-                    unsafe { world.storages().sparse_sets.get(component_id) }
+                    world.sparse_sets().get(component_id)
                 },
             ),
             last_run,
@@ -1559,7 +1559,7 @@ unsafe impl<'__w, T: Component> WorldQuery for &'__w mut T {
         access: &mut FilteredAccess<ComponentId>,
     ) {
         assert!(
-            !access.access().has_component_read(component_id),
+            !access.access().has_read(component_id),
             "&mut {} conflicts with a previous access in this query. Mutable component access must be unique.",
             core::any::type_name::<T>(),
         );
@@ -1699,7 +1699,7 @@ unsafe impl<'__w, T: Component> WorldQuery for Mut<'__w, T> {
         // Update component access here instead of in `<&mut T as WorldQuery>` to avoid erroneously referencing
         // `&mut T` in error message.
         assert!(
-            !access.access().has_component_read(component_id),
+            !access.access().has_read(component_id),
             "Mut<{}> conflicts with a previous access in this query. Mutable component access mut be unique.",
             core::any::type_name::<T>(),
         );

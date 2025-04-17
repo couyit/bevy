@@ -8,7 +8,7 @@ use crate::{
     prelude::*,
     query::DebugCheckedUnwrap,
     system::{IntoObserverSystem, ObserverSystem},
-    world::DeferredWorld,
+    world::{DeferredWorld, Worlds},
 };
 use bevy_ptr::PtrMut;
 
@@ -405,10 +405,10 @@ fn observer_system_runner<E: Event, B: Bundle, S: ObserverSystem<E, B>>(
     //   and is never exclusive
     // - system is the same type erased system from above
     unsafe {
-        (*system).update_archetype_component_access(world);
-        match (*system).validate_param_unsafe(world) {
+        (*system).update_archetype_component_access_local(world);
+        match (*system).validate_param_unsafe_local(world) {
             Ok(()) => {
-                if let Err(err) = (*system).run_unsafe(trigger, world) {
+                if let Err(err) = (*system).run_local(trigger, world.world_mut()) {
                     error_handler(
                         err,
                         ErrorContext::Observer {
@@ -446,7 +446,7 @@ fn hook_on_add<E: Event, B: Bundle, S: ObserverSystem<E, B>>(
     mut world: DeferredWorld<'_>,
     HookContext { entity, .. }: HookContext,
 ) {
-    world.component_commands().queue(move |world: &mut World| {
+    world.commands().queue(move |worlds: &mut Worlds| {
         let event_id = E::register_component_id(world);
         let mut components = Vec::new();
         B::component_ids(&mut world.components_registrator(), &mut |id| {
@@ -474,7 +474,7 @@ fn hook_on_add<E: Event, B: Bundle, S: ObserverSystem<E, B>>(
             };
         // SAFETY: World reference is exclusive and initialize does not touch system, so references do not alias
         unsafe {
-            (*system).initialize(world);
+            (*system).initialize(worlds);
         }
 
         {
