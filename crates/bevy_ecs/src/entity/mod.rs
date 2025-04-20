@@ -84,8 +84,9 @@ use crate::{
 };
 use alloc::vec::Vec;
 use bevy_platform::sync::atomic::Ordering;
-use core::{fmt, hash::Hash, mem, num::NonZero, panic::Location};
+use core::{fmt, hash::Hash, mem, num::NonZero, ops::Deref, panic::Location};
 use log::warn;
+use std::sync::Arc;
 
 #[cfg(feature = "serialize")]
 use serde::{Deserialize, Serialize};
@@ -582,6 +583,22 @@ pub struct Entities {
     free_cursor: AtomicIdCursor,
 }
 
+pub struct EntitiesRef(Arc<Entities>);
+
+impl Deref for EntitiesRef {
+    type Target = Entities;
+
+    fn deref(&self) -> &Self::Target {
+        self.0.as_ref()
+    }
+}
+
+impl From<Arc<Entities>> for EntitiesRef {
+    fn from(value: Arc<Entities>) -> Self {
+        EntitiesRef(value)
+    }
+}
+
 impl Entities {
     pub(crate) const fn new() -> Self {
         Entities {
@@ -1059,7 +1076,7 @@ pub struct EntityDoesNotExistError {
 }
 
 impl EntityDoesNotExistError {
-    pub(crate) fn new(entity: Entity, entities: &Entities) -> Self {
+    pub(crate) fn new(entity: Entity, entities: EntitiesRef) -> Self {
         Self {
             entity,
             details: entities.entity_does_not_exist_error_details(entity),

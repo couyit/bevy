@@ -6,7 +6,7 @@ use crate::{
     bundle::Bundles,
     change_detection::{MaybeLocation, MutUntyped, Ticks, TicksMut},
     component::{ComponentId, ComponentTicks, Components, Mutable, StorageType, Tick, TickCells},
-    entity::{ContainsEntity, Entities, Entity, EntityDoesNotExistError, EntityLocation},
+    entity::{ContainsEntity, EntitiesRef, Entity, EntityDoesNotExistError, EntityLocation},
     observer::Observers,
     prelude::Component,
     query::{DebugCheckedUnwrap, ReadOnlyQueryData},
@@ -335,7 +335,7 @@ impl<'w> UnsafeWorldCell<'w> {
 
     /// Retrieves this world's [`Entities`] collection.
     #[inline]
-    pub fn entities(self) -> &'w Entities {
+    pub fn entities(self) -> EntitiesRef {
         // SAFETY:
         // - we only access world metadata
         unsafe { self.world_metadata() }.entities()

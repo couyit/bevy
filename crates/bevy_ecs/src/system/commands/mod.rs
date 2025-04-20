@@ -19,7 +19,7 @@ use crate::{
     bundle::{Bundle, InsertMode, NoBundleEffect},
     change_detection::{MaybeLocation, Mut},
     component::{Component, ComponentId, Mutable},
-    entity::{Entities, Entity, EntityClonerBuilder, EntityDoesNotExistError},
+    entity::{EntitiesRef, Entity, EntityClonerBuilder, EntityDoesNotExistError},
     error::{ignore, warn, BevyError, CommandWithEntity, ErrorContext, HandleError},
     event::Event,
     observer::{Observer, TriggerTargets},
@@ -30,7 +30,9 @@ use crate::{
         SystemParam, SystemParamValidationError,
     },
     world::{
-        command_queue::RawCommandQueue, unsafe_world_cell::{UnsafeWorldCell, UnsafeWorldsCell}, CommandQueue, DeferredWorld, EntityWorldMut, FromWorld, World, WorldId
+        command_queue::RawCommandQueue,
+        unsafe_world_cell::{UnsafeWorldCell, UnsafeWorldsCell},
+        CommandQueue, DeferredWorld, EntityWorldMut, FromWorld, World, WorldId,
     },
 };
 
@@ -99,30 +101,32 @@ use super::{fetch, DefaultWorldId, GetGlobal, GetLocal};
 /// The [`error`](crate::error) module provides some simple error handlers for convenience.
 ///
 /// [`ApplyDeferred`]: crate::schedule::ApplyDeferred
-pub struct Commands<'w, 's> {
+pub struct Commands<'s> {
     queue: InternalQueue<'s>,
-    entities: &'w Entities,
+    entities: EntitiesRef,
 }
 
 // SAFETY: All commands [`Command`] implement [`Send`]
-unsafe impl Send for Commands<'_, '_> {}
+unsafe impl Send for Commands<'_> {}
 
 // SAFETY: `Commands` never gives access to the inner commands.
-unsafe impl Sync for Commands<'_, '_> {}
+unsafe impl Sync for Commands<'_> {}
 
 const _: () = {
-    type __StructFieldsAlias<'w, 's> = (Deferred<'s, CommandQueue>, &'w Entities);
+    type __StructFieldsAlias<'s> = (Deferred<'s, CommandQueue>, EntitiesRef);
     #[doc(hidden)]
     pub struct FetchState {
-        state: <Deferred<'static, CommandQueue> as SystemParam>::State,
+        state: <__StructFieldsAlias<'static> as SystemParam>::State,
     }
     // SAFETY: Only reads Entities
-    unsafe impl SystemParam for Commands<'_, '_> {
+    unsafe impl SystemParam for Commands<'_> {
         type State = FetchState;
-        type Item<'w, 's> = Commands<'w, 's>;
+        type Item<'w, 's> = Commands<'s>;
         type World<'w> = (UnsafeWorldCell<'w>, WorldId);
 
-        fn shrink_world<'wlong: 'wshort, 'wshort>(world: Self::World<'wlong>) -> Self::World<'wshort> {
+        fn shrink_world<'wlong: 'wshort, 'wshort>(
+            world: Self::World<'wlong>,
+        ) -> Self::World<'wshort> {
             world
         }
 
@@ -135,7 +139,7 @@ const _: () = {
             system_meta: &mut bevy_ecs::system::SystemMeta,
         ) -> Self::State {
             FetchState {
-                state: Deferred::<CommandQueue>::init_state(world, system_meta),
+                state: (Deferred::<CommandQueue>::init_state(world, system_meta), ()),
             }
         }
 
@@ -148,8 +152,8 @@ const _: () = {
         ) {
             // SAFETY: Caller guarantees the archetype is from the world used in `init_state`
             unsafe {
-                <__StructFieldsAlias<'_, '_> as SystemParam>::new_archetype(
-                    mut state.state,
+                <__StructFieldsAlias<'_> as SystemParam>::new_archetype(
+                    &mut state.state,
                     archetype,
                     archetype_component_id,
                 );
@@ -161,11 +165,7 @@ const _: () = {
             system_meta: &bevy_ecs::system::SystemMeta,
             world: UnsafeWorldsCell<'w>,
         ) {
-            <__StructFieldsAlias<'_, '_> as SystemParam>::apply(
-                &mut state.state,
-                system_meta,
-                world,
-            );
+            <__StructFieldsAlias<'_> as SystemParam>::apply(&mut state.state, system_meta, world);
         }
 
         fn queue<'w>(
@@ -173,11 +173,7 @@ const _: () = {
             system_meta: &bevy_ecs::system::SystemMeta,
             world: DeferredWorld<'w>,
         ) {
-            <__StructFieldsAlias<'_, '_> as SystemParam>::queue(
-                &mut state.state,
-                system_meta,
-                world,
-            );
+            <__StructFieldsAlias<'_> as SystemParam>::queue(&mut state.state, system_meta, world);
         }
 
         #[inline]
@@ -186,10 +182,10 @@ const _: () = {
             system_meta: &bevy_ecs::system::SystemMeta,
             world: Self::World<'w>,
         ) -> Result<(), SystemParamValidationError> {
-            <(Deferred<CommandQueue>, &Entities) as SystemParam>::validate_param(
+            <(Deferred<CommandQueue>, EntitiesRef) as SystemParam>::validate_param(
                 &state.state,
                 system_meta,
-                world,
+                (world, world.0),
             )
         }
 
@@ -199,10 +195,10 @@ const _: () = {
             system_meta: &bevy_ecs::system::SystemMeta,
             world: Self::World<'w>,
         ) -> Self::Item<'w, 's> {
-            let (f0, f1) = <(Deferred<'s, CommandQueue>, &'w Entities) as SystemParam>::get_param(
+            let (f0, f1) = <(Deferred<'s, CommandQueue>, EntitiesRef) as SystemParam>::get_param(
                 &mut state.state,
                 system_meta,
-                world,
+                (world, world.0),
             );
             Commands {
                 queue: InternalQueue::CommandQueue(f0),
@@ -211,27 +207,33 @@ const _: () = {
         }
     }
     // SAFETY: Only reads Entities
-    unsafe impl<'w, 's> bevy_ecs::system::ReadOnlySystemParam for Commands<'w, 's>
+    unsafe impl<'s> bevy_ecs::system::ReadOnlySystemParam for Commands<'s>
     where
         Deferred<'s, CommandQueue>: bevy_ecs::system::ReadOnlySystemParam,
-        &'w Entities: bevy_ecs::system::ReadOnlySystemParam,
+        EntitiesRef: bevy_ecs::system::ReadOnlySystemParam,
     {
     }
 };
 
-impl GetLocal<Commands<'_,'_>> for (fetch::Local, fetch::Local) {
-    fn get_local<'w>(&self, world: UnsafeWorldCell<'w>) -> <Commands<'_,'_> as SystemParam>::World<'w> {
-        GetLocal::<Deferred::<CommandQueue>>::get_local(self, world)
+impl GetLocal<Commands<'_>> for (fetch::Local, fetch::Local) {
+    fn get_local<'w>(
+        &self,
+        world: UnsafeWorldCell<'w>,
+    ) -> <Commands<'_> as SystemParam>::World<'w> {
+        GetLocal::<Deferred<CommandQueue>>::get_local(self, world)
     }
 }
 
-impl GetGlobal<Commands<'_,'_>> for (fetch::Local, fetch::Local) {
-    fn get_global<'w>(&self, worlds: UnsafeWorldsCell<'w>) -> <Commands<'_,'_> as SystemParam>::World<'w> {
-        GetGlobal::<Deferred::<CommandQueue>>::get_global(self, worlds)
+impl GetGlobal<Commands<'_>> for (fetch::Local, fetch::Local) {
+    fn get_global<'w>(
+        &self,
+        worlds: UnsafeWorldsCell<'w>,
+    ) -> <Commands<'_> as SystemParam>::World<'w> {
+        GetGlobal::<Deferred<CommandQueue>>::get_global(self, worlds)
     }
 }
 
-impl DefaultWorldId for Commands<'_, '_> {
+impl DefaultWorldId for Commands<'_> {
     type Id = (fetch::Local, fetch::Local);
     fn default_world_id() -> Self::Id {
         (World::MAIN, World::MAIN)
@@ -243,14 +245,14 @@ enum InternalQueue<'s> {
     RawCommandQueue(RawCommandQueue),
 }
 
-impl<'w, 's> Commands<'w, 's> {
+impl<'s> Commands<'s> {
     /// Returns a new `Commands` instance from a [`CommandQueue`] and a [`World`].
-    pub fn new(queue: &'s mut CommandQueue, world: &'w World) -> Self {
+    pub fn new(queue: &'s mut CommandQueue, world: &World) -> Self {
         Self::new_from_entities(queue, world.entities())
     }
 
     /// Returns a new `Commands` instance from a [`CommandQueue`] and an [`Entities`] reference.
-    pub fn new_from_entities(queue: &'s mut CommandQueue, entities: &'w Entities) -> Self {
+    pub fn new_from_entities(queue: &'s mut CommandQueue, entities: EntitiesRef) -> Self {
         Self {
             queue: InternalQueue::CommandQueue(Deferred(queue)),
             entities,
@@ -266,7 +268,7 @@ impl<'w, 's> Commands<'w, 's> {
     /// * Caller ensures that `queue` must outlive `'w`
     pub(crate) unsafe fn new_raw_from_entities(
         queue: RawCommandQueue,
-        entities: &'w Entities,
+        entities: EntitiesRef,
     ) -> Self {
         Self {
             queue: InternalQueue::RawCommandQueue(queue),
@@ -293,7 +295,7 @@ impl<'w, 's> Commands<'w, 's> {
     /// #
     /// # fn do_initialization(_: Commands) {}
     /// ```
-    pub fn reborrow(&mut self) -> Commands<'w, '_> {
+    pub fn reborrow(&mut self) -> Commands<'_> {
         Commands {
             queue: match &mut self.queue {
                 InternalQueue::CommandQueue(queue) => InternalQueue::CommandQueue(queue.reborrow()),

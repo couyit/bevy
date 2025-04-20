@@ -1,11 +1,11 @@
 pub use crate::change_detection::{NonSendMut, Res, ResMut};
+use crate::entity::{Entities, EntitiesRef};
 use crate::world::{FromWorld, WorldId};
 use crate::{
     archetype::{Archetype, ArchetypeComponentId, Archetypes},
     bundle::Bundles,
     change_detection::{MaybeLocation, Ticks, TicksMut},
     component::{ComponentId, ComponentTicks, Components, Tick},
-    entity::Entities,
     query::{
         Access, FilteredAccess, FilteredAccessSet, QueryData, QueryFilter, QuerySingleError,
         QueryState, ReadOnlyQueryData,
@@ -35,7 +35,7 @@ use core::{
 };
 use disqualified::ShortName;
 use std::rc::Rc;
-use thiserror::Error;
+use std::sync::Arc;
 
 use super::Populated;
 use variadics_please::{all_tuples, all_tuples_enumerated};
@@ -264,7 +264,13 @@ pub unsafe trait SystemParam: Sized {
         unused_variables,
         reason = "The parameters here are intentionally unused by the default implementation; however, putting underscores here will result in the underscores being copied by rust-analyzer's tab completion."
     )]
-    fn apply<'w>(state: &mut Self::State, system_meta: &SystemMeta, worlds: UnsafeWorldsCell<'w>) {}
+    fn apply<'w>(
+        state: &mut Self::State,
+        system_meta: &SystemMeta,
+        worlds: UnsafeWorldsCell<'w>,
+        entities: &mut Arc<Entities>,
+    ) {
+    }
 
     /// Queues any deferred mutations to be applied at the next [`ApplyDeferred`](crate::prelude::ApplyDeferred).
     #[inline]
@@ -332,6 +338,7 @@ pub unsafe trait SystemParam: Sized {
         state: &'s mut Self::State,
         system_meta: &SystemMeta,
         world: Self::World<'w>,
+        entities: &Arc<Entities>,
     ) -> Self::Item<'w, 's>;
 }
 
@@ -357,13 +364,13 @@ pub trait DefaultWorldId: SystemParam {
     fn default_world_id() -> Self::Id;
 }
 
-pub(crate) trait IntoSystemParamTuple: SystemParam {
-    type Tuple: DefaultWorldId;
+pub(crate) trait SystemParamTupleType: SystemParam {
+    type Tuple;
 }
 
 impl<T, U> DefaultWorldId for T
 where
-    T: IntoSystemParamTuple<Tuple = U>,
+    T: SystemParamTupleType<Tuple = U>,
     U: DefaultWorldId,
     U::Id: GetGlobal<T>,
 {
@@ -382,7 +389,7 @@ pub mod fetch {
         WorldId,
     };
 
-    use super::{DefaultWorldId, GetGlobal, GetLocal, SystemBuffer, SystemParam};
+    use super::{DefaultWorldId, GetGlobal, GetLocal, SystemParam};
 
     pub type Local = WorldId;
     pub struct Global;
@@ -415,25 +422,6 @@ pub mod fetch {
         }
     }
 
-    impl<T: SystemBuffer> GetLocal<super::Deferred<'_, T>> for (Local, Local) {
-        fn get_local<'w>(
-            &self,
-            world: UnsafeWorldCell<'w>,
-        ) -> <super::Deferred<'_, T> as SystemParam>::World<'w> {
-            assert_eq!(self.0, world.id());
-            (world, self.1)
-        }
-    }
-
-    impl<T: SystemBuffer> GetGlobal<super::Deferred<'_, T>> for (Local, Local) {
-        fn get_global<'w>(
-            &self,
-            worlds: UnsafeWorldsCell<'w>,
-        ) -> <super::Deferred<'_, T> as SystemParam>::World<'w> {
-            (unsafe { worlds.get_unsafe_world_cell_mut(self.0) }, self.1)
-        }
-    }
-
     macro_rules! impl_from_ids_for_local {
         ($(($index: tt, $param: ident, $fetch: ident)),*) => {
             #[expect(
@@ -444,9 +432,9 @@ pub mod fetch {
                 unused_variables,
                 reason =  "Zero-length tuples won't use variables."
             )]
-            impl<$($param: SystemParam, )*> GetLocal<($($param, )*)> for Local
+            impl<$($param: SystemParam,)*> GetLocal<($($param,)*)> for Local
             where Local: $(GetLocal<$param> + )* Any {
-                fn get_local<'w>(&self, world: UnsafeWorldCell<'w>) -> ($($param::World<'w>, )*) {
+                fn get_local<'w>(&self, world: UnsafeWorldCell<'w>) -> ($($param::World<'w>,)*) {
                     (($(<Local as GetLocal<$param>>::get_local(self, world),)*))
                 }
             }
@@ -459,38 +447,15 @@ pub mod fetch {
                 unused_variables,
                 reason =  "Zero-length tuples won't use variables."
             )]
-            impl<$($param: SystemParam, )*> GetGlobal<($($param, )*)> for Local
-            where Local: $(GetLocal<$param> + )* Any {
-                fn get_global<'w>(&self, worlds: UnsafeWorldsCell<'w>) -> ($($param::World<'w>, )*) {
-                    let world = unsafe{ worlds.get_unsafe_world_cell_mut(*self) };
-                    (($(<Local as GetLocal<$param>>::get_local(self, world), )*))
-                }
-            }
-
-            #[expect(
-                clippy::allow_attributes,
-                reason = "This is in a macro, and as such, the below lints may not always apply."
-            )]
-            #[allow(
-                unused_variables,
-                reason =  "Zero-length tuples won't use variables."
-            )]
-            impl<$($fetch: GetLocal<$param>, )* $($param: SystemParam, )*> GetLocal<($($param, )*)> for ($($fetch, )*) {
-                fn get_local<'w>(&self, world: UnsafeWorldCell<'w>) -> ($($param::World<'w>, )*) {
-                    (($($fetch::get_local(&self.$index, world), )*))
+            impl<$($fetch: GetLocal<$param>,)* $($param: SystemParam,)*> GetLocal<($($param,)*)> for ($($fetch,)*) {
+                fn get_local<'w>(&self, world: UnsafeWorldCell<'w>) -> ($($param::World<'w>,)*) {
+                    (($($fetch::get_local(&self.$index, world),)*))
                 }
             }
         };
     }
 
     all_tuples_enumerated!(impl_from_ids_for_local, 0, 16, P, F);
-
-    impl<P> GetGlobal<P> for ()
-    where
-        for<'w> P: SystemParam<World<'w> = ()>,
-    {
-        fn get_global<'w>(&self, _worlds: UnsafeWorldsCell<'w>) {}
-    }
 
     macro_rules! impl_from_ids_for_global {
         ($(($index: tt, $param: ident, $fetch: ident, $temp: ident)),*) => {
@@ -502,23 +467,31 @@ pub mod fetch {
                 unused_variables,
                 reason =  "Zero-length tuples won't use variables."
             )]
-            impl<$($fetch: GetGlobal<$param>, )* $($param: SystemParam, )*> GetGlobal<($($param, )*)> for ($($fetch, )*) {
-                fn get_global<'w>(&self, worlds: UnsafeWorldsCell<'w>) -> ($($param::World<'w>, )*) {
-                    (($(self.$index.get_global(worlds), )*))
+            impl<$($param: SystemParam,)*> GetGlobal<($($param,)*)> for Local
+            where Local: $(GetLocal<$param> + )* Any {
+                fn get_global<'w>(&self, worlds: UnsafeWorldsCell<'w>) -> ($($param::World<'w>,)*) {
+                    let world = unsafe{ worlds.get_unsafe_world_cell_mut(*self) };
+                    (($(<Local as GetLocal<$param>>::get_local(self, world),)*))
                 }
             }
 
-            impl<$($param, )*> GetGlobal<($($param, )*)> for ()
-            where $(for<'w> $param: SystemParam<World<'w> = ()>,)*
-            {
-                fn get_global<'w>(&self, _worlds: UnsafeWorldsCell<'w>) -> ($($param::World<'w>, )*) {
-                    (($({ let $temp = (); $temp }, )*))
+            #[expect(
+                clippy::allow_attributes,
+                reason = "This is in a macro, and as such, the below lints may not always apply."
+            )]
+            #[allow(
+                unused_variables,
+                reason =  "Zero-length tuples won't use variables."
+            )]
+            impl<$($fetch: GetGlobal<$param>,)* $($param: SystemParam,)*> GetGlobal<($($param,)*)> for ($($fetch,)*) {
+                fn get_global<'w>(&self, worlds: UnsafeWorldsCell<'w>) -> ($($param::World<'w>,)*) {
+                    (($(self.$index.get_global(worlds),)*))
                 }
             }
         };
     }
 
-    all_tuples_enumerated!(impl_from_ids_for_global, 1, 16, P, F, t);
+    all_tuples_enumerated!(impl_from_ids_for_global, 0, 16, P, F, t);
 }
 
 // SAFETY: QueryState is constrained to read-only fetches, so it only reads World.
@@ -565,6 +538,7 @@ unsafe impl<D: QueryData + 'static, F: QueryFilter + 'static> SystemParam for Qu
         state: &'s mut Self::State,
         system_meta: &SystemMeta,
         world: Self::World<'w>,
+        _entities: &Arc<Entities>,
     ) -> Self::Item<'w, 's> {
         // SAFETY: We have registered all of the query's world accesses,
         // so the caller ensures that `world` has permission to access any
@@ -659,6 +633,7 @@ unsafe impl<'a, D: QueryData + 'static, F: QueryFilter + 'static> SystemParam fo
         state: &'s mut Self::State,
         system_meta: &SystemMeta,
         world: Self::World<'w>,
+        _entities: &Arc<Entities>,
     ) -> Self::Item<'w, 's> {
         // SAFETY: State ensures that the components it accesses are not accessible somewhere elsewhere.
         // The caller ensures the world matches the one used in init_state.
@@ -748,6 +723,7 @@ unsafe impl<'a, D: QueryData + 'static, F: QueryFilter + 'static> SystemParam
         state: &'s mut Self::State,
         system_meta: &SystemMeta,
         world: Self::World<'w>,
+        _entities: &Arc<Entities>,
     ) -> Self::Item<'w, 's> {
         state.validate_world(world.id());
         // SAFETY: State ensures that the components it accesses are not accessible elsewhere.
@@ -850,9 +826,10 @@ unsafe impl<D: QueryData + 'static, F: QueryFilter + 'static> SystemParam
         state: &'s mut Self::State,
         system_meta: &SystemMeta,
         world: Self::World<'w>,
+        entities: &Arc<Entities>,
     ) -> Self::Item<'w, 's> {
         // SAFETY: Delegate to existing `SystemParam` implementations.
-        let query = unsafe { Query::<D, F>::get_param(state, system_meta, world) };
+        let query = unsafe { Query::<D, F>::get_param(state, system_meta, world, entities) };
         Populated(query)
     }
 
@@ -1012,6 +989,7 @@ pub struct ParamSet<'w, 's, T: SystemParam> {
     param_states: &'s mut T::State,
     world: T::World<'w>,
     system_meta: SystemMeta,
+    entities: Arc<Entities>,
 }
 
 macro_rules! impl_param_set {
@@ -1069,8 +1047,8 @@ macro_rules! impl_param_set {
                 unsafe { <($($param,)*) as SystemParam>::new_archetype(state, archetype, archetype_component_access); }
             }
 
-            fn apply<'w>(state: &mut Self::State, system_meta: &SystemMeta, worlds: UnsafeWorldsCell<'w>) {
-                <($($param,)*) as SystemParam>::apply(state, system_meta, worlds);
+            fn apply<'w>(state: &mut Self::State, system_meta: &SystemMeta, worlds: UnsafeWorldsCell<'w>, entities: &mut Arc<Entities>) {
+                <($($param,)*) as SystemParam>::apply(state, system_meta, worlds, entities);
             }
 
             fn queue<'w>(state: &mut Self::State, system_meta: &SystemMeta, world: DeferredWorld) {
@@ -1090,12 +1068,14 @@ macro_rules! impl_param_set {
             unsafe fn get_param< 'w, 's>(
                 state: &'s mut Self::State,
                 system_meta: &SystemMeta,
-                world:  Self::World<'w>,
+                world: Self::World<'w>,
+                entities: &Arc<Entities>,
             ) -> Self::Item< 'w, 's> {
                 ParamSet {
                     param_states: state,
                     system_meta: system_meta.clone(),
                     world: world.clone(),
+                    entities: entities.clone(),
                 }
             }
         }
@@ -1114,15 +1094,21 @@ macro_rules! impl_param_set {
                     // Conflicting params in ParamSet are not accessible at the same time
                     // ParamSets are guaranteed to not conflict with other SystemParams
                     unsafe {
-                        $param::get_param(&mut self.param_states.$index, &self.system_meta, world.$index)
+                        $param::get_param(&mut self.param_states.$index, &self.system_meta, world.$index, &self.entities)
                     }
                 }
             )*
         }
 
-        impl<$($param: SystemParam,)* $($fetch: GetGlobal<$param>,)*> GetGlobal<ParamSet<'_, '_, ($($param,)*)>> for ($($fetch, )*) {
-            fn get_global<'w>(&self, worlds: UnsafeWorldsCell<'w>) -> ($($param::World<'w>, )*) {
-                (($(self.$index.get_global(worlds), )*))
+        impl<$($fetch: GetGlobal<$param>,)* $($param: SystemParam,)*> GetGlobal<ParamSet<'_, '_, ($($param,)*)>> for ($($fetch,)*) {
+            fn get_global<'w>(&self, _worlds: UnsafeWorldsCell<'w>) -> ($($param::World<'w>,)*) {
+                (($(self.$index.get_global(_worlds),)*))
+            }
+        }
+
+        impl<$($fetch: GetLocal<$param>,)* $($param: SystemParam,)*> GetLocal<ParamSet<'_, '_, ($($param,)*)>> for ($($fetch,)*) {
+            fn get_local<'w>(&self, world: UnsafeWorldCell<'w>) -> ($($param::World<'w>,)*) {
+                (($($fetch::get_local(&self.$index, world),)*))
             }
         }
 
@@ -1204,6 +1190,7 @@ unsafe impl<'a, T: Resource> SystemParam for Res<'a, T> {
         &mut component_id: &'s mut Self::State,
         system_meta: &SystemMeta,
         world: Self::World<'w>,
+        _entities: &Arc<Entities>,
     ) -> Self::Item<'w, 's> {
         let (ptr, ticks, caller) =
             world
@@ -1261,6 +1248,7 @@ unsafe impl<'a, T: Resource> SystemParam for Option<Res<'a, T>> {
         &mut component_id: &'s mut Self::State,
         system_meta: &SystemMeta,
         world: Self::World<'w>,
+        _entities: &Arc<Entities>,
     ) -> Self::Item<'w, 's> {
         world
             .get_resource_with_ticks(component_id)
@@ -1351,6 +1339,7 @@ unsafe impl<'a, T: Resource> SystemParam for ResMut<'a, T> {
         &mut component_id: &'s mut Self::State,
         system_meta: &SystemMeta,
         world: Self::World<'w>,
+        _entities: &Arc<Entities>,
     ) -> Self::Item<'w, 's> {
         let value = world
             .get_resource_mut_by_id(component_id)
@@ -1404,6 +1393,7 @@ unsafe impl<'a, T: Resource> SystemParam for Option<ResMut<'a, T>> {
         &mut component_id: &'s mut Self::State,
         system_meta: &SystemMeta,
         world: Self::World<'w>,
+        _entities: &Arc<Entities>,
     ) -> Self::Item<'w, 's> {
         world
             .get_resource_mut_by_id(component_id)
@@ -1481,6 +1471,7 @@ unsafe impl SystemParam for &'_ World {
         _state: &'s mut Self::State,
         _system_meta: &SystemMeta,
         world: Self::World<'w>,
+        _entities: &Arc<Entities>,
     ) -> Self::Item<'w, 's> {
         // SAFETY: Read-only access to the entire world was registered in `init_state`.
         unsafe { world.world() }
@@ -1532,6 +1523,7 @@ unsafe impl<'w> SystemParam for DeferredWorld<'w> {
         _state: &'s mut Self::State,
         _system_meta: &SystemMeta,
         world: Self::World<'world>,
+        _entities: &Arc<Entities>,
     ) -> Self::Item<'world, 's> {
         world.into_deferred()
     }
@@ -1677,6 +1669,7 @@ unsafe impl<'a, T: FromWorld + Send + 'static> SystemParam for Local<'a, T> {
         state: &'s mut Self::State,
         _system_meta: &SystemMeta,
         _world: Self::World<'w>,
+        _entities: &Arc<Entities>,
     ) -> Self::Item<'w, 's> {
         Local(state.get())
     }
@@ -1697,7 +1690,7 @@ impl<'a, T: FromWorld + Send + 'static> DefaultWorldId for Local<'a, T> {
 /// so you should try to minimize the time spent in [`SystemBuffer::apply`].
 pub trait SystemBuffer: FromWorld + Send + 'static {
     /// Applies any deferred mutations to the [`World`].
-    fn apply<'w>(&mut self, system_meta: &SystemMeta, world: DeferredWorld);
+    fn apply<'w>(&mut self, system_meta: &SystemMeta, world: &mut World, entities: &mut Entities);
     /// Queues any deferred mutations to be applied at the next [`ApplyDeferred`](crate::prelude::ApplyDeferred).
     fn queue<'w>(&mut self, _system_meta: &SystemMeta, _world: DeferredWorld) {}
 }
@@ -1869,10 +1862,18 @@ unsafe impl<T: SystemBuffer> SystemParam for Deferred<'_, T> {
         )
     }
 
-    fn apply<'w>(state: &mut Self::State, system_meta: &SystemMeta, worlds: UnsafeWorldsCell<'w>) {
-        state.0.get().apply(system_meta, unsafe {
-            worlds.get_unsafe_world_cell_mut(state.1).into_deferred()
-        });
+    fn apply<'w>(
+        state: &mut Self::State,
+        system_meta: &SystemMeta,
+        worlds: UnsafeWorldsCell<'w>,
+        entities: &mut Arc<Entities>,
+    ) {
+        let entities = Arc::get_mut(entities).unwrap();
+        state.0.get().apply(
+            system_meta,
+            unsafe { worlds.get_unsafe_world_cell_mut(state.1).world_mut() },
+            entities,
+        );
     }
 
     fn queue<'w>(state: &mut Self::State, system_meta: &SystemMeta, world: DeferredWorld) {
@@ -1884,8 +1885,28 @@ unsafe impl<T: SystemBuffer> SystemParam for Deferred<'_, T> {
         state: &'s mut Self::State,
         _system_meta: &SystemMeta,
         _worlds: Self::World<'w>,
+        _entities: &Arc<Entities>,
     ) -> Self::Item<'w, 's> {
         Deferred(state.0.get())
+    }
+}
+
+impl<T: SystemBuffer> GetGlobal<Deferred<'_, T>> for (fetch::Local, fetch::Local) {
+    fn get_global<'w>(
+        &self,
+        worlds: UnsafeWorldsCell<'w>,
+    ) -> <Deferred<'_, T> as SystemParam>::World<'w> {
+        (unsafe { worlds.get_unsafe_world_cell_mut(self.0) }, self.1)
+    }
+}
+
+impl<T: SystemBuffer> GetLocal<Deferred<'_, T>> for (fetch::Local, fetch::Local) {
+    fn get_local<'w>(
+        &self,
+        world: UnsafeWorldCell<'w>,
+    ) -> <Deferred<'_, T> as SystemParam>::World<'w> {
+        assert_eq!(world.id(), self.0);
+        (world, self.1)
     }
 }
 
@@ -1920,8 +1941,17 @@ unsafe impl SystemParam for NonSendMarker {
         _state: &'state mut Self::State,
         _system_meta: &SystemMeta,
         _world: (),
+        _entities: &Arc<Entities>,
     ) -> Self::Item<'world, 'state> {
         Self
+    }
+}
+
+impl GetGlobal<NonSendMarker> for () {
+    fn get_global<'w>(
+        &self,
+        _worlds: UnsafeWorldsCell<'w>,
+    ) -> <NonSendMarker as SystemParam>::World<'w> {
     }
 }
 
@@ -2069,6 +2099,7 @@ unsafe impl<'a, T: 'static> SystemParam for NonSend<'a, T> {
         &mut component_id: &'s mut Self::State,
         system_meta: &SystemMeta,
         world: Self::World<'w>,
+        _entities: &Arc<Entities>,
     ) -> Self::Item<'w, 's> {
         let (ptr, ticks, caller) =
             world
@@ -2124,6 +2155,7 @@ unsafe impl<T: 'static> SystemParam for Option<NonSend<'_, T>> {
         &mut component_id: &'s mut Self::State,
         system_meta: &SystemMeta,
         world: Self::World<'w>,
+        _entities: &Arc<Entities>,
     ) -> Self::Item<'w, 's> {
         world
             .get_non_send_with_ticks(component_id)
@@ -2212,6 +2244,7 @@ unsafe impl<'a, T: 'static> SystemParam for NonSendMut<'a, T> {
         &mut component_id: &'s mut Self::State,
         system_meta: &SystemMeta,
         world: Self::World<'w>,
+        _entities: &Arc<Entities>,
     ) -> Self::Item<'w, 's> {
         let (ptr, ticks, caller) =
             world
@@ -2265,6 +2298,7 @@ unsafe impl<'a, T: 'static> SystemParam for Option<NonSendMut<'a, T>> {
         &mut component_id: &'s mut Self::State,
         system_meta: &SystemMeta,
         world: Self::World<'w>,
+        _entities: &Arc<Entities>,
     ) -> Self::Item<'w, 's> {
         world
             .get_non_send_with_ticks(component_id)
@@ -2311,6 +2345,7 @@ unsafe impl<'a> SystemParam for &'a Archetypes {
         _state: &'s mut Self::State,
         _system_meta: &SystemMeta,
         world: Self::World<'w>,
+        _entities: &Arc<Entities>,
     ) -> Self::Item<'w, 's> {
         world.archetypes()
     }
@@ -2347,6 +2382,7 @@ unsafe impl<'a> SystemParam for &'a Components {
         _state: &'s mut Self::State,
         _system_meta: &SystemMeta,
         world: Self::World<'w>,
+        _entities: &Arc<Entities>,
     ) -> Self::Item<'w, 's> {
         world.components()
     }
@@ -2360,12 +2396,12 @@ impl DefaultWorldId for &Components {
 }
 
 // SAFETY: Only reads World entities
-unsafe impl<'a> ReadOnlySystemParam for &'a Entities {}
+unsafe impl ReadOnlySystemParam for EntitiesRef {}
 
 // SAFETY: no component value access
-unsafe impl<'a> SystemParam for &'a Entities {
+unsafe impl<'a> SystemParam for EntitiesRef {
     type State = ();
-    type Item<'w, 's> = &'w Entities;
+    type Item<'w, 's> = EntitiesRef;
     type World<'w> = UnsafeWorldCell<'w>;
 
     fn shrink_world<'wlong: 'wshort, 'wshort>(world: Self::World<'wlong>) -> Self::World<'wshort> {
@@ -2382,13 +2418,14 @@ unsafe impl<'a> SystemParam for &'a Entities {
     unsafe fn get_param<'w, 's>(
         _state: &'s mut Self::State,
         _system_meta: &SystemMeta,
-        world: Self::World<'w>,
+        _world: Self::World<'w>,
+        entities: &Arc<Entities>,
     ) -> Self::Item<'w, 's> {
-        world.entities()
+        entities.clone().into()
     }
 }
 
-impl DefaultWorldId for &Entities {
+impl DefaultWorldId for EntitiesRef {
     type Id = fetch::Local;
     fn default_world_id() -> Self::Id {
         <&World>::default_world_id()
@@ -2419,6 +2456,7 @@ unsafe impl<'a> SystemParam for &'a Bundles {
         _state: &'s mut Self::State,
         _system_meta: &SystemMeta,
         world: Self::World<'w>,
+        _entities: &Arc<Entities>,
     ) -> Self::Item<'w, 's> {
         world.bundles()
     }
@@ -2482,6 +2520,7 @@ unsafe impl SystemParam for SystemChangeTick {
         _state: &'s mut Self::State,
         system_meta: &SystemMeta,
         world: Self::World<'w>,
+        _entities: &Arc<Entities>,
     ) -> Self::Item<'w, 's> {
         SystemChangeTick {
             last_run: *system_meta.change_ticks[0].get(world.id()).unwrap(),
@@ -2527,13 +2566,14 @@ unsafe impl<T: SystemParam> SystemParam for Vec<T> {
         state: &'s mut Self::State,
         system_meta: &SystemMeta,
         world: Self::World<'w>,
+        entities: &Arc<Entities>,
     ) -> Self::Item<'w, 's> {
         state
             .iter_mut()
             // SAFETY:
             // - We initialized the state for each parameter in the builder, so the caller ensures we have access to any world data needed by each param.
             // - The caller ensures this was the world used to initialize our state, and we used that world to initialize parameter states
-            .map(|state| unsafe { T::get_param(state, system_meta, world.clone()) })
+            .map(|state| unsafe { T::get_param(state, system_meta, world.clone(), entities) })
             .collect()
     }
 
@@ -2548,9 +2588,14 @@ unsafe impl<T: SystemParam> SystemParam for Vec<T> {
         }
     }
 
-    fn apply<'w>(state: &mut Self::State, system_meta: &SystemMeta, worlds: UnsafeWorldsCell<'w>) {
+    fn apply<'w>(
+        state: &mut Self::State,
+        system_meta: &SystemMeta,
+        worlds: UnsafeWorldsCell<'w>,
+        entities: &mut Arc<Entities>,
+    ) {
         for state in state {
-            T::apply(state, system_meta, worlds);
+            T::apply(state, system_meta, worlds, entities);
         }
     }
 
@@ -2596,11 +2641,13 @@ unsafe impl<T: SystemParam> SystemParam for ParamSet<'_, '_, Vec<T>> {
         state: &'s mut Self::State,
         system_meta: &SystemMeta,
         world: Self::World<'w>,
+        entities: &Arc<Entities>,
     ) -> Self::Item<'w, 's> {
         ParamSet {
             param_states: state,
             system_meta: system_meta.clone(),
             world: world.clone(),
+            entities: entities.clone(),
         }
     }
 
@@ -2615,9 +2662,14 @@ unsafe impl<T: SystemParam> SystemParam for ParamSet<'_, '_, Vec<T>> {
         }
     }
 
-    fn apply<'w>(state: &mut Self::State, system_meta: &SystemMeta, worlds: UnsafeWorldsCell<'w>) {
+    fn apply<'w>(
+        state: &mut Self::State,
+        system_meta: &SystemMeta,
+        worlds: UnsafeWorldsCell<'w>,
+        entities: &mut Arc<Entities>,
+    ) {
         for state in state {
-            T::apply(state, system_meta, worlds);
+            T::apply(state, system_meta, worlds, entities);
         }
     }
 
@@ -2641,6 +2693,7 @@ impl<'w, T: SystemParam> ParamSet<'w, '_, Vec<T>> {
                 &mut self.param_states[index],
                 &self.system_meta,
                 self.world.clone(),
+                &self.entities,
             )
         }
     }
@@ -2653,7 +2706,9 @@ impl<'w, T: SystemParam> ParamSet<'w, '_, Vec<T>> {
                 // - We initialized the state for each parameter in the builder, so the caller ensures we have access to any world data needed by any param.
                 //   We have mutable access to the ParamSet, so no other params in the set are active.
                 // - The caller of `get_param` ensured that this was the world used to initialize our state, and we used that world to initialize parameter states
-                unsafe { T::get_param(state, &self.system_meta, self.world.clone()) },
+                unsafe {
+                    T::get_param(state, &self.system_meta, self.world.clone(), &self.entities)
+                },
             );
         });
     }
@@ -2720,8 +2775,8 @@ macro_rules! impl_system_param_tuple {
             }
 
             #[inline]
-            fn apply<'w>(($($param,)*): &mut Self::State, system_meta: &SystemMeta, worlds: UnsafeWorldsCell<'w>) {
-                $($param::apply($param, system_meta, worlds);)*
+            fn apply<'w>(($($param,)*): &mut Self::State, system_meta: &SystemMeta, worlds: UnsafeWorldsCell<'w>, entities: &mut Arc<Entities>) {
+                $($param::apply($param, system_meta, worlds, entities);)*
             }
 
             #[inline]
@@ -2746,16 +2801,17 @@ macro_rules! impl_system_param_tuple {
                 ($($param,)*): &'s mut Self::State,
                 system_meta: &SystemMeta,
                 ($($world,)*):  Self::World<'w>,
+                entities: &Arc<Entities>,
             ) -> Self::Item< 'w, 's> {
                 #[allow(
                     clippy::unused_unit,
                     reason = "Zero-length tuples won't have any params to get."
                 )]
-                ($($param::get_param($param, system_meta, $world),)*)
+                ($($param::get_param($param, system_meta, $world, entities),)*)
             }
         }
 
-        impl<$($param: DefaultWorldId),*> DefaultWorldId for ($($param,)*) {
+        impl<$($param: DefaultWorldId,)*> DefaultWorldId for ($($param,)*) {
             type Id = ($($param::Id,)*);
             fn default_world_id() -> Self::Id {
                 (($($param::default_world_id(),)*))
@@ -2797,7 +2853,7 @@ pub mod lifetimeless {
     /// A [`ResMut`](super::ResMut) with `'static` lifetimes.
     pub type SResMut<T> = super::ResMut<'static, T>;
     /// [`Commands`](crate::system::Commands) with `'static` lifetimes.
-    pub type SCommands = crate::system::Commands<'static, 'static>;
+    pub type SCommands = crate::system::Commands<'static>;
 }
 
 /// A helper for using system parameters in generic contexts
@@ -2907,8 +2963,13 @@ unsafe impl<P: SystemParam + 'static> SystemParam for StaticSystemParam<'_, '_, 
         unsafe { P::new_archetype(state, archetype, archetype_component_access) };
     }
 
-    fn apply<'w>(state: &mut Self::State, system_meta: &SystemMeta, worlds: UnsafeWorldsCell<'w>) {
-        P::apply(state, system_meta, worlds);
+    fn apply<'w>(
+        state: &mut Self::State,
+        system_meta: &SystemMeta,
+        worlds: UnsafeWorldsCell<'w>,
+        entities: &mut Arc<Entities>,
+    ) {
+        P::apply(state, system_meta, worlds, entities);
     }
 
     fn queue<'w>(state: &mut Self::State, system_meta: &SystemMeta, world: DeferredWorld) {
@@ -2929,9 +2990,10 @@ unsafe impl<P: SystemParam + 'static> SystemParam for StaticSystemParam<'_, '_, 
         state: &'s mut Self::State,
         system_meta: &SystemMeta,
         world: Self::World<'w>,
+        entities: &Arc<Entities>,
     ) -> Self::Item<'w, 's> {
         // SAFETY: Defer to the safety of P::SystemParam
-        StaticSystemParam(unsafe { P::get_param(state, system_meta, world) })
+        StaticSystemParam(unsafe { P::get_param(state, system_meta, world, entities) })
     }
 }
 
@@ -2963,6 +3025,7 @@ unsafe impl<T: ?Sized> SystemParam for PhantomData<T> {
         _state: &'s mut Self::State,
         _system_meta: &SystemMeta,
         _world: (),
+        _entities: &Arc<Entities>,
     ) -> Self::Item<'w, 's> {
         PhantomData
     }
@@ -2970,6 +3033,14 @@ unsafe impl<T: ?Sized> SystemParam for PhantomData<T> {
 
 // SAFETY: No world access.
 unsafe impl<T: ?Sized> ReadOnlySystemParam for PhantomData<T> {}
+
+impl<T: ?Sized> GetGlobal<PhantomData<T>> for () {
+    fn get_global<'w>(
+        &self,
+        _worlds: UnsafeWorldsCell<'w>,
+    ) -> <PhantomData<T> as SystemParam>::World<'w> {
+    }
+}
 
 impl<T: ?Sized> DefaultWorldId for PhantomData<T> {
     type Id = ();
@@ -3039,6 +3110,7 @@ pub struct DynSystemParam<'w, 's> {
     state: &'s mut dyn Any,
     worlds: Rc<dyn Any>,
     system_meta: SystemMeta,
+    entities: Arc<Entities>,
     marker: PhantomData<UnsafeWorldCell<'w>>,
 }
 
@@ -3049,11 +3121,17 @@ impl<'w, 's> DynSystemParam<'w, 's> {
     ///   in [`init_state`](SystemParam::init_state) for the inner system param.
     /// - `world` must be the same `World` that was used to initialize
     ///   [`state`](SystemParam::init_state) for the inner system param.
-    unsafe fn new(state: &'s mut dyn Any, worlds: Rc<dyn Any>, system_meta: SystemMeta) -> Self {
+    unsafe fn new(
+        state: &'s mut dyn Any,
+        worlds: Rc<dyn Any>,
+        system_meta: SystemMeta,
+        entities: Arc<Entities>,
+    ) -> Self {
         Self {
             state,
             worlds,
             system_meta,
+            entities,
             marker: PhantomData,
         }
     }
@@ -3078,7 +3156,7 @@ impl<'w, 's> DynSystemParam<'w, 's> {
         // - `DynSystemParam::new()` ensures `state` is a `ParamState<T>`, that the world matches,
         //   and that it has access required by the inner system param.
         // - This consumes the `DynSystemParam`, so it is the only use of `world` with this access and it is available for `'w`.
-        unsafe { downcast::<T>(self.state, &self.system_meta, self.worlds) }
+        unsafe { downcast::<T>(self.state, &self.system_meta, self.worlds, &self.entities) }
     }
 
     /// Returns the inner system parameter if it is the correct type.
@@ -3092,7 +3170,14 @@ impl<'w, 's> DynSystemParam<'w, 's> {
         // - `DynSystemParam::new()` ensures `state` is a `ParamState<T>`, that the world matches,
         //   and that it has access required by the inner system param.
         // - This exclusively borrows the `DynSystemParam` for `'_`, so it is the only use of `world` with this access for `'_`.
-        unsafe { downcast::<T>(self.state, &self.system_meta, self.worlds.clone()) }
+        unsafe {
+            downcast::<T>(
+                self.state,
+                &self.system_meta,
+                self.worlds.clone(),
+                &self.entities,
+            )
+        }
     }
 
     /// Returns the inner system parameter if it is the correct type.
@@ -3109,7 +3194,14 @@ impl<'w, 's> DynSystemParam<'w, 's> {
         // - `DynSystemParam::new()` ensures `state` is a `ParamState<T>`, that the world matches,
         //   and that it has access required by the inner system param.
         // - The inner system param only performs read access, so it's safe to copy that access for the full `'w` lifetime.
-        unsafe { downcast::<T>(self.state, &self.system_meta, self.worlds.clone()) }
+        unsafe {
+            downcast::<T>(
+                self.state,
+                &self.system_meta,
+                self.worlds.clone(),
+                &self.entities,
+            )
+        }
     }
 }
 
@@ -3123,6 +3215,7 @@ unsafe fn downcast<'w, 's, T: SystemParam>(
     state: &'s mut dyn Any,
     system_meta: &SystemMeta,
     world: Rc<dyn Any>,
+    entities: &Arc<Entities>,
 ) -> Option<T>
 // We need a 'static version of the SystemParam to use with `Any::downcast_mut()`,
 // and we need a <'w, 's> version to actually return.
@@ -3148,6 +3241,7 @@ where
                 &mut state.0,
                 system_meta,
                 T::Item::<'static, 'static>::shrink_world(world.as_ref().to_owned()),
+                entities,
             )
         })
     } else {
@@ -3186,7 +3280,12 @@ trait DynParamState: Sync + Send {
     /// This is used to apply [`Commands`] during [`ApplyDeferred`](crate::prelude::ApplyDeferred).
     ///
     /// [`Commands`]: crate::prelude::Commands
-    fn apply<'w>(&mut self, system_meta: &SystemMeta, world: DeferredWorld);
+    fn apply<'w>(
+        &mut self,
+        system_meta: &SystemMeta,
+        world: UnsafeWorldsCell<'w>,
+        entities: &mut Arc<Entities>,
+    );
 
     /// Queues any deferred mutations to be applied at the next [`ApplyDeferred`](crate::prelude::ApplyDeferred).
     fn queue<'w>(&mut self, system_meta: &SystemMeta, world: DeferredWorld);
@@ -3198,7 +3297,6 @@ trait DynParamState: Sync + Send {
     unsafe fn validate_param<'w>(
         &self,
         system_meta: &SystemMeta,
-        world: Self::World<'w>,
     ) -> Result<(), SystemParamValidationError>;
 }
 
@@ -3219,8 +3317,13 @@ impl<T: SystemParam + 'static> DynParamState for ParamState<T> {
         unsafe { T::new_archetype(&mut self.0, archetype, archetype_component_access) };
     }
 
-    fn apply<'w>(&mut self, system_meta: &SystemMeta, world: DeferredWorld) {
-        T::apply(&mut self.0, system_meta, world);
+    fn apply<'w>(
+        &mut self,
+        system_meta: &SystemMeta,
+        world: UnsafeWorldsCell<'w>,
+        entities: &mut Arc<Entities>,
+    ) {
+        T::apply(&mut self.0, system_meta, world, entities);
     }
 
     fn queue<'w>(&mut self, system_meta: &SystemMeta, world: DeferredWorld) {
@@ -3230,7 +3333,6 @@ impl<T: SystemParam + 'static> DynParamState for ParamState<T> {
     unsafe fn validate_param<'w>(
         &self,
         system_meta: &SystemMeta,
-        world: T::World<'w>,
     ) -> Result<(), SystemParamValidationError> {
         T::validate_param(&self.0, system_meta, world)
     }
@@ -3240,7 +3342,7 @@ impl<T: SystemParam + 'static> DynParamState for ParamState<T> {
 unsafe impl SystemParam for DynSystemParam<'_, '_> {
     type State = DynSystemParamState;
     type Item<'world, 'state> = DynSystemParam<'world, 'state>;
-    type World<'w> = UnsafeWorldsCell<'w>;
+    type World<'w> = (UnsafeWorldsCell<'w>, Arc<dyn Any>);
 
     fn shrink_world<'wlong: 'wshort, 'wshort>(world: Self::World<'wlong>) -> Self::World<'wshort> {
         world
@@ -3266,13 +3368,14 @@ unsafe impl SystemParam for DynSystemParam<'_, '_> {
         state: &'s mut Self::State,
         system_meta: &SystemMeta,
         worlds: Self::World<'w>,
+        entities: &Arc<Entities>,
     ) -> Self::Item<'w, 's> {
         // SAFETY:
         // - `state.0` is a boxed `ParamState<T>`, and its implementation of `as_any_mut` returns `self`.
         // - The state was obtained from `SystemParamBuilder::build()`, which registers all [`World`] accesses used
         //   by [`SystemParam::get_param`] with the provided [`system_meta`](SystemMeta).
         // - The caller ensures that the provided world is the same and has the required access.
-        unsafe { DynSystemParam::new(state.0.as_any_mut(), worlds, system_meta.clone()) }
+        unsafe { DynSystemParam::new(state.0.as_any_mut(), worlds, system_meta.clone(), entities) }
     }
 
     unsafe fn new_archetype(
@@ -3284,8 +3387,13 @@ unsafe impl SystemParam for DynSystemParam<'_, '_> {
         unsafe { state.0.new_archetype(archetype, archetype_component_access) };
     }
 
-    fn apply<'w>(state: &mut Self::State, system_meta: &SystemMeta, worlds: UnsafeWorldsCell<'w>) {
-        state.0.apply(system_meta, worlds);
+    fn apply<'w>(
+        state: &mut Self::State,
+        system_meta: &SystemMeta,
+        worlds: UnsafeWorldsCell<'w>,
+        entities: &mut Arc<Entities>,
+    ) {
+        state.0.apply(system_meta, worlds, entities);
     }
 
     fn queue<'w>(state: &mut Self::State, system_meta: &SystemMeta, world: DeferredWorld) {
@@ -3293,12 +3401,7 @@ unsafe impl SystemParam for DynSystemParam<'_, '_> {
     }
 }
 
-impl DefaultWorldId for DynSystemParam<'_, '_> {
-    type Id = fetch::Global;
-    fn default_world_id() -> Self::Id {
-        fetch::Global
-    }
-}
+impl<T: SystemParam> GetGlobal<DynSystemParam<'_, '_>> for F {}
 
 // SAFETY: When initialized with `init_state`, `get_param` returns a `FilteredResources` with no access.
 // Therefore, `init_state` trivially registers all access, and no accesses can conflict.
@@ -3322,6 +3425,7 @@ unsafe impl SystemParam for FilteredResources<'_, '_> {
         state: &'s mut Self::State,
         system_meta: &SystemMeta,
         world: Self::World<'w>,
+        _entities: &Arc<Entities>,
     ) -> Self::Item<'w, 's> {
         // SAFETY: The caller ensures that `world` has access to anything registered in `init_state` or `build`,
         // and the builder registers `access` in `build`.
@@ -3368,6 +3472,7 @@ unsafe impl SystemParam for FilteredResourcesMut<'_, '_> {
         state: &'s mut Self::State,
         system_meta: &SystemMeta,
         world: Self::World<'w>,
+        _entities: &Arc<Entities>,
     ) -> Self::Item<'w, 's> {
         // SAFETY: The caller ensures that `world` has access to anything registered in `init_state` or `build`,
         // and the builder registers `access` in `build`.
@@ -3469,7 +3574,7 @@ mod tests {
     use super::*;
     use crate::{
         entity::Entity,
-        system::assert_is_system,
+        system::{assert_is_system, Commands},
         world::{WorldId, Worlds},
     };
     use core::cell::RefCell;
@@ -3479,41 +3584,40 @@ mod tests {
 
     #[test]
     fn fetch_worlds() {
-        fn check_global<
-            T: GetGlobal<(
-                Commands,
-                (Query<'static, 'static, Entity>, Res<'static, A>),
-                ((Query<'static, 'static, Entity>,), Local<'static, u32>),
-            )>,
-        >(
-            _: T,
-        ) {
-        }
-        fn check_local<
-            T: GetLocal<(
-                Query<'static, 'static, Entity>,
-                (
-                    Query<'static, 'static, Entity>,
-                    Query<'static, 'static, Entity>,
-                ),
-                (
-                    (Query<'static, 'static, Entity>,),
-                    Query<'static, 'static, Entity>,
-                ),
-            )>,
-        >(
-            _: T,
-        ) {
+        #[derive(SystemParam)]
+        pub struct SpecialQuery<
+            'w,
+            's,
+            D: QueryData + Send + Sync + 'static,
+            F: QueryFilter + Send + Sync + 'static,
+        > {
+            _query: Query<'w, 's, D, F>,
         }
 
+        type WG = (
+            Commands<'static>,
+            (SpecialQuery<'static, 'static, Entity, ()>, Res<'static, A>),
+            (Query<'static, 'static, Entity>, Local<'static, u32>),
+        );
+
+        type WL = (
+            Query<'static, 'static, Entity>,
+            (
+                SpecialQuery<'static, 'static, Entity, ()>,
+                Query<'static, 'static, Entity>,
+            ),
+        );
+
+        fn check_global<T: GetGlobal<WG>>(_: T) {}
+        fn check_local<T: GetLocal<WL>>(_: T) {}
+
         let id = WorldId(0);
-        check_global((id, (id, id), ((id,), id)));
-        check_global((id, id, (id, id)));
+        check_global((id, ((id,), id), (id, id)));
+        check_global((id, (id, id), id));
         check_global((id, fetch::Default, (id, id)));
         check_global(fetch::Default);
-        check_local((id, (id, id), ((id,), id)));
-        check_local((id, id, (id, id)));
-        check_local((id, id, id));
+        check_local((id, ((id,), id)));
+        check_local((id, id));
         check_local(id);
     }
 

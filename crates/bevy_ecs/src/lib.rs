@@ -1270,7 +1270,7 @@ mod tests {
             .components()
             .get_resource_id(TypeId::of::<Num>())
             .unwrap();
-        let archetype_component_id = world.storages().resources.get(resource_id).unwrap().id();
+        let archetype_component_id = world.resources().get(resource_id).unwrap().id();
 
         assert_eq!(world.resource::<Num>().0, 123);
         assert!(world.contains_resource::<Num>());
@@ -1333,8 +1333,7 @@ mod tests {
             "resource id does not change after removing / re-adding"
         );
 
-        let current_archetype_component_id =
-            world.storages().resources.get(resource_id).unwrap().id();
+        let current_archetype_component_id = world.resources.get(resource_id).unwrap().id();
 
         assert_eq!(
             archetype_component_id, current_archetype_component_id,
@@ -1459,10 +1458,13 @@ mod tests {
     #[should_panic]
     fn non_send_resource_panic() {
         let mut worlds = Worlds::new();
-        let world = worlds.get_world_mut(World::RESOURCE);
-        world.insert_non_send_resource(0i32);
+        worlds
+            .get_world_mut(World::RESOURCE)
+            .insert_non_send_resource(0i32);
         std::thread::spawn(move || {
-            let _ = world.non_send_resource_mut::<i32>();
+            let _ = worlds
+                .get_world_mut(World::RESOURCE)
+                .non_send_resource_mut::<i32>();
         })
         .join()
         .unwrap();

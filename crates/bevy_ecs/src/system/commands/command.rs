@@ -51,23 +51,10 @@ pub trait Command<Out = ()>: Send + 'static {
     /// This method is used to define what a command "does" when it is ultimately applied.
     /// Because this method takes `self`, you can store data or settings on the type that implements this trait.
     /// This data is set by the system or other source of the command, and then ultimately read in this method.
-    fn apply(self, worlds: &mut Worlds) -> Out;
-}
-
-impl<F, Out> Command<Out> for F
-where
-    F: FnOnce(&mut Worlds) -> Out + Send + 'static,
-{
-    fn apply(self, worlds: &mut Worlds) -> Out {
-        self(worlds)
-    }
-}
-
-pub trait LocalCommand<Out = ()>: Send + 'static {
     fn apply(self, world: &mut World) -> Out;
 }
 
-impl<F, Out> LocalCommand<Out> for F
+impl<F, Out> Command<Out> for F
 where
     F: FnOnce(&mut World) -> Out + Send + 'static,
 {
@@ -76,11 +63,24 @@ where
     }
 }
 
+pub trait GlobalCommand<Out = ()>: Send + 'static {
+    fn apply(self, worlds: &mut Worlds) -> Out;
+}
+
+impl<F, Out> GlobalCommand<Out> for F
+where
+    F: FnOnce(&mut Worlds) -> Out + Send + 'static,
+{
+    fn apply(self, worlds: &mut Worlds) -> Out {
+        self(worlds)
+    }
+}
+
 /// A [`Command`] that consumes an iterator of [`Bundles`](Bundle) to spawn a series of entities.
 ///
 /// This is more efficient than spawning the entities individually.
 #[track_caller]
-pub fn spawn_batch<I>(bundles_iter: I) -> impl LocalCommand
+pub fn spawn_batch<I>(bundles_iter: I) -> impl Command
 where
     I: IntoIterator + Send + Sync + 'static,
     I::Item: Bundle<Effect: NoBundleEffect>,
@@ -98,7 +98,7 @@ where
 ///
 /// This is more efficient than inserting the bundles individually.
 #[track_caller]
-pub fn insert_batch<I, B>(batch: I, insert_mode: InsertMode) -> impl LocalCommand<Result>
+pub fn insert_batch<I, B>(batch: I, insert_mode: InsertMode) -> impl Command<Result>
 where
     I: IntoIterator<Item = (Entity, B)> + Send + Sync + 'static,
     B: Bundle<Effect: NoBundleEffect>,
@@ -113,7 +113,7 @@ where
 /// A [`Command`] that inserts a [`Resource`] into the world using a value
 /// created with the [`FromWorld`] trait.
 #[track_caller]
-pub fn init_resource<R: Resource + FromWorld>() -> impl LocalCommand {
+pub fn init_resource<R: Resource + FromWorld>() -> impl Command {
     move |world: &mut World| {
         world.init_resource::<R>();
     }
@@ -121,7 +121,7 @@ pub fn init_resource<R: Resource + FromWorld>() -> impl LocalCommand {
 
 /// A [`Command`] that inserts a [`Resource`] into the world.
 #[track_caller]
-pub fn insert_resource<R: Resource>(resource: R) -> impl LocalCommand {
+pub fn insert_resource<R: Resource>(resource: R) -> impl Command {
     let caller = MaybeLocation::caller();
     move |world: &mut World| {
         world.insert_resource_with_caller(resource, caller);
@@ -129,14 +129,44 @@ pub fn insert_resource<R: Resource>(resource: R) -> impl LocalCommand {
 }
 
 /// A [`Command`] that removes a [`Resource`] from the world.
-pub fn remove_resource<R: Resource>() -> impl LocalCommand {
+pub fn remove_resource<R: Resource>() -> impl Command {
     move |world: &mut World| {
         world.remove_resource::<R>();
     }
 }
 
+/// A [`Command`] that sends a global [`Trigger`](crate::observer::Trigger) without any targets.
+#[track_caller]
+pub fn trigger(event: impl Event) -> impl Command {
+    let caller = MaybeLocation::caller();
+    move |world: &mut World| {
+        world.trigger_with_caller(event, caller);
+    }
+}
+
+/// A [`Command`] that sends a [`Trigger`](crate::observer::Trigger) for the given targets.
+pub fn trigger_targets(
+    event: impl Event,
+    targets: impl TriggerTargets + Send + Sync + 'static,
+) -> impl Command {
+    let caller = MaybeLocation::caller();
+    move |world: &mut World| {
+        world.trigger_targets_with_caller(event, targets, caller);
+    }
+}
+
+/// A [`Command`] that sends an arbitrary [`Event`].
+#[track_caller]
+pub fn send_event<E: Event>(event: E) -> impl Command {
+    let caller = MaybeLocation::caller();
+    move |world: &mut World| {
+        let mut events = world.resource_mut::<Events<E>>();
+        events.send_with_caller(event, caller);
+    }
+}
+
 /// A [`Command`] that runs the system corresponding to the given [`SystemId`].
-pub fn run_system<O: 'static>(id: SystemId) -> impl Command<Result> {
+pub fn run_system<O: 'static>(id: SystemId) -> impl GlobalCommand<Result> {
     move |worlds: &mut Worlds| -> Result {
         worlds.run_system(id)?;
         Ok(())
@@ -145,7 +175,7 @@ pub fn run_system<O: 'static>(id: SystemId) -> impl Command<Result> {
 
 /// A [`Command`] that runs the system corresponding to the given [`SystemId`]
 /// and provides the given input value.
-pub fn run_system_with<I>(id: SystemId, input: I::Inner<'static>) -> impl Command<Result>
+pub fn run_system_with<I>(id: SystemId, input: I::Inner<'static>) -> impl GlobalCommand<Result>
 where
     I: SystemInput<Inner<'static>: Send> + 'static,
 {
@@ -157,7 +187,7 @@ where
 
 /// A [`Command`] that runs the given system,
 /// caching its [`SystemId`] in a [`CachedSystemId`](crate::system::CachedSystemId) resource.
-pub fn run_system_cached<M, S>(system: S) -> impl Command<Result>
+pub fn run_system_cached<M, S>(system: S) -> impl GlobalCommand<Result>
 where
     M: 'static,
     S: IntoSystem<(), (), M> + Send + 'static,
@@ -170,7 +200,10 @@ where
 
 /// A [`Command`] that runs the given system with the given input value,
 /// caching its [`SystemId`] in a [`CachedSystemId`](crate::system::CachedSystemId) resource.
-pub fn run_system_cached_with<I, M, S>(system: S, input: I::Inner<'static>) -> impl Command<Result>
+pub fn run_system_cached_with<I, M, S>(
+    system: S,
+    input: I::Inner<'static>,
+) -> impl GlobalCommand<Result>
 where
     I: SystemInput<Inner<'static>: Send> + Send + 'static,
     M: 'static,
@@ -185,7 +218,7 @@ where
 /// A [`Command`] that removes a system previously registered with
 /// [`Commands::register_system`](crate::system::Commands::register_system) or
 /// [`World::register_system`].
-pub fn unregister_system<I, O>(system_id: SystemId) -> impl Command<Result>
+pub fn unregister_system<I, O>(system_id: SystemId) -> impl GlobalCommand<Result>
 where
     I: SystemInput + Send + 'static,
     O: Send + 'static,
@@ -200,7 +233,7 @@ where
 /// - [`Commands::run_system_cached`](crate::system::Commands::run_system_cached)
 /// - [`World::run_system_cached`]
 /// - [`World::register_system_cached`]
-pub fn unregister_system_cached<I, O, M, S>(system: S) -> impl Command<Result>
+pub fn unregister_system_cached<I, O, M, S>(system: S) -> impl GlobalCommand<Result>
 where
     I: SystemInput + Send + 'static,
     O: 'static,
@@ -214,39 +247,9 @@ where
 }
 
 /// A [`Command`] that runs the schedule corresponding to the given [`ScheduleLabel`].
-pub fn run_schedule(label: impl ScheduleLabel) -> impl Command<Result> {
+pub fn run_schedule(label: impl ScheduleLabel) -> impl GlobalCommand<Result> {
     move |worlds: &mut Worlds| -> Result {
         worlds.try_run_schedule(label)?;
         Ok(())
-    }
-}
-
-/// A [`Command`] that sends a global [`Trigger`](crate::observer::Trigger) without any targets.
-#[track_caller]
-pub fn trigger(event: impl Event) -> impl LocalCommand {
-    let caller = MaybeLocation::caller();
-    move |world: &mut World| {
-        world.trigger_with_caller(event, caller);
-    }
-}
-
-/// A [`Command`] that sends a [`Trigger`](crate::observer::Trigger) for the given targets.
-pub fn trigger_targets(
-    event: impl Event,
-    targets: impl TriggerTargets + Send + Sync + 'static,
-) -> impl LocalCommand {
-    let caller = MaybeLocation::caller();
-    move |world: &mut World| {
-        world.trigger_targets_with_caller(event, targets, caller);
-    }
-}
-
-/// A [`Command`] that sends an arbitrary [`Event`].
-#[track_caller]
-pub fn send_event<E: Event>(event: E) -> impl LocalCommand {
-    let caller = MaybeLocation::caller();
-    move |world: &mut World| {
-        let mut events = world.resource_mut::<Events<E>>();
-        events.send_with_caller(event, caller);
     }
 }

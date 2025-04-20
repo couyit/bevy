@@ -17,6 +17,7 @@ pub mod reflect;
 use crate::{
     change_detection::TicksMut,
     component::ComponentTicks,
+    entity::EntitiesRef,
     storage::{ResourceData, Resources, SparseSetIndex, SparseSets, Tables},
     system::Systems,
 };
@@ -74,8 +75,9 @@ use crate::{
 use alloc::{boxed::Box, vec::Vec};
 use bevy_platform::sync::atomic::{AtomicU32, Ordering};
 use bevy_ptr::{OwningPtr, Ptr, UnsafeCellDeref};
-use core::{any::TypeId, fmt, ptr};
+use core::{any::TypeId, fmt};
 use log::warn;
+use std::sync::{Arc, RwLock};
 use unsafe_world_cell::{UnsafeEntityCell, UnsafeWorldCell, UnsafeWorldsCell};
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
@@ -93,6 +95,7 @@ impl SparseSetIndex for WorldId {
 
 pub struct Worlds {
     pub(crate) id: WorldsId,
+    pub(crate) entities: Arc<RwLock<Arc<Entities>>>,
     pub(crate) worlds: Vec<World>,
     pub(crate) systems: Systems,
 }
@@ -104,16 +107,17 @@ impl World {
 
 impl Default for Worlds {
     fn default() -> Self {
-        let mut world = Self {
+        let mut worlds = Self {
             id: WorldsId::new().unwrap(),
+            entities: RwLock::new(Arc::new(Entities::new())),
             worlds: Vec::with_capacity(2),
             systems: Default::default(),
         };
 
-        world.create_resource_world();
-        world.create_world();
+        worlds.create_resource_world();
+        worlds.create_world();
 
-        world
+        worlds
     }
 }
 
@@ -132,13 +136,15 @@ impl Worlds {
 
     pub fn create_world(&mut self) -> WorldId {
         let id = WorldId(self.worlds.len());
-        self.worlds.push(World::new_for_components(id));
+        self.worlds
+            .push(World::new_for_components(id, self.entities.clone()));
         id
     }
 
     pub fn create_resource_world(&mut self) -> WorldId {
         let id = WorldId(self.worlds.len());
-        self.worlds.push(World::new_for_resources(id));
+        self.worlds
+            .push(World::new_for_resources(id, self.entities.clone()));
         id
     }
 
@@ -162,7 +168,6 @@ impl Worlds {
 // TODO: Check if Components takes up more space than Resources.
 pub enum Storage {
     Components {
-        entities: Entities,
         archetypes: Archetypes,
         bundles: Bundles,
         sparse_sets: SparseSets,
@@ -195,6 +200,9 @@ pub enum Storage {
 #[repr(C)]
 pub struct World {
     id: WorldId,
+    pub(crate) entities: Arc<RwLock<Arc<Entities>>>,
+    // Present only while the system runs.
+    pub(crate) entities_temp: Option<Arc<Entities>>,
     pub(crate) components: Components,
     pub(crate) component_ids: ComponentIds,
     pub(crate) storage: Storage,
@@ -220,20 +228,16 @@ impl Drop for World {
     }
 }
 
-impl Default for World {
-    fn default() -> Self {
-        Self::new()
-    }
-}
-
 impl World {
-    pub fn new() -> Self {
-        Self::new_for_components(World::MAIN)
-    }
-
-    fn new_for_storage(id: WorldId, storage: Storage) -> Self {
+    fn new_for_storage(
+        id: WorldId,
+        entities: Arc<RwLock<Arc<Entities>>>,
+        storage: Storage,
+    ) -> Self {
         let mut world = Self {
             id,
+            entities,
+            entities_temp: None,
             components: Default::default(),
             storage,
             observers: Observers::default(),
@@ -807,23 +811,14 @@ impl World {
         self.removed_components.update();
         self.last_change_tick = self.increment_change_tick();
     }
-
-    /// Applies any queued component registration.
-    /// For spawning vanilla rust component types and resources, this is not strictly necessary.
-    /// However, flushing components can make information available more quickly, and can have performance benefits.
-    /// Additionally, for components and resources registered dynamically through a raw descriptor or similar,
-    /// this is the only way to complete their registration.
-    pub(crate) fn flush_components(&mut self) {
-        self.components_registrator().apply_queued_registrations();
-    }
 }
 
 impl World {
-    fn new_for_components(id: WorldId) -> Self {
+    fn new_for_components(id: WorldId, entities: Arc<RwLock<Arc<Entities>>>) -> Self {
         Self::new_for_storage(
             id,
+            entities,
             Storage::Components {
-                entities: Entities::new(),
                 archetypes: Archetypes::new(),
                 bundles: Default::default(),
                 sparse_sets: Default::default(),
@@ -832,39 +827,11 @@ impl World {
         )
     }
 
-    /// Retrieves this world's [`Entities`] collection.
-    #[inline]
-    pub fn entities(&self) -> &Entities {
-        match self.storage {
-            Storage::Components { ref entities, .. } => unsafe {
-                &*(ptr::from_ref(entities) as *const Entities)
-            },
-            Storage::Resources { .. } => panic!("Storage is not for Components"),
-        }
-    }
-
-    /// Retrieves this world's [`Entities`] collection mutably.
-    ///
-    /// # Safety
-    /// Mutable reference must not be used to put the [`Entities`] data
-    /// in an invalid state for this [`World`]
-    #[inline]
-    pub(crate) fn entities_mut(&mut self) -> &mut Entities {
-        match self.storage {
-            Storage::Components {
-                ref mut entities, ..
-            } => unsafe { &mut *(ptr::from_mut(entities) as *mut Entities) },
-            Storage::Resources { .. } => panic!("Storage is not for Components"),
-        }
-    }
-
     /// Retrieves this world's [`Archetypes`] collection.
     #[inline]
     pub fn archetypes(&self) -> &Archetypes {
         match self.storage {
-            Storage::Components { ref archetypes, .. } => unsafe {
-                &*(ptr::from_ref(archetypes) as *const Archetypes)
-            },
+            Storage::Components { ref archetypes, .. } => archetypes,
             Storage::Resources { .. } => panic!("Storage is not for Components"),
         }
     }
@@ -874,7 +841,7 @@ impl World {
         match self.storage {
             Storage::Components {
                 ref mut archetypes, ..
-            } => unsafe { &mut *(ptr::from_mut(archetypes) as *mut Archetypes) },
+            } => archetypes,
             Storage::Resources { .. } => panic!("Storage is not for Components"),
         }
     }
@@ -1467,9 +1434,9 @@ impl World {
     /// assert_eq!(position.x, 0.0);
     /// ```
     #[track_caller]
-    pub fn spawn_empty(&mut self) -> EntityWorldMut {
+    pub fn spawn_empty(&mut self, entities: &mut Entities) -> EntityWorldMut {
         self.flush();
-        let entity = self.entities_mut().alloc();
+        let entity = entities.alloc();
         // SAFETY: entity was just allocated
         unsafe { self.spawn_at_empty_internal(entity, MaybeLocation::caller()) }
     }
@@ -1483,7 +1450,6 @@ impl World {
     ) -> EntityWorldMut {
         match self.storage {
             Storage::Components {
-                ref mut entities,
                 ref mut archetypes,
                 ref mut tables,
                 ..
@@ -1697,10 +1663,9 @@ impl World {
     /// Empties queued entities and adds them to the empty [`Archetype`](crate::archetype::Archetype).
     /// This should be called before doing operations that might operate on queued entities,
     /// such as inserting a [`Component`].
-    pub(crate) fn flush_entities(&mut self) {
+    pub(crate) fn flush_entities(&mut self, entities: &mut Entities) {
         match self.storage {
             Storage::Components {
-                ref mut entities,
                 ref mut archetypes,
                 ref mut tables,
                 ..
@@ -1752,7 +1717,7 @@ impl World {
     ///
     /// Queued entities will be spawned, and then commands will be applied.
     #[inline]
-    pub fn flush(&mut self) {
+    pub fn flush(&mut self, entities: &mut Entities) {
         self.flush_entities();
         self.flush_components();
         self.flush_commands();
@@ -2695,9 +2660,10 @@ impl World {
         }
     }
 
-    fn new_for_resources(id: WorldId) -> Self {
+    fn new_for_resources(id: WorldId, entities: Arc<Entities>) -> Self {
         let mut world = Self::new_for_storage(
             id,
+            entities,
             Storage::Resources {
                 resources: Default::default(),
                 non_send_resources: Default::default(),

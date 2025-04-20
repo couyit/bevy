@@ -264,8 +264,6 @@ pub fn derive_system_param(input: TokenStream) -> TokenStream {
         field_messages.push(field_message.unwrap_or_else(|| quote! { err.message }));
     }
 
-    let is_unit = field_locals.is_empty();
-
     let generics = ast.generics;
 
     // Emit an error if there's any unrecognized lifetime names.
@@ -348,6 +346,23 @@ pub fn derive_system_param(input: TokenStream) -> TokenStream {
         world_tuple_patterns.push(parse_quote!( (#(#end,)*) ));
     }
 
+    let system_param_generics: Vec<_> = (0..tuple_types.len())
+        .map(|i| format_ident!("P{i}"))
+        .map(|x| quote! { #x })
+        .collect();
+    let id_index: Vec<_> = (0..tuple_types.len()).map(Index::from).collect();
+
+    let mut get_global_generics = generics.clone();
+    let mut get_local_generics = generics.clone();
+    let get_global_where_clause = get_global_generics.make_where_clause();
+    let get_local_where_clause = get_local_generics.make_where_clause();
+    get_global_where_clause
+        .predicates
+        .push(parse_quote!(#path::system::fetch::Local: #(#path::system::GetGlobal<#tuple_types> + )* std::any::Any));
+    get_local_where_clause.predicates.push(
+        parse_quote!(#path::system::fetch::Local: #(#path::system::GetLocal<#tuple_types> + )* std::any::Any),
+    );
+
     // Create a where clause for the `ReadOnlySystemParam` impl.
     // Ensure that each field implements `ReadOnlySystemParam`.
     let mut read_only_generics = generics.clone();
@@ -383,17 +398,7 @@ pub fn derive_system_param(input: TokenStream) -> TokenStream {
         }
     }
 
-    let get_global_impl = if is_unit {
-        quote! {}
-    } else {
-        quote! {
-            impl<'w, 's, #punctuated_generics> #path::system::GetGlobal<#struct_name #ty_generics> for <#fields_alias::<'w, 's, #punctuated_generic_idents> as #path::system::DefaultWorldId>::Id #where_clause {
-                fn get_global<'world>(&self, worlds: #path::world::unsafe_world_cell::UnsafeWorldsCell<'world>) -> <#struct_name #ty_generics as #path::system::SystemParam>::World<'world> {
-                    <Self as #path::system::GetGlobal<#fields_alias::<'w, 's, #punctuated_generic_idents>>>::get_global(self, worlds)
-                }
-            }
-        }
-    };
+    let lifetimes: Vec<_> = generics.lifetimes().collect();
 
     let builder = builder_name.map(|builder_name| {
         let builder_type_parameters: Vec<_> = (0..fields.len()).map(|i| format_ident!("B{i}")).collect();
@@ -404,7 +409,6 @@ pub fn derive_system_param(input: TokenStream) -> TokenStream {
                 #(#fields: #builder_type_parameters,)*
             }
         };
-        let lifetimes: Vec<_> = generics.lifetimes().collect();
         let generic_struct = quote!{ #struct_name <#(#lifetimes,)* #punctuated_generic_idents> };
         let builder_impl = quote!{
             // SAFETY: This delegates to the `SystemParamBuilder` for tuples.
@@ -467,8 +471,8 @@ pub fn derive_system_param(input: TokenStream) -> TokenStream {
                     unsafe { #fields_alias::<'_, '_, #punctuated_generic_idents>::new_archetype(&mut state.state, archetype, archetype_component_access) }
                 }
 
-                fn apply<'w, 's>(state: &'s mut Self::State, system_meta: &#path::system::SystemMeta, worlds: #path::world::unsafe_world_cell::UnsafeWorldsCell<'w>) {
-                    #fields_alias::<'_, '_, #punctuated_generic_idents>::apply(&mut state.state, system_meta, worlds);
+                fn apply<'w, 's>(state: &'s mut Self::State, system_meta: &#path::system::SystemMeta, worlds: #path::world::unsafe_world_cell::UnsafeWorldsCell<'w>, entities: &mut std::sync::Arc<#path::entity::Entities>) {
+                    #fields_alias::<'_, '_, #punctuated_generic_idents>::apply(&mut state.state, system_meta, worlds, entities);
                 }
 
                 fn queue<'w, 's>(state: &'s mut Self::State, system_meta: &#path::system::SystemMeta, world: #path::world::DeferredWorld) {
@@ -495,8 +499,9 @@ pub fn derive_system_param(input: TokenStream) -> TokenStream {
                     state: &'s mut Self::State,
                     system_meta: &#path::system::SystemMeta,
                     world: Self::World<'w>,
+                    entities: &std::sync::Arc<#path::entity::Entities>
                 ) -> Self::Item<'w, 's> {
-                    let (#(#tuple_patterns,)*) = <(#(#tuple_types,)*)>::get_param(&mut state.state, system_meta, world);
+                    let (#(#tuple_patterns,)*) = <(#(#tuple_types,)*)>::get_param(&mut state.state, system_meta, world, entities);
                     #struct_name {
                         #(#fields: #field_locals,)*
                     }
@@ -506,11 +511,37 @@ pub fn derive_system_param(input: TokenStream) -> TokenStream {
             // Safety: Each field is `ReadOnlySystemParam`, so this can only read from the `World`
             unsafe impl<'w, 's, #punctuated_generics> #path::system::ReadOnlySystemParam for #struct_name #ty_generics #read_only_where_clause {}
 
-            impl<'w, 's, #punctuated_generics> #path::system::IntoSystemParamTuple for #struct_name #ty_generics #where_clause {
-                type Tuple = #fields_alias::<'w, 's, #punctuated_generic_idents>;
+            impl<'w, 's, #(#system_param_generics: #path::system::GetGlobal<#tuple_types>,)* #punctuated_generics> #path::system::GetGlobal<#struct_name <#(#lifetimes,)* #punctuated_generic_idents>> for (#(#system_param_generics,)*) #where_clause {
+                fn get_global<'world>(&self, _worlds: #path::world::unsafe_world_cell::UnsafeWorldsCell<'world>) -> <#fields_alias::<'static, 'static, #punctuated_generic_idents> as #path::system::SystemParam>::World<'world> {
+                    ((#(#system_param_generics::get_global(&self.#id_index, _worlds),)*))
+                }
             }
 
-            #get_global_impl
+            impl<'w, 's, #(#system_param_generics: #path::system::GetLocal<#tuple_types>,)* #punctuated_generics> #path::system::GetLocal<#struct_name <#(#lifetimes,)* #punctuated_generic_idents>> for (#(#system_param_generics,)*) #where_clause {
+                fn get_local<'world>(&self, _world: #path::world::unsafe_world_cell::UnsafeWorldCell<'world>) -> <#fields_alias::<'static, 'static, #punctuated_generic_idents> as #path::system::SystemParam>::World<'world> {
+                    ((#(#system_param_generics::get_local(&self.#id_index, _world),)*))
+                }
+            }
+
+            impl<'w, 's, #punctuated_generics> #path::system::GetGlobal<#struct_name <#(#lifetimes,)* #punctuated_generic_idents>> for #path::system::fetch::Local
+            #get_global_where_clause
+            {
+                fn get_global<'world>(&self, _worlds: #path::world::unsafe_world_cell::UnsafeWorldsCell<'world>) -> <#fields_alias::<'static, 'static, #punctuated_generic_idents> as #path::system::SystemParam>::World<'world> {
+                    ((#(<#path::system::fetch::Local as #path::system::GetGlobal<#tuple_types>>::get_global(&self, _worlds),)*))
+                }
+            }
+
+            impl<'w, 's, #punctuated_generics> #path::system::GetLocal<#struct_name <#(#lifetimes,)* #punctuated_generic_idents>> for #path::system::fetch::Local
+            #get_local_where_clause
+            {
+                fn get_local<'world>(&self, _world: #path::world::unsafe_world_cell::UnsafeWorldCell<'world>) -> <#fields_alias::<'static, 'static, #punctuated_generic_idents> as #path::system::SystemParam>::World<'world> {
+                    ((#(<#path::system::fetch::Local as #path::system::GetLocal<#tuple_types>>::get_local(&self, _world),)*))
+                }
+            }
+
+            impl<'w, 's, #punctuated_generics> #path::system::SystemParamTupleType for #struct_name <#(#lifetimes,)* #punctuated_generic_idents> #where_clause {
+                type Tuple = #fields_alias::<'w, 's, #punctuated_generic_idents>;
+            }
 
             #builder_impl
         };

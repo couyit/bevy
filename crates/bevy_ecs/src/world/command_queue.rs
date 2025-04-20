@@ -1,4 +1,5 @@
 use crate::{
+    entity::Entities,
     system::{Command, SystemBuffer, SystemMeta},
     world::{DeferredWorld, World},
 };
@@ -11,6 +12,7 @@ use core::{
     ptr::{addr_of_mut, NonNull},
 };
 use log::warn;
+use std::sync::Arc;
 
 struct CommandMeta {
     /// SAFETY: The `value` must point to a value of type `T: Command`,
@@ -19,8 +21,12 @@ struct CommandMeta {
     /// `world` is optional to allow this one function pointer to perform double-duty as a drop.
     ///
     /// Advances `cursor` by the size of `T` in bytes.
-    consume_command_and_get_size:
-        unsafe fn(value: OwningPtr<Unaligned>, world: Option<NonNull<World>>, cursor: &mut usize),
+    consume_command_and_get_size: unsafe fn(
+        value: OwningPtr<Unaligned>,
+        world: Option<NonNull<World>>,
+        entities: Option<NonNull<Entities>>,
+        cursor: &mut usize,
+    ),
 }
 
 /// Densely and efficiently stores a queue of heterogenous types implementing [`Command`].
@@ -159,7 +165,7 @@ impl RawCommandQueue {
         }
 
         let meta = CommandMeta {
-            consume_command_and_get_size: |command, world, cursor| {
+            consume_command_and_get_size: |command, world, entities, cursor| {
                 *cursor += size_of::<C>();
 
                 // SAFETY: According to the invariants of `CommandMeta.consume_command_and_get_size`,
@@ -168,13 +174,15 @@ impl RawCommandQueue {
                 match world {
                     // Apply command to the provided world...
                     Some(mut world) => {
+                        let mut entities = entities.unwrap();
+
                         // SAFETY: Caller ensures pointer is not null
                         let world = unsafe { world.as_mut() };
                         command.apply(world);
                         // The command may have queued up world commands, which we flush here to ensure they are also picked up.
                         // If the current command queue already the World Command queue, this will still behave appropriately because the global cursor
                         // is still at the current `stop`, ensuring only the newly queued Commands will be applied.
-                        world.flush();
+                        world.flush(unsafe { entities.as_mut() });
                     }
                     // ...or discard it.
                     None => drop(command),
@@ -230,6 +238,16 @@ impl RawCommandQueue {
         // the remaining commands currently in this list. This is safe.
         *self.cursor.as_mut() = stop;
 
+        let mut guard;
+
+        let entities = match world {
+            Some(world) => Some({
+                guard = unsafe { world.as_ref() }.entities.write();
+                Arc::get_mut(guard.as_mut().unwrap()).unwrap().into()
+            }),
+            None => None,
+        };
+
         while local_cursor < stop {
             // SAFETY: The cursor is either at the start of the buffer, or just after the previous command.
             // Since we know that the cursor is in bounds, it must point to the start of a new command.
@@ -260,7 +278,9 @@ impl RawCommandQueue {
                 // This also advances the cursor past the command. For ZSTs, the cursor will not move.
                 // At this point, it will either point to the next `CommandMeta`,
                 // or the cursor will be out of bounds and the loop will end.
-                unsafe { (meta.consume_command_and_get_size)(cmd, world, &mut local_cursor) };
+                unsafe {
+                    (meta.consume_command_and_get_size)(cmd, world, entities, &mut local_cursor)
+                };
             });
 
             #[cfg(feature = "std")]
@@ -320,15 +340,15 @@ impl Drop for CommandQueue {
 
 impl SystemBuffer for CommandQueue {
     #[inline]
-    fn apply(&mut self, _system_meta: &SystemMeta, worlds: DeferredWorld) {
+    fn apply(&mut self, _system_meta: &SystemMeta, world: &mut World) {
         #[cfg(feature = "trace")]
         let _span_guard = _system_meta.commands_span.enter();
-        self.apply(worlds);
+        self.apply(world);
     }
 
     #[inline]
-    fn queue(&mut self, _system_meta: &SystemMeta, mut worlds: DeferredWorld) {
-        worlds.component_commands().append(self);
+    fn queue(&mut self, _system_meta: &SystemMeta, mut world: DeferredWorld) {
+        world.commands().append(self);
     }
 }
 
