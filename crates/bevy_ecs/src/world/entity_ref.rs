@@ -1087,13 +1087,14 @@ unsafe impl EntityEquivalent for EntityMut<'_> {}
 /// See also [`EntityMut`], which allows disjoint mutable access to multiple
 /// entities at once.  Unlike `EntityMut`, this type allows adding and
 /// removing components, and despawning the entity.
-pub struct EntityWorldMut<'w> {
+pub struct EntityWorldMut<'w, 'e> {
     world: &'w mut World,
+    entities: &'e mut Entities,
     entity: Entity,
     location: EntityLocation,
 }
 
-impl<'w> EntityWorldMut<'w> {
+impl<'w, 'e> EntityWorldMut<'w, 'e> {
     #[track_caller]
     #[inline(never)]
     #[cold]
@@ -1102,7 +1103,7 @@ impl<'w> EntityWorldMut<'w> {
             "Entity {} {}",
             self.entity,
             self.world
-                .entities()
+                .get_entities()
                 .entity_does_not_exist_error_details(self.entity)
         );
     }
@@ -1149,14 +1150,16 @@ impl<'w> EntityWorldMut<'w> {
     #[inline]
     pub(crate) unsafe fn new(
         world: &'w mut World,
+        entities: &'e mut Entities,
         entity: Entity,
         location: EntityLocation,
     ) -> Self {
-        debug_assert!(world.entities().contains(entity));
-        debug_assert_eq!(world.entities().get(entity), Some(location));
+        debug_assert!(world.get_entities().contains(entity));
+        debug_assert_eq!(world.get_entities().get(entity), Some(location));
 
         EntityWorldMut {
             world,
+            entities,
             entity,
             location,
         }
@@ -1392,7 +1395,7 @@ impl<'w> EntityWorldMut<'w> {
 
         let result = self
             .world
-            .modify_component(self.entity, f)
+            .modify_component(self.entity, f, self.entities)
             .expect("entity access must be valid")?;
 
         self.update_location();
@@ -1424,7 +1427,7 @@ impl<'w> EntityWorldMut<'w> {
 
         let result = self
             .world
-            .modify_component_by_id(self.entity, component_id, f)
+            .modify_component_by_id(self.entity, component_id, f, self.entities)
             .expect("entity access must be valid")?;
 
         self.update_location();
@@ -1786,10 +1789,11 @@ impl<'w> EntityWorldMut<'w> {
                 mode,
                 caller,
                 relationship_hook_mode,
+                self.entities,
             )
         };
         self.location = location;
-        self.world.flush();
+        self.world.flush(self.entities);
         self.update_location();
         after_effect.apply(self);
         self
@@ -2725,7 +2729,7 @@ impl<'w> EntityWorldMut<'w> {
     pub fn update_location(&mut self) {
         self.location = self
             .world
-            .entities()
+            .get_entities()
             .get(self.entity)
             .unwrap_or(EntityLocation::INVALID);
     }
@@ -2914,7 +2918,7 @@ impl<'w> EntityWorldMut<'w> {
     ) -> Entity {
         self.assert_not_despawned();
 
-        let entity_clone = self.world.entities().reserve_entity();
+        let entity_clone = self.world.get_entities().reserve_entity();
         self.world.flush();
 
         let mut builder = EntityCloner::build(self.world);
@@ -2975,7 +2979,7 @@ impl<'w> EntityWorldMut<'w> {
     /// Returns the source code location from which this entity has last been spawned.
     pub fn spawned_by(&self) -> MaybeLocation {
         self.world()
-            .entities()
+            .get_entities()
             .entity_get_spawned_or_despawned_by(self.entity)
             .map(|location| location.unwrap())
     }

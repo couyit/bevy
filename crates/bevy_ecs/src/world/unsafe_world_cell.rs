@@ -338,7 +338,7 @@ impl<'w> UnsafeWorldCell<'w> {
     pub fn entities(self) -> EntitiesRef {
         // SAFETY:
         // - we only access world metadata
-        unsafe { self.world_metadata() }.entities()
+        unsafe { self.world_metadata() }.get_entities()
     }
 
     /// Retrieves this world's [`Archetypes`] collection.

@@ -228,7 +228,11 @@ impl RawCommandQueue {
     ///
     /// * Caller ensures that `self` has not outlived the underlying queue
     #[inline]
-    pub(crate) unsafe fn apply_or_drop_queued(&mut self, world: Option<NonNull<World>>) {
+    pub(crate) unsafe fn apply_or_drop_queued(
+        &mut self,
+        world: Option<NonNull<World>>,
+        entities: Option<NonNull<Entities>>,
+    ) {
         // SAFETY: If this is the command queue on world, world will not be dropped as we have a mutable reference
         // If this is not the command queue on world we have exclusive ownership and self will not be mutated
         let start = *self.cursor.as_ref();
@@ -237,16 +241,6 @@ impl RawCommandQueue {
         // SAFETY: we are setting the global cursor to the current length to prevent the executing commands from applying
         // the remaining commands currently in this list. This is safe.
         *self.cursor.as_mut() = stop;
-
-        let mut guard;
-
-        let entities = match world {
-            Some(world) => Some({
-                guard = unsafe { world.as_ref() }.entities.write();
-                Arc::get_mut(guard.as_mut().unwrap()).unwrap().into()
-            }),
-            None => None,
-        };
 
         while local_cursor < stop {
             // SAFETY: The cursor is either at the start of the buffer, or just after the previous command.

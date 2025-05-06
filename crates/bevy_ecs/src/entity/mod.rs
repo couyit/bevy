@@ -84,9 +84,16 @@ use crate::{
 };
 use alloc::vec::Vec;
 use bevy_platform::sync::atomic::Ordering;
-use core::{fmt, hash::Hash, mem, num::NonZero, ops::Deref, panic::Location};
+use core::{
+    fmt,
+    hash::Hash,
+    mem,
+    num::NonZero,
+    ops::{Deref, DerefMut},
+    panic::Location,
+};
 use log::warn;
-use std::sync::Arc;
+use std::sync::{Arc, RwLockWriteGuard};
 
 #[cfg(feature = "serialize")]
 use serde::{Deserialize, Serialize};
@@ -596,6 +603,22 @@ impl Deref for EntitiesRef {
 impl From<Arc<Entities>> for EntitiesRef {
     fn from(value: Arc<Entities>) -> Self {
         EntitiesRef(value)
+    }
+}
+
+pub struct EntitiesMut<'a>(pub(crate) RwLockWriteGuard<'a, Arc<Entities>>);
+
+impl<'a> Deref for EntitiesMut<'a> {
+    type Target = Entities;
+
+    fn deref(&self) -> &Self::Target {
+        &**self.0
+    }
+}
+
+impl<'a> DerefMut for EntitiesMut<'a> {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        Arc::get_mut(&mut *self.0).unwrap()
     }
 }
 

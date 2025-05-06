@@ -17,7 +17,7 @@ pub mod reflect;
 use crate::{
     change_detection::TicksMut,
     component::ComponentTicks,
-    entity::EntitiesRef,
+    entity::EntitiesMut,
     storage::{ResourceData, Resources, SparseSetIndex, SparseSets, Tables},
     system::Systems,
 };
@@ -109,7 +109,7 @@ impl Default for Worlds {
     fn default() -> Self {
         let mut worlds = Self {
             id: WorldsId::new().unwrap(),
-            entities: RwLock::new(Arc::new(Entities::new())),
+            entities: Arc::new(RwLock::new(Arc::new(Entities::new()))),
             worlds: Vec::with_capacity(2),
             systems: Default::default(),
         };
@@ -201,7 +201,7 @@ pub enum Storage {
 pub struct World {
     id: WorldId,
     pub(crate) entities: Arc<RwLock<Arc<Entities>>>,
-    // Present only while the system runs.
+    // Present only while the system runs. (readonly)
     pub(crate) entities_temp: Option<Arc<Entities>>,
     pub(crate) components: Components,
     pub(crate) component_ids: ComponentIds,
@@ -218,7 +218,7 @@ pub struct World {
 impl Drop for World {
     fn drop(&mut self) {
         // SAFETY: Not passing a pointer so the argument is always valid
-        unsafe { self.command_queue.apply_or_drop_queued(None) };
+        unsafe { self.command_queue.apply_or_drop_queued(None, None) };
         // SAFETY: Pointers in internal command queue are only invalidated here
         drop(unsafe { Box::from_raw(self.command_queue.bytes.as_ptr()) });
         // SAFETY: Pointers in internal command queue are only invalidated here
@@ -827,6 +827,17 @@ impl World {
         )
     }
 
+    fn get_entities(&self) -> Arc<Entities> {
+        self.entities_temp
+            .as_ref()
+            .expect("entities_temp is empty.")
+            .clone()
+    }
+
+    fn get_entities_mut(&self) -> EntitiesMut<'_> {
+        EntitiesMut(self.entities.write().unwrap())
+    }
+
     /// Retrieves this world's [`Archetypes`] collection.
     #[inline]
     pub fn archetypes(&self) -> &Archetypes {
@@ -913,7 +924,9 @@ impl World {
     #[inline]
     pub fn commands(&mut self) -> Commands {
         // SAFETY: command_queue is stored on world and always valid while the world exists
-        unsafe { Commands::new_raw_from_entities(self.command_queue.clone(), self.entities()) }
+        unsafe {
+            Commands::new_raw_from_entities(self.command_queue.clone(), self.get_entities().into())
+        }
     }
 
     /// Returns [`EntityRef`]s that expose read-only operations for the given
@@ -1022,7 +1035,11 @@ impl World {
         fn panic_no_entity(world: &World, entity: Entity) -> ! {
             panic!(
                 "Entity {entity} {}",
-                world.entities().entity_does_not_exist_error_details(entity)
+                world
+                    .entities
+                    .read()
+                    .unwrap()
+                    .entity_does_not_exist_error_details(entity)
             );
         }
 
@@ -1171,10 +1188,11 @@ impl World {
         &self,
         entity: Entity,
     ) -> Result<impl Iterator<Item = &ComponentInfo>, EntityDoesNotExistError> {
-        let entity_location = self
-            .entities()
-            .get(entity)
-            .ok_or(EntityDoesNotExistError::new(entity, self.entities()))?;
+        let entities = self.entities.read().unwrap();
+        let entity_location = entities.get(entity).ok_or(EntityDoesNotExistError::new(
+            entity,
+            entities.clone().into(),
+        ))?;
 
         let archetype = self
             .archetypes()
@@ -1345,7 +1363,7 @@ impl World {
     /// for &target in entity.get::<Targets>().unwrap().0.iter() {
     ///     commands.entity(target).insert(TargetedBy(eid));
     /// }
-    /// # world.flush();
+    /// # world.flush(entities);
     /// # assert_eq!(world.get::<TargetedBy>(e1).unwrap().0, eid);
     /// # assert_eq!(world.get::<TargetedBy>(e2).unwrap().0, eid);
     /// ```
@@ -1435,10 +1453,10 @@ impl World {
     /// ```
     #[track_caller]
     pub fn spawn_empty(&mut self, entities: &mut Entities) -> EntityWorldMut {
-        self.flush();
+        self.flush(entities);
         let entity = entities.alloc();
         // SAFETY: entity was just allocated
-        unsafe { self.spawn_at_empty_internal(entity, MaybeLocation::caller()) }
+        unsafe { self.spawn_at_empty_internal(entity, MaybeLocation::caller(), entities) }
     }
 
     /// # Safety
@@ -1447,6 +1465,7 @@ impl World {
         &mut self,
         entity: Entity,
         caller: MaybeLocation,
+        entities: &mut Entities,
     ) -> EntityWorldMut {
         match self.storage {
             Storage::Components {
@@ -1692,14 +1711,14 @@ impl World {
     /// # Panics
     /// This will panic if any of the queued commands are [`spawn`](Commands::spawn).
     /// If this is possible, you should instead use [`flush`](Self::flush).
-    pub(crate) fn flush_commands(&mut self) {
+    pub(crate) fn flush_commands(&mut self, entities: &mut Entities) {
         // SAFETY: `self.command_queue` is only de-allocated in `World`'s `Drop`
         if !unsafe { self.command_queue.is_empty() } {
             // SAFETY: `self.command_queue` is only de-allocated in `World`'s `Drop`
             unsafe {
                 self.command_queue
                     .clone()
-                    .apply_or_drop_queued(Some(self.into()));
+                    .apply_or_drop_queued(Some(self.into()), Some(entities.into()));
             };
         }
     }
@@ -1718,9 +1737,9 @@ impl World {
     /// Queued entities will be spawned, and then commands will be applied.
     #[inline]
     pub fn flush(&mut self, entities: &mut Entities) {
-        self.flush_entities();
+        self.flush_entities(entities);
         self.flush_components();
-        self.flush_commands();
+        self.flush_commands(entities);
     }
 
     /// Registers all of the components in the given [`Bundle`] and returns both the component
@@ -1831,15 +1850,16 @@ impl World {
     }
 
     pub fn clear(&mut self) {
+        let mut guard = self.entities.write().unwrap();
+        Arc::get_mut(&mut *guard).unwrap().clear();
+
         match self.storage {
             Storage::Components {
-                ref mut entities,
                 ref mut archetypes,
                 ref mut sparse_sets,
                 ref mut tables,
                 ..
             } => {
-                entities.clear();
                 archetypes.clear_entities();
                 sparse_sets.clear_entities();
                 tables.clear();
@@ -1945,34 +1965,34 @@ impl World {
     /// assert_eq!(position.x, 2.0);
     /// ```
     #[track_caller]
-    pub fn spawn<B: Bundle>(&mut self, bundle: B) -> EntityWorldMut {
-        self.spawn_with_caller::<B>(bundle, MaybeLocation::caller())
+    pub fn spawn<B: Bundle>(&mut self, bundle: B, entities: &mut Entities) -> EntityWorldMut {
+        self.spawn_with_caller::<B>(bundle, MaybeLocation::caller(), entities)
     }
 
     pub(crate) fn spawn_with_caller<B: Bundle>(
         &mut self,
         bundle: B,
         caller: MaybeLocation,
+        entities: &mut Entities,
     ) -> EntityWorldMut {
-        self.flush();
+        self.flush(entities);
         let change_tick = self.change_tick();
-        let entity = self.entities_mut().alloc();
+        let entity = entities.alloc();
         let mut bundle_spawner = BundleSpawner::new::<B>(self, change_tick);
         // SAFETY: bundle's type matches `bundle_info`, entity is allocated but non-existent
         let (mut entity_location, after_effect) =
-            unsafe { bundle_spawner.spawn_non_existent(entity, bundle, caller) };
+            unsafe { bundle_spawner.spawn_non_existent(entity, bundle, caller, entities) };
 
         // SAFETY: command_queue is not referenced anywhere else
         if !unsafe { self.command_queue.is_empty() } {
-            self.flush();
+            self.flush(entities);
             entity_location = self
-                .entities()
+                .get_entities()
                 .get(entity)
                 .unwrap_or(EntityLocation::INVALID);
         }
 
-        self.entities_mut()
-            .set_spawned_or_despawned_by(entity.index(), caller);
+        entities.set_spawned_or_despawned_by(entity.index(), caller);
 
         // SAFETY: entity and location are valid, as they were just created above
         let mut entity = unsafe { EntityWorldMut::new(self, entity, entity_location) };
@@ -2047,9 +2067,13 @@ impl World {
         &mut self,
         entity: Entity,
         f: impl FnOnce(&mut T) -> R,
+        entities: &mut Entities,
     ) -> Result<Option<R>, EntityMutableFetchError> {
-        let result = DeferredWorld::from(self).modify_component(entity, f)?;
-        self.flush();
+        let mut world = DeferredWorld::from(&mut *self);
+
+        let result = world.modify_component(entity, f)?;
+
+        self.flush(entities);
         Ok(result)
     }
 
@@ -2073,12 +2097,13 @@ impl World {
         entity: Entity,
         component_id: ComponentId,
         f: impl for<'a> FnOnce(MutUntyped<'a>) -> R,
+        entities: &mut Entities,
     ) -> Result<Option<R>, EntityMutableFetchError> {
-        let mut world = DeferredWorld::from(self);
+        let mut world = DeferredWorld::from(&mut *self);
 
         let result = world.modify_component_by_id(entity, component_id, f)?;
 
-        self.flush();
+        self.flush(entities);
         Ok(result)
     }
 
@@ -2110,8 +2135,8 @@ impl World {
     /// ```
     #[track_caller]
     #[inline]
-    pub fn despawn(&mut self, entity: Entity) -> bool {
-        if let Err(error) = self.despawn_with_caller(entity, MaybeLocation::caller()) {
+    pub fn despawn(&mut self, entity: Entity, entities: &mut Entities) -> bool {
+        if let Err(error) = self.despawn_with_caller(entity, MaybeLocation::caller(), entities) {
             warn!("{error}");
             false
         } else {
@@ -2130,8 +2155,12 @@ impl World {
     /// to despawn descendants. For example, this will recursively despawn [`Children`](crate::hierarchy::Children).
     #[track_caller]
     #[inline]
-    pub fn try_despawn(&mut self, entity: Entity) -> Result<(), EntityDespawnError> {
-        self.despawn_with_caller(entity, MaybeLocation::caller())
+    pub fn try_despawn(
+        &mut self,
+        entity: Entity,
+        entities: &mut Entities,
+    ) -> Result<(), EntityDespawnError> {
+        self.despawn_with_caller(entity, MaybeLocation::caller(), entities)
     }
 
     #[inline]
@@ -2139,8 +2168,9 @@ impl World {
         &mut self,
         entity: Entity,
         caller: MaybeLocation,
+        entities: &mut Entities,
     ) -> Result<(), EntityDespawnError> {
-        self.flush();
+        self.flush(entities);
         let entity = self.get_entity_mut(entity)?;
         entity.despawn_with_caller(caller);
         Ok(())
@@ -2179,7 +2209,11 @@ impl World {
     #[deprecated(
         note = "This can cause extreme performance problems when used with lots of arbitrary free entities. See #18054 on GitHub."
     )]
-    pub fn insert_or_spawn_batch<I, B>(&mut self, iter: I) -> Result<(), Vec<Entity>>
+    pub fn insert_or_spawn_batch<I, B>(
+        &mut self,
+        iter: I,
+        entities: &mut Entities,
+    ) -> Result<(), Vec<Entity>>
     where
         I: IntoIterator,
         I::IntoIter: Iterator<Item = (Entity, B)>,
@@ -2189,7 +2223,7 @@ impl World {
             deprecated,
             reason = "This needs to be supported for now, and the outer function is deprecated too."
         )]
-        self.insert_or_spawn_batch_with_caller::<I, B>(iter, MaybeLocation::caller())
+        self.insert_or_spawn_batch_with_caller::<I, B>(iter, MaybeLocation::caller(), entities)
     }
 
     /// Split into a new function so we can pass the calling location into the function when using
@@ -2202,13 +2236,14 @@ impl World {
         &mut self,
         iter: I,
         caller: MaybeLocation,
+        entities: &mut Entities,
     ) -> Result<(), Vec<Entity>>
     where
         I: IntoIterator,
         I::IntoIter: Iterator<Item = (Entity, B)>,
         B: Bundle<Effect: NoBundleEffect>,
     {
-        self.flush();
+        self.flush(entities);
         let change_tick = self.change_tick();
 
         // SAFETY: These come from the same world. `Self.components_registrator` can't be used since we borrow other fields too.
@@ -2229,14 +2264,6 @@ impl World {
             Insert(BundleInserter<'w>, ArchetypeId),
         }
 
-        impl<'w> SpawnOrInsert<'w> {
-            fn entities(&mut self) -> &mut Entities {
-                match self {
-                    SpawnOrInsert::Spawn(spawner) => spawner.entities(),
-                    SpawnOrInsert::Insert(inserter, _) => inserter.entities(),
-                }
-            }
-        }
         // SAFETY: we initialized this bundle_id in `init_info`
         let mut spawn_or_insert = SpawnOrInsert::Spawn(unsafe {
             BundleSpawner::new_with_id(self.as_unsafe_world_cell(), bundle_id, change_tick)
@@ -2248,10 +2275,7 @@ impl World {
                 deprecated,
                 reason = "This needs to be supported for now, and the outer function is deprecated too."
             )]
-            match spawn_or_insert
-                .entities()
-                .alloc_at_without_replacement(entity)
-            {
+            match entities.alloc_at_without_replacement(entity) {
                 AllocAtWithoutReplacement::Exists(location) => {
                     match spawn_or_insert {
                         SpawnOrInsert::Insert(ref mut inserter, archetype)
@@ -2266,6 +2290,7 @@ impl World {
                                     InsertMode::Replace,
                                     caller,
                                     RelationshipHookMode::Run,
+                                    entities,
                                 )
                             };
                         }
@@ -2288,6 +2313,7 @@ impl World {
                                     InsertMode::Replace,
                                     caller,
                                     RelationshipHookMode::Run,
+                                    entities,
                                 )
                             };
                             spawn_or_insert =
@@ -2298,7 +2324,7 @@ impl World {
                 AllocAtWithoutReplacement::DidNotExist => {
                     if let SpawnOrInsert::Spawn(ref mut spawner) = spawn_or_insert {
                         // SAFETY: `entity` is allocated (but non existent), bundle matches inserter
-                        unsafe { spawner.spawn_non_existent(entity, bundle, caller) };
+                        unsafe { spawner.spawn_non_existent(entity, bundle, caller, entities) };
                     } else {
                         // SAFETY: we initialized this bundle_id in `init_info`
                         let mut spawner = unsafe {
@@ -2309,7 +2335,7 @@ impl World {
                             )
                         };
                         // SAFETY: `entity` is valid, `location` matches entity, bundle matches inserter
-                        unsafe { spawner.spawn_non_existent(entity, bundle, caller) };
+                        unsafe { spawner.spawn_non_existent(entity, bundle, caller, entities) };
                         spawn_or_insert = SpawnOrInsert::Spawn(spawner);
                     }
                 }
@@ -2342,13 +2368,18 @@ impl World {
     ///
     /// For the fallible version, see [`World::try_insert_batch`].
     #[track_caller]
-    pub fn insert_batch<I, B>(&mut self, batch: I)
+    pub fn insert_batch<I, B>(&mut self, batch: I, entities: &mut Entities)
     where
         I: IntoIterator,
         I::IntoIter: Iterator<Item = (Entity, B)>,
         B: Bundle<Effect: NoBundleEffect>,
     {
-        self.insert_batch_with_caller::<I, B>(batch, InsertMode::Replace, MaybeLocation::caller());
+        self.insert_batch_with_caller::<I, B>(
+            batch,
+            InsertMode::Replace,
+            MaybeLocation::caller(),
+            entities,
+        );
     }
 
     /// For a given batch of ([`Entity`], [`Bundle`]) pairs,
@@ -2367,13 +2398,18 @@ impl World {
     ///
     /// For the fallible version, see [`World::try_insert_batch_if_new`].
     #[track_caller]
-    pub fn insert_batch_if_new<I, B>(&mut self, batch: I)
+    pub fn insert_batch_if_new<I, B>(&mut self, batch: I, entities: &mut Entities)
     where
         I: IntoIterator,
         I::IntoIter: Iterator<Item = (Entity, B)>,
         B: Bundle<Effect: NoBundleEffect>,
     {
-        self.insert_batch_with_caller::<I, B>(batch, InsertMode::Keep, MaybeLocation::caller());
+        self.insert_batch_with_caller::<I, B>(
+            batch,
+            InsertMode::Keep,
+            MaybeLocation::caller(),
+            entities,
+        );
     }
 
     /// Split into a new function so we can differentiate the calling location.
@@ -2387,6 +2423,7 @@ impl World {
         batch: I,
         insert_mode: InsertMode,
         caller: MaybeLocation,
+        entities: &mut Entities,
     ) where
         I: IntoIterator,
         I::IntoIter: Iterator<Item = (Entity, B)>,
@@ -2397,7 +2434,7 @@ impl World {
             archetype_id: ArchetypeId,
         }
 
-        self.flush();
+        self.flush(entities);
         let change_tick = self.change_tick();
         // SAFETY: These come from the same world. `Self.components_registrator` can't be used since we borrow other fields too.
         let mut registrator =
@@ -2405,7 +2442,6 @@ impl World {
 
         let (entities, bundle_id) = match self.storage {
             Storage::Components {
-                ref mut entities,
                 ref mut bundles,
                 ref mut sparse_sets,
                 ..
@@ -2441,11 +2477,12 @@ impl World {
                         insert_mode,
                         caller,
                         RelationshipHookMode::Run,
+                        entities,
                     )
                 };
 
                 for (entity, bundle) in batch_iter {
-                    if let Some(location) = cache.inserter.entities().get(entity) {
+                    if let Some(location) = entities.get(entity) {
                         if location.archetype_id != cache.archetype_id {
                             cache = InserterArchetypeCache {
                                 // SAFETY: we initialized this bundle_id in `register_info`
@@ -2469,6 +2506,7 @@ impl World {
                                 insert_mode,
                                 caller,
                                 RelationshipHookMode::Run,
+                                entities,
                             )
                         };
                     } else {
@@ -2495,7 +2533,11 @@ impl World {
     ///
     /// For the panicking version, see [`World::insert_batch`].
     #[track_caller]
-    pub fn try_insert_batch<I, B>(&mut self, batch: I) -> Result<(), TryInsertBatchError>
+    pub fn try_insert_batch<I, B>(
+        &mut self,
+        batch: I,
+        entities: &mut Entities,
+    ) -> Result<(), TryInsertBatchError>
     where
         I: IntoIterator,
         I::IntoIter: Iterator<Item = (Entity, B)>,
@@ -2505,6 +2547,7 @@ impl World {
             batch,
             InsertMode::Replace,
             MaybeLocation::caller(),
+            entities,
         )
     }
     /// For a given batch of ([`Entity`], [`Bundle`]) pairs,
@@ -2521,13 +2564,22 @@ impl World {
     ///
     /// For the panicking version, see [`World::insert_batch_if_new`].
     #[track_caller]
-    pub fn try_insert_batch_if_new<I, B>(&mut self, batch: I) -> Result<(), TryInsertBatchError>
+    pub fn try_insert_batch_if_new<I, B>(
+        &mut self,
+        batch: I,
+        entities: &mut Entities,
+    ) -> Result<(), TryInsertBatchError>
     where
         I: IntoIterator,
         I::IntoIter: Iterator<Item = (Entity, B)>,
         B: Bundle<Effect: NoBundleEffect>,
     {
-        self.try_insert_batch_with_caller::<I, B>(batch, InsertMode::Keep, MaybeLocation::caller())
+        self.try_insert_batch_with_caller::<I, B>(
+            batch,
+            InsertMode::Keep,
+            MaybeLocation::caller(),
+            entities,
+        )
     }
 
     /// Split into a new function so we can differentiate the calling location.
@@ -2545,6 +2597,7 @@ impl World {
         batch: I,
         insert_mode: InsertMode,
         caller: MaybeLocation,
+        entities: &mut Entities,
     ) -> Result<(), TryInsertBatchError>
     where
         I: IntoIterator,
@@ -2556,7 +2609,7 @@ impl World {
             archetype_id: ArchetypeId,
         }
 
-        self.flush();
+        self.flush(entities);
         let change_tick = self.change_tick();
         // SAFETY: These come from the same world. `Self.components_registrator` can't be used since we borrow other fields too.
         let mut registrator =
@@ -2564,7 +2617,6 @@ impl World {
 
         let (entities, bundle_id) = match self.storage {
             Storage::Components {
-                ref mut entities,
                 ref mut bundles,
                 ref mut sparse_sets,
                 ..
@@ -2605,6 +2657,7 @@ impl World {
                             insert_mode,
                             caller,
                             RelationshipHookMode::Run,
+                            entities,
                         )
                     };
                     break Some(cache);
@@ -2618,7 +2671,7 @@ impl World {
 
         if let Some(mut cache) = cache {
             for (entity, bundle) in batch_iter {
-                if let Some(location) = cache.inserter.entities().get(entity) {
+                if let Some(location) = entities.get(entity) {
                     if location.archetype_id != cache.archetype_id {
                         cache = InserterArchetypeCache {
                             // SAFETY: we initialized this bundle_id in `register_info`
@@ -2642,6 +2695,7 @@ impl World {
                             insert_mode,
                             caller,
                             RelationshipHookMode::Run,
+                            entities,
                         )
                     };
                 } else {
@@ -2660,7 +2714,7 @@ impl World {
         }
     }
 
-    fn new_for_resources(id: WorldId, entities: Arc<Entities>) -> Self {
+    fn new_for_resources(id: WorldId, entities: Arc<RwLock<Arc<Entities>>>) -> Self {
         let mut world = Self::new_for_storage(
             id,
             entities,
@@ -4119,9 +4173,12 @@ mod tests {
 
         let res = std::panic::catch_unwind(|| {
             let mut worlds = Worlds::new();
-            let world = worlds.get_world_mut(worlds.create_world());
+            let id = worlds.create_world();
+            let entities_ref = worlds.entities.write().unwrap();
+            let entities = Arc::get_mut(&mut entities_ref).unwrap();
+            let world = worlds.get_world_mut(id);
             world
-                .spawn_empty()
+                .spawn_empty(entities)
                 .insert(helper.make_component(true, 0))
                 .insert(helper.make_component(false, 1));
 
@@ -4688,23 +4745,31 @@ mod tests {
         let world = worlds.get_world_mut(worlds.create_world());
         let entity = world.spawn_empty().id();
         assert_eq!(
-            world.entities().entity_get_spawned_or_despawned_by(entity),
+            world
+                .get_entities()
+                .entity_get_spawned_or_despawned_by(entity),
             MaybeLocation::new(Some(Location::caller()))
         );
         world.despawn(entity);
         assert_eq!(
-            world.entities().entity_get_spawned_or_despawned_by(entity),
+            world
+                .get_entities()
+                .entity_get_spawned_or_despawned_by(entity),
             MaybeLocation::new(Some(Location::caller()))
         );
         let new = world.spawn_empty().id();
         assert_eq!(entity.index(), new.index());
         assert_eq!(
-            world.entities().entity_get_spawned_or_despawned_by(entity),
+            world
+                .get_entities()
+                .entity_get_spawned_or_despawned_by(entity),
             MaybeLocation::new(None)
         );
         world.despawn(new);
         assert_eq!(
-            world.entities().entity_get_spawned_or_despawned_by(entity),
+            world
+                .get_entities()
+                .entity_get_spawned_or_despawned_by(entity),
             MaybeLocation::new(None)
         );
     }
@@ -4737,7 +4802,7 @@ mod tests {
         commands.entity(eid).despawn();
         assert_eq!(emut.get::<Foo>().unwrap(), &Foo(35));
 
-        world.flush();
+        world.flush(entities);
         worlds.flush_commands();
 
         assert!(world.get_entity(eid).is_err());
@@ -4760,7 +4825,7 @@ mod tests {
         commands.entity(eid).despawn();
         assert_eq!(emut.get::<Foo>().unwrap(), &Foo(1));
 
-        world.flush();
+        world.flush(entities);
 
         assert!(world.get_entity(eid).is_err());
     }

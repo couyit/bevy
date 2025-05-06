@@ -121,7 +121,7 @@ const _: () = {
     // SAFETY: Only reads Entities
     unsafe impl SystemParam for Commands<'_> {
         type State = FetchState;
-        type Item<'w, 's> = Commands<'s>;
+        type Item<'w, 's, 'e> = Commands<'s>;
         type World<'w> = (UnsafeWorldCell<'w>, WorldId);
 
         fn shrink_world<'wlong: 'wshort, 'wshort>(
@@ -214,6 +214,24 @@ const _: () = {
     {
     }
 };
+
+impl GetLocal<Commands<'_>> for fetch::Local {
+    fn get_local<'w>(
+        &self,
+        world: UnsafeWorldCell<'w>,
+    ) -> <Commands<'_> as SystemParam>::World<'w> {
+        GetLocal::<Deferred<CommandQueue>>::get_local(self, world)
+    }
+}
+
+impl GetGlobal<Commands<'_>> for fetch::Local {
+    fn get_global<'w>(
+        &self,
+        worlds: UnsafeWorldsCell<'w>,
+    ) -> <Commands<'_> as SystemParam>::World<'w> {
+        GetGlobal::<Deferred<CommandQueue>>::get_global(self, worlds)
+    }
+}
 
 impl GetLocal<Commands<'_>> for (fetch::Local, fetch::Local) {
     fn get_local<'w>(

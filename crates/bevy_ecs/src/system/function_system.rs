@@ -331,7 +331,6 @@ pub struct SystemState<Param: SystemParam + 'static> {
     meta: SystemMeta,
     param_state: Param::State,
     archetype_generation: SparseSet<WorldId, ArchetypeGeneration>,
-    ids: Ids<Param>,
 }
 
 // Allow closure arguments to be inferred.
@@ -387,10 +386,10 @@ all_tuples!(
     P
 );
 
-impl<Param> SystemState<Param>
+impl<Param, Ids> SystemState<Param, Ids>
 where
     Param: SystemParam,
-    Param::W: GetLocal,
+    Ids: GetLocal<Param>,
 {
     /// Creates a new [`SystemState`] with default state.
     ///

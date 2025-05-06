@@ -19,6 +19,7 @@ use crate::{
     query::DebugCheckedUnwrap,
     relationship::RelationshipHookMode,
     storage::{SparseSetIndex, SparseSets, Table, TableRow, Tables},
+    system::Command,
     world::{
         unsafe_world_cell::UnsafeWorldCell, EntityWorldMut, Storage, World, ON_ADD, ON_INSERT,
         ON_REPLACE,
@@ -1127,7 +1128,8 @@ impl<'w> BundleInserter<'w> {
         insert_mode: InsertMode,
         caller: MaybeLocation,
         relationship_hook_mode: RelationshipHookMode,
-    ) -> (EntityLocation, T::Effect) {
+        entities: &mut Entities,
+    ) -> (EntityLocation, T::Effect, impl Command) {
         let bundle_info = self.bundle_info.as_ref();
         let archetype_after_insert = self.archetype_after_insert.as_ref();
         let archetype = self.archetype.as_ref();
@@ -1163,7 +1165,9 @@ impl<'w> BundleInserter<'w> {
         // so this reference can only be promoted from shared to &mut down here, after they have been ran
         let archetype = self.archetype.as_mut();
 
-        let (new_archetype, new_location, after_effect) = match &mut self.archetype_move_type {
+        let (new_archetype, new_location, after_effect, command) = match &mut self
+            .archetype_move_type
+        {
             ArchetypeMoveType::SameArchetype => {
                 // SAFETY: Mutable references do not alias and will be dropped after this block
                 let sparse_sets = {
@@ -1184,19 +1188,18 @@ impl<'w> BundleInserter<'w> {
                     caller,
                 );
 
-                (archetype, location, after_effect)
+                (archetype, location, after_effect, || {})
             }
             ArchetypeMoveType::NewArchetypeSameTable { new_archetype } => {
                 let new_archetype = new_archetype.as_mut();
 
                 // SAFETY: Mutable references do not alias and will be dropped after this block
-                let (sparse_sets, entities) = {
+                let sparse_sets = {
                     match self.world.world_mut().storage {
                         Storage::Components {
-                            ref mut entities,
                             ref mut sparse_sets,
                             ..
-                        } => (sparse_sets, entities),
+                        } => sparse_sets,
                         Storage::Resources { .. } => panic!("Storage is not for Components"),
                     }
                 };
@@ -1241,14 +1244,13 @@ impl<'w> BundleInserter<'w> {
                 let new_archetype = new_archetype.as_mut();
 
                 // SAFETY: Mutable references do not alias and will be dropped after this block
-                let (archetypes_ptr, sparse_sets, entities) = {
+                let (archetypes_ptr, sparse_sets) = {
                     match self.world.world_mut().storage {
                         Storage::Components {
-                            ref mut entities,
                             ref mut archetypes,
                             ref mut sparse_sets,
                             ..
-                        } => (archetypes.archetypes.as_mut_ptr(), sparse_sets, entities),
+                        } => (archetypes.archetypes.as_mut_ptr(), sparse_sets),
                         Storage::Resources { .. } => panic!("Storage is not for Components"),
                     }
                 };
@@ -1383,12 +1385,6 @@ impl<'w> BundleInserter<'w> {
 
         (new_location, after_effect)
     }
-
-    #[inline]
-    pub(crate) fn entities(&mut self) -> &mut Entities {
-        // SAFETY: No outstanding references to self.world, changes to entities cannot invalidate our internal pointers
-        unsafe { self.world.world_mut().entities_mut() }
-    }
 }
 
 // SAFETY: We have exclusive world access so our pointers can't be invalidated externally
@@ -1479,13 +1475,13 @@ impl<'w> BundleSpawner<'w> {
         entity: Entity,
         bundle: T,
         caller: MaybeLocation,
+        entities: &mut Entities,
     ) -> (EntityLocation, T::Effect) {
-        let (entities, sparse_sets) = match unsafe { self.world.world_mut() }.storage {
+        let sparse_sets = match unsafe { self.world.world_mut() }.storage {
             Storage::Components {
-                ref mut entities,
                 ref mut sparse_sets,
                 ..
-            } => (entities, sparse_sets),
+            } => sparse_sets,
             Storage::Resources { .. } => unreachable!(),
         };
 
@@ -1561,25 +1557,21 @@ impl<'w> BundleSpawner<'w> {
         &mut self,
         bundle: T,
         caller: MaybeLocation,
+        entities: &mut Entities,
     ) -> (Entity, T::Effect) {
-        let entity = self.entities().alloc();
+        let entity = entities.alloc();
         // SAFETY: entity is allocated (but non-existent), `T` matches this BundleInfo's type
-        let (_, after_effect) = unsafe { self.spawn_non_existent(entity, bundle, caller) };
+        let (_, after_effect) =
+            unsafe { self.spawn_non_existent(entity, bundle, caller, entities) };
         (entity, after_effect)
-    }
-
-    #[inline]
-    pub(crate) fn entities(&mut self) -> &mut Entities {
-        // SAFETY: No outstanding references to self.world, changes to entities cannot invalidate our internal pointers
-        unsafe { self.world.world_mut().entities_mut() }
     }
 
     /// # Safety
     /// - `Self` must be dropped after running this function as it may invalidate internal pointers.
     #[inline]
-    pub(crate) unsafe fn flush_commands(&mut self) {
+    pub(crate) unsafe fn flush_commands(&mut self, entities: &mut Entities) {
         // SAFETY: pointers on self can be invalidated,
-        self.world.world_mut().flush();
+        self.world.world_mut().flush(entities);
     }
 }
 

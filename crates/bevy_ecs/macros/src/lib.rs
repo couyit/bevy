@@ -271,7 +271,8 @@ pub fn derive_system_param(input: TokenStream) -> TokenStream {
         let ident = &lt.lifetime.ident;
         let w = format_ident!("w");
         let s = format_ident!("s");
-        if ident != &w && ident != &s {
+        let e = format_ident!("e");
+        if ident != &w && ident != &s && ident != &e {
             return syn::Error::new_spanned(
                 lt,
                 r#"invalid lifetime name: expected `'w` or `'s`
@@ -437,50 +438,50 @@ pub fn derive_system_param(input: TokenStream) -> TokenStream {
         // <EventReader<'static, 'static, T> as SystemParam>::State
         const _: () = {
             // Allows rebinding the lifetimes of each field type.
-            type #fields_alias <'w, 's, #punctuated_generics_no_bounds> = (#(#tuple_types,)*);
+            type #fields_alias <'w, 's, 'e, #punctuated_generics_no_bounds> = (#(#tuple_types,)*);
 
             #[doc(hidden)]
             #state_struct_visibility struct #state_struct_name <#(#lifetimeless_generics,)*>
             #where_clause {
-                state: <#fields_alias::<'static, 'static, #punctuated_generic_idents> as #path::system::SystemParam>::State,
+                state: <#fields_alias::<'static, 'static, 'static, #punctuated_generic_idents> as #path::system::SystemParam>::State,
             }
 
             unsafe impl<#punctuated_generics> #path::system::SystemParam for
                 #struct_name <#(#shadowed_lifetimes,)* #punctuated_generic_idents> #where_clause
             {
                 type State = #state_struct_name<#punctuated_generic_idents>;
-                type Item<'w, 's> = #struct_name #ty_generics;
-                type World<'w> = <#fields_alias::<'static, 'static, #punctuated_generic_idents> as #path::system::SystemParam>::World<'w>;
+                type Item<'w, 's, 'e> = #struct_name #ty_generics;
+                type World<'w> = <#fields_alias::<'static, 'static, 'static, #punctuated_generic_idents> as #path::system::SystemParam>::World<'w>;
 
                 fn shrink_world<'wlong: 'wshort, 'wshort>(world: Self::World<'wlong>) -> Self::World<'wshort> {
-                    #fields_alias::<'_, '_, #punctuated_generic_idents>::shrink_world(world)
+                    #fields_alias::<'_, '_, '_, #punctuated_generic_idents>::shrink_world(world)
                 }
 
                 fn init_world_access<'w>(world: Self::World<'w>, system_meta: & mut #path::system::SystemMeta) {
-                    #fields_alias::<'_, '_, #punctuated_generic_idents>::init_world_access(world, system_meta);
+                    #fields_alias::<'_, '_, '_, #punctuated_generic_idents>::init_world_access(world, system_meta);
                 }
 
                 fn init_state<'w>(world: Self::World<'w>, system_meta: & mut #path::system::SystemMeta) -> Self::State {
                     #state_struct_name {
-                        state: #fields_alias::<'_, '_, #punctuated_generic_idents>::init_state(world, system_meta),
+                        state: #fields_alias::<'_, '_, '_, #punctuated_generic_idents>::init_state(world, system_meta),
                     }
                 }
 
                 unsafe fn new_archetype(state: &mut Self::State, archetype: &#path::archetype::Archetype, archetype_component_access: &mut #path::query::Access<#path::archetype::ArchetypeComponentId>) {
                     // SAFETY: The caller ensures that `archetype` is from the World the state was initialized from in `init_state`.
-                    unsafe { #fields_alias::<'_, '_, #punctuated_generic_idents>::new_archetype(&mut state.state, archetype, archetype_component_access) }
+                    unsafe { #fields_alias::<'_, '_, '_, #punctuated_generic_idents>::new_archetype(&mut state.state, archetype, archetype_component_access) }
                 }
 
                 fn apply<'w, 's>(state: &'s mut Self::State, system_meta: &#path::system::SystemMeta, worlds: #path::world::unsafe_world_cell::UnsafeWorldsCell<'w>, entities: &mut std::sync::Arc<#path::entity::Entities>) {
-                    #fields_alias::<'_, '_, #punctuated_generic_idents>::apply(&mut state.state, system_meta, worlds, entities);
+                    #fields_alias::<'_, '_, '_, #punctuated_generic_idents>::apply(&mut state.state, system_meta, worlds, entities);
                 }
 
                 fn queue<'w, 's>(state: &'s mut Self::State, system_meta: &#path::system::SystemMeta, world: #path::world::DeferredWorld) {
-                    #fields_alias::<'_, '_, #punctuated_generic_idents>::queue(&mut state.state, system_meta, world);
+                    #fields_alias::<'_, '_, '_, #punctuated_generic_idents>::queue(&mut state.state, system_meta, world);
                 }
 
                 #[inline]
-                unsafe fn validate_param<'w, 's>(
+                unsafe fn validate_param<'w, 's, 'e>(
                     state: &'s Self::State,
                     _system_meta: &#path::system::SystemMeta,
                     world: Self::World<'w>,
@@ -495,12 +496,12 @@ pub fn derive_system_param(input: TokenStream) -> TokenStream {
                 }
 
                 #[inline]
-                unsafe fn get_param<'w, 's>(
+                unsafe fn get_param<'w, 's, 'e>(
                     state: &'s mut Self::State,
                     system_meta: &#path::system::SystemMeta,
                     world: Self::World<'w>,
-                    entities: &std::sync::Arc<#path::entity::Entities>
-                ) -> Self::Item<'w, 's> {
+                    entities: &'e std::sync::Arc<#path::entity::Entities>
+                ) -> Self::Item<'w, 's, 'e> {
                     let (#(#tuple_patterns,)*) = <(#(#tuple_types,)*)>::get_param(&mut state.state, system_meta, world, entities);
                     #struct_name {
                         #(#fields: #field_locals,)*
@@ -509,38 +510,38 @@ pub fn derive_system_param(input: TokenStream) -> TokenStream {
             }
 
             // Safety: Each field is `ReadOnlySystemParam`, so this can only read from the `World`
-            unsafe impl<'w, 's, #punctuated_generics> #path::system::ReadOnlySystemParam for #struct_name #ty_generics #read_only_where_clause {}
+            unsafe impl<'w, 's, 'e, #punctuated_generics> #path::system::ReadOnlySystemParam for #struct_name #ty_generics #read_only_where_clause {}
 
-            impl<'w, 's, #(#system_param_generics: #path::system::GetGlobal<#tuple_types>,)* #punctuated_generics> #path::system::GetGlobal<#struct_name <#(#lifetimes,)* #punctuated_generic_idents>> for (#(#system_param_generics,)*) #where_clause {
-                fn get_global<'world>(&self, _worlds: #path::world::unsafe_world_cell::UnsafeWorldsCell<'world>) -> <#fields_alias::<'static, 'static, #punctuated_generic_idents> as #path::system::SystemParam>::World<'world> {
+            impl<'w, 's, 'e, #(#system_param_generics: #path::system::GetGlobal<#tuple_types>,)* #punctuated_generics> #path::system::GetGlobal<#struct_name <#(#lifetimes,)* #punctuated_generic_idents>> for (#(#system_param_generics,)*) #where_clause {
+                fn get_global<'world>(&self, _worlds: #path::world::unsafe_world_cell::UnsafeWorldsCell<'world>) -> <#fields_alias::<'static, 'static, 'static, #punctuated_generic_idents> as #path::system::SystemParam>::World<'world> {
                     ((#(#system_param_generics::get_global(&self.#id_index, _worlds),)*))
                 }
             }
 
-            impl<'w, 's, #(#system_param_generics: #path::system::GetLocal<#tuple_types>,)* #punctuated_generics> #path::system::GetLocal<#struct_name <#(#lifetimes,)* #punctuated_generic_idents>> for (#(#system_param_generics,)*) #where_clause {
-                fn get_local<'world>(&self, _world: #path::world::unsafe_world_cell::UnsafeWorldCell<'world>) -> <#fields_alias::<'static, 'static, #punctuated_generic_idents> as #path::system::SystemParam>::World<'world> {
+            impl<'w, 's, 'e, #(#system_param_generics: #path::system::GetLocal<#tuple_types>,)* #punctuated_generics> #path::system::GetLocal<#struct_name <#(#lifetimes,)* #punctuated_generic_idents>> for (#(#system_param_generics,)*) #where_clause {
+                fn get_local<'world>(&self, _world: #path::world::unsafe_world_cell::UnsafeWorldCell<'world>) -> <#fields_alias::<'static, 'static, 'static, #punctuated_generic_idents> as #path::system::SystemParam>::World<'world> {
                     ((#(#system_param_generics::get_local(&self.#id_index, _world),)*))
                 }
             }
 
-            impl<'w, 's, #punctuated_generics> #path::system::GetGlobal<#struct_name <#(#lifetimes,)* #punctuated_generic_idents>> for #path::system::fetch::Local
+            impl<'w, 's, 'e, #punctuated_generics> #path::system::GetGlobal<#struct_name <#(#lifetimes,)* #punctuated_generic_idents>> for #path::system::fetch::Local
             #get_global_where_clause
             {
-                fn get_global<'world>(&self, _worlds: #path::world::unsafe_world_cell::UnsafeWorldsCell<'world>) -> <#fields_alias::<'static, 'static, #punctuated_generic_idents> as #path::system::SystemParam>::World<'world> {
+                fn get_global<'world>(&self, _worlds: #path::world::unsafe_world_cell::UnsafeWorldsCell<'world>) -> <#fields_alias::<'static, 'static, 'static, #punctuated_generic_idents> as #path::system::SystemParam>::World<'world> {
                     ((#(<#path::system::fetch::Local as #path::system::GetGlobal<#tuple_types>>::get_global(&self, _worlds),)*))
                 }
             }
 
-            impl<'w, 's, #punctuated_generics> #path::system::GetLocal<#struct_name <#(#lifetimes,)* #punctuated_generic_idents>> for #path::system::fetch::Local
+            impl<'w, 's, 'e, #punctuated_generics> #path::system::GetLocal<#struct_name <#(#lifetimes,)* #punctuated_generic_idents>> for #path::system::fetch::Local
             #get_local_where_clause
             {
-                fn get_local<'world>(&self, _world: #path::world::unsafe_world_cell::UnsafeWorldCell<'world>) -> <#fields_alias::<'static, 'static, #punctuated_generic_idents> as #path::system::SystemParam>::World<'world> {
+                fn get_local<'world>(&self, _world: #path::world::unsafe_world_cell::UnsafeWorldCell<'world>) -> <#fields_alias::<'static, 'static, 'static, #punctuated_generic_idents> as #path::system::SystemParam>::World<'world> {
                     ((#(<#path::system::fetch::Local as #path::system::GetLocal<#tuple_types>>::get_local(&self, _world),)*))
                 }
             }
 
-            impl<'w, 's, #punctuated_generics> #path::system::SystemParamTupleType for #struct_name <#(#lifetimes,)* #punctuated_generic_idents> #where_clause {
-                type Tuple = #fields_alias::<'w, 's, #punctuated_generic_idents>;
+            impl<'w, 's, 'e, #punctuated_generics> #path::system::SystemParamTupleType for #struct_name <#(#lifetimes,)* #punctuated_generic_idents> #where_clause {
+                type Tuple = #fields_alias::<'w, 's, 'e, #punctuated_generic_idents>;
             }
 
             #builder_impl

@@ -446,7 +446,7 @@ impl<'w> DeferredWorld<'w> {
         let raw_queue = unsafe { self.worlds.get_raw_command_queue() };
         // SAFETY: `&mut self` ensures the commands does not outlive the world.
         let commands =
-            unsafe { Commands::new_raw_from_entities(raw_queue, self.entities()) };
+            unsafe { Commands::new_raw_from_entities(raw_queue, self.get_entities()) };
 
         (fetcher, commands)
     }
