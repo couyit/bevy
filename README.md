@@ -7,8 +7,6 @@
 [![CI](https://github.com/bevyengine/bevy/workflows/CI/badge.svg)](https://github.com/bevyengine/bevy/actions)
 [![Discord](https://img.shields.io/discord/691052431525675048.svg?label=&logo=discord&logoColor=ffffff&color=7389D8&labelColor=6A7EC2)](https://discord.gg/bevy)
 
-# Bevy Wgpu 25
-
 ## What is Bevy?
 
 Bevy is a refreshingly simple data-driven game engine built in Rust. It is free and open-source forever!
