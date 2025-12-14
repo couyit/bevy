@@ -5,6 +5,7 @@ use bevy_color::LinearRgba;
 use core::sync::atomic::{AtomicBool, Ordering};
 use wgpu::{
     LoadOp, Operations, RenderPassColorAttachment, RenderPassDepthStencilAttachment, StoreOp,
+    TextureFormat,
 };
 
 /// A wrapper for a [`CachedTexture`] that is used as a [`RenderPassColorAttachment`].
@@ -127,13 +128,15 @@ impl DepthAttachment {
 #[derive(Clone)]
 pub struct OutputColorAttachment {
     pub view: TextureView,
+    pub format: TextureFormat,
     is_first_call: Arc<AtomicBool>,
 }
 
 impl OutputColorAttachment {
-    pub fn new(view: TextureView) -> Self {
+    pub fn new(view: TextureView, format: TextureFormat) -> Self {
         Self {
             view,
+            format,
             is_first_call: Arc::new(AtomicBool::new(true)),
         }
     }
