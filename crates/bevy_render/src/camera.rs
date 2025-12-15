@@ -155,8 +155,8 @@ pub trait NormalizedRenderTargetExt {
         manual_texture_views: &'a ManualTextureViews,
     ) -> Option<&'a TextureView>;
 
-    /// Retrieves the [`TextureFormat`] of this render target, if it exists.
-    fn get_texture_format<'a>(
+    /// Retrieves the texture view's [`TextureFormat`] of this render target, if it exists.
+    fn get_texture_view_format<'a>(
         &self,
         windows: &'a ExtractedWindows,
         images: &'a RenderAssets<GpuImage>,
@@ -200,7 +200,7 @@ impl NormalizedRenderTargetExt for NormalizedRenderTarget {
     }
 
     /// Retrieves the [`TextureFormat`] of this render target, if it exists.
-    fn get_texture_format<'a>(
+    fn get_texture_view_format<'a>(
         &self,
         windows: &'a ExtractedWindows,
         images: &'a RenderAssets<GpuImage>,
@@ -209,12 +209,12 @@ impl NormalizedRenderTargetExt for NormalizedRenderTarget {
         match self {
             NormalizedRenderTarget::Window(window_ref) => windows
                 .get(&window_ref.entity())
-                .and_then(|window| window.swap_chain_texture_format),
+                .and_then(|window| window.swap_chain_texture_view_format),
             NormalizedRenderTarget::Image(image_target) => images
                 .get(&image_target.handle)
-                .map(|image| image.texture_format),
+                .map(|image| image.texture_view_format.unwrap_or(image.texture_format)),
             NormalizedRenderTarget::TextureView(id) => {
-                manual_texture_views.get(id).map(|tex| tex.format)
+                manual_texture_views.get(id).map(|tex| tex.view_format)
             }
             NormalizedRenderTarget::None { .. } => None,
         }
